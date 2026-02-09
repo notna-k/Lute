@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: lute-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - lute-network
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+      args:
+        - AGENT_VERSION=${AGENT_VERSION:-0.1.0}
+        - BUILD_TIME=${BUILD_TIME:-unknown}
+    container_name: lute-api
+    restart: unless-stopped
+    ports:
+      - "${API_HTTP_PORT:-8080}:8080" # HTTP
+      - "${API_GRPC_PORT:-50051}:50051" # gRPC
+    environment:
+      # Server
+      SERVER_PORT: ${SERVER_PORT}
+      SERVER_HOST: ${SERVER_HOST}
+      GIN_MODE: ${GIN_MODE}
+      # MongoDB
+      MONGODB_URI: ${MONGODB_URI}
+      MONGODB_DATABASE: ${MONGODB_DATABASE}
+      # gRPC
+      GRPC_PORT: ${GRPC_PORT}
+      GRPC_HOST: ${GRPC_HOST}
+      # WebSocket
+      WS_READ_BUFFER_SIZE: ${WS_READ_BUFFER_SIZE}
+      WS_WRITE_BUFFER_SIZE: ${WS_WRITE_BUFFER_SIZE}
+      WS_CHECK_ORIGIN: ${WS_CHECK_ORIGIN}
+      # Firebase
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON}
+      # Agent binaries
+      AGENT_BINARY_DIR: /opt/lute/agent-binaries
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - lute-network
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ui:
+    build:
+      context: ../../ui
+      dockerfile: Dockerfile
+      args:
+        - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
+        - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
+        - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
+        - VITE_FIREBASE_STORAGE_BUCKET=${VITE_FIREBASE_STORAGE_BUCKET}
+        - VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID}
+        - VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
+        - VITE_API_URL=${VITE_API_URL}
+    container_name: lute-ui
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-3000}:80"
+    depends_on:
+      - api
+    networks:
+      - lute-network
+
+networks:
+  lute-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+
+

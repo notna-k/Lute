@@ -1,0 +1,14 @@
+bin/
+dist/
+*.test
+*.out
+.git
+.gitignore
+.env
+.env.local
+*.log
+.DS_Store
+node_modules
+.vscode
+.idea
+
