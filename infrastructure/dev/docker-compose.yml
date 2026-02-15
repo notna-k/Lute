@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mongodb:
-    image: mongo:7.0
+    image: mongo:8.2.5
     container_name: lute-mongodb
     restart: unless-stopped
     ports:
@@ -24,8 +24,8 @@ services:
 
   api:
     build:
-      context: ../../server
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: server/api/Dockerfile
       args:
         - AGENT_VERSION=${AGENT_VERSION:-0.1.0}
         - BUILD_TIME=${BUILD_TIME:-unknown}
@@ -60,7 +60,7 @@ services:
     networks:
       - lute-network
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health" ]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -93,5 +93,3 @@ networks:
 volumes:
   mongodb_data:
   mongodb_config:
-
-
