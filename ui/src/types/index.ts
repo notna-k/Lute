@@ -11,10 +11,13 @@ export interface Machine {
   user_id: string;
   name: string;
   description?: string;
-  status: 'running' | 'stopped' | 'paused' | 'pending';
+  status: 'running' | 'stopped' | 'paused' | 'pending' | 'alive' | 'dead';
   is_public: boolean;
-  agent_id?: string;
+  agent_ip?: string;
+  agent_version?: string;
+  last_seen?: string;
   metadata?: Record<string, unknown>;
+  metrics?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }

@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/lute/agent/types"
+	"github.com/lute/agent/setup/types"
 	"github.com/lute/agent/utils"
 )
 
@@ -123,7 +123,6 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 	fmt.Println()
 	fmt.Println("✓ Machine registered successfully!")
 	fmt.Printf("  Machine ID: %s\n", setupResp.MachineID)
-	fmt.Printf("  Agent ID:   %s\n", setupResp.AgentID)
 	fmt.Println()
 
 	return &setupResp
@@ -164,7 +163,6 @@ func createAgentCommand(exePath string, setupResp *types.SetupResponse, logFile 
 	cmd := exec.Command(exePath,
 		"--server", setupResp.GRPCAddress,
 		"--machine-id", setupResp.MachineID,
-		"--agent-id", setupResp.AgentID,
 	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -178,8 +176,8 @@ func createAgentCommand(exePath string, setupResp *types.SetupResponse, logFile 
 // displayManualInstructions shows manual start instructions
 func displayManualInstructions(setupResp *types.SetupResponse) {
 	fmt.Println("Could not auto-start. Run manually:")
-	fmt.Printf("  lute-agent --server %s --machine-id %s --agent-id %s\n",
-		setupResp.GRPCAddress, setupResp.MachineID, setupResp.AgentID)
+	fmt.Printf("  lute-agent --server %s --machine-id %s\n",
+		setupResp.GRPCAddress, setupResp.MachineID)
 }
 
 // displayStartupInfo displays information about the started agent

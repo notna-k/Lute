@@ -14,6 +14,7 @@ import (
 
 	pb "github.com/lute/agent/proto/agent"
 	"github.com/lute/api/config"
+	"github.com/lute/api/models"
 	"github.com/lute/api/repository"
 )
 
@@ -21,7 +22,6 @@ type Server struct {
 	pb.UnimplementedAgentServiceServer
 	config      *config.Config
 	machineRepo *repository.MachineRepository
-	agentRepo   *repository.AgentRepository
 	commandRepo *repository.CommandRepository
 	grpcServer  *grpc.Server
 }
@@ -29,13 +29,11 @@ type Server struct {
 func NewServer(
 	cfg *config.Config,
 	machineRepo *repository.MachineRepository,
-	agentRepo *repository.AgentRepository,
 	commandRepo *repository.CommandRepository,
 ) *Server {
 	return &Server{
 		config:      cfg,
 		machineRepo: machineRepo,
-		agentRepo:   agentRepo,
 		commandRepo: commandRepo,
 	}
 }
@@ -68,63 +66,101 @@ func (s *Server) Stop() {
 	}
 }
 
-// RegisterAgent — agent connects for the first time in normal (daemon) mode
+// RegisterAgent — agent connects for the first time
+// If machine_id is provided, updates existing machine
+// If machine_id is empty, creates a new machine
 func (s *Server) RegisterAgent(ctx context.Context, req *pb.RegisterAgentRequest) (*pb.RegisterAgentResponse, error) {
-	log.Printf("RegisterAgent: agent_id=%s machine_id=%s version=%s ip=%s",
-		req.AgentId, req.MachineId, req.Version, req.IpAddress)
+	log.Printf("RegisterAgent: machine_id=%s version=%s ip=%s hostname=%s",
+		req.MachineId, req.Version, req.IpAddress, req.Hostname)
 
-	// 1. Verify the machine exists
-	machineID, err := primitive.ObjectIDFromHex(req.MachineId)
-	if err != nil {
-		return &pb.RegisterAgentResponse{
-			Success: false,
-			Message: fmt.Sprintf("invalid machine_id: %v", err),
-		}, nil
-	}
+	var machine *models.Machine
+	var machineID primitive.ObjectID
+	var err error
 
-	machine, err := s.machineRepo.GetByID(ctx, machineID)
-	if err != nil {
-		return &pb.RegisterAgentResponse{
-			Success: false,
-			Message: fmt.Sprintf("machine not found: %v", err),
-		}, nil
-	}
+	// Check if machine_id is provided
+	if req.MachineId != "" {
+		// Existing machine - verify it exists
+		machineID, err = primitive.ObjectIDFromHex(req.MachineId)
+		if err != nil {
+			return &pb.RegisterAgentResponse{
+				Success: false,
+				Message: fmt.Sprintf("invalid machine_id: %v", err),
+			}, nil
+		}
 
-	// 2. Update agent record
-	if err := s.agentRepo.UpdateStatus(ctx, req.AgentId, "connected"); err != nil {
-		log.Printf("RegisterAgent: failed to update agent status: %v", err)
-	}
+		machine, err = s.machineRepo.GetByID(ctx, machineID)
+		if err != nil {
+			return &pb.RegisterAgentResponse{
+				Success: false,
+				Message: fmt.Sprintf("machine not found: %v", err),
+			}, nil
+		}
+	} else {
+		// New machine - create it
+		if req.IpAddress == "" {
+			return &pb.RegisterAgentResponse{
+				Success: false,
+				Message: "ip_address is required for new machine registration",
+			}, nil
+		}
 
-	// 3. Update machine status to running
-	if err := s.machineRepo.UpdateStatus(ctx, machine.ID, "running"); err != nil {
-		log.Printf("RegisterAgent: failed to update machine status: %v", err)
+		// Build metadata from request
+		metadata := make(map[string]interface{})
+		for k, v := range req.Metadata {
+			metadata[k] = v
+		}
+		metadata["ip"] = req.IpAddress
+
+		// Create new machine
+		machine = &models.Machine{
+			Name:        fmt.Sprintf("%s:%s", req.Hostname, req.IpAddress),
+			Description: fmt.Sprintf("Auto-registered agent from %s", req.IpAddress),
+			Status:      "alive",
+			Metadata:    metadata,
+		}
+
+		if err := s.machineRepo.Create(ctx, machine); err != nil {
+			log.Printf("RegisterAgent: failed to create machine: %v", err)
+			return &pb.RegisterAgentResponse{
+				Success: false,
+				Message: fmt.Sprintf("failed to create machine: %v", err),
+			}, nil
+		}
+
+		machineID = machine.ID
+		log.Printf("RegisterAgent: created new machine %s", machineID.Hex())
 	}
 
 	return &pb.RegisterAgentResponse{
 		Success:       true,
 		Message:       "Agent registered successfully",
 		ServerVersion: "1.0.0",
+		MachineId:     machineID.Hex(),
 	}, nil
 }
 
 // Heartbeat — periodic keep-alive with optional system metrics
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	// Update agent last_seen
-	if err := s.agentRepo.UpdateLastSeen(ctx, req.AgentId); err != nil {
-		log.Printf("Heartbeat: failed to update last_seen for %s: %v", req.AgentId, err)
+	// Parse machine ID from machine_id field
+	machineID, err := primitive.ObjectIDFromHex(req.MachineId)
+	if err != nil {
+		log.Printf("Heartbeat: invalid machine_id %s: %v", req.MachineId, err)
+		return &pb.HeartbeatResponse{
+			Success:   false,
+			Timestamp: time.Now().Unix(),
+		}, nil
 	}
 
-	// Update agent status
-	if req.Status != "" {
-		if err := s.agentRepo.UpdateStatus(ctx, req.AgentId, req.Status); err != nil {
-			log.Printf("Heartbeat: failed to update status for %s: %v", req.AgentId, err)
-		}
+	// Always set status to "alive" and update last_seen when we receive a heartbeat
+	if err := s.machineRepo.UpdateStatusAndLastSeen(ctx, machineID, "alive"); err != nil {
+		log.Printf("Heartbeat: failed to update status to alive for machine %s: %v", req.MachineId, err)
+		return err
 	}
 
 	// Store metrics if provided
 	if len(req.Metrics) > 0 {
-		if err := s.agentRepo.UpdateMetrics(ctx, req.AgentId, req.Metrics); err != nil {
-			log.Printf("Heartbeat: failed to update metrics for %s: %v", req.AgentId, err)
+		if err := s.machineRepo.UpdateMetrics(ctx, machineID, req.Metrics); err != nil {
+			log.Printf("Heartbeat: failed to update metrics for machine %s: %v", req.MachineId, err)
 		}
 	}
 
@@ -136,8 +172,8 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 
 // UpdateMachineStatus — agent reports a state change (running/stopped/error)
 func (s *Server) UpdateMachineStatus(ctx context.Context, req *pb.UpdateMachineStatusRequest) (*pb.UpdateMachineStatusResponse, error) {
-	log.Printf("UpdateMachineStatus: agent_id=%s machine_id=%s status=%s msg=%s",
-		req.AgentId, req.MachineId, req.Status, req.Message)
+	log.Printf("UpdateMachineStatus: machine_id=%s status=%s msg=%s",
+		req.MachineId, req.Status, req.Message)
 
 	machineID, err := primitive.ObjectIDFromHex(req.MachineId)
 	if err != nil {
@@ -155,11 +191,6 @@ func (s *Server) UpdateMachineStatus(ctx context.Context, req *pb.UpdateMachineS
 		}, nil
 	}
 
-	// Also update agent status to match
-	if err := s.agentRepo.UpdateStatus(ctx, req.AgentId, req.Status); err != nil {
-		log.Printf("UpdateMachineStatus: failed to update agent status: %v", err)
-	}
-
 	return &pb.UpdateMachineStatusResponse{
 		Success: true,
 		Message: "Status updated",
@@ -168,7 +199,7 @@ func (s *Server) UpdateMachineStatus(ctx context.Context, req *pb.UpdateMachineS
 
 // GetMachineConfig — agent polls for configuration + pending commands
 func (s *Server) GetMachineConfig(ctx context.Context, req *pb.GetMachineConfigRequest) (*pb.GetMachineConfigResponse, error) {
-	log.Printf("GetMachineConfig: agent_id=%s machine_id=%s", req.AgentId, req.MachineId)
+	log.Printf("GetMachineConfig: machine_id=%s", req.MachineId)
 
 	cfg := make(map[string]string)
 
@@ -176,9 +207,20 @@ func (s *Server) GetMachineConfig(ctx context.Context, req *pb.GetMachineConfigR
 	cfg["heartbeat_interval"] = "30"
 	cfg["log_level"] = "info"
 
-	// Fetch pending commands for this agent
+	// Parse machine ID
+	machineID, err := primitive.ObjectIDFromHex(req.MachineId)
+	if err != nil {
+		log.Printf("GetMachineConfig: invalid machine_id: %v", err)
+		return &pb.GetMachineConfigResponse{
+			Success: true,
+			Config:  cfg,
+			Message: "Configuration retrieved (invalid machine_id)",
+		}, nil
+	}
+
+	// Fetch pending commands for this machine
 	if s.commandRepo != nil {
-		pending, err := s.commandRepo.GetPendingByAgentID(ctx, req.AgentId)
+		pending, err := s.commandRepo.GetPendingByMachineID(ctx, machineID)
 		if err != nil {
 			log.Printf("GetMachineConfig: failed to fetch pending commands: %v", err)
 		} else if len(pending) > 0 {
@@ -212,8 +254,8 @@ func (s *Server) GetMachineConfig(ctx context.Context, req *pb.GetMachineConfigR
 // ExecuteCommand — agent reports a command pick-up or result
 // env["stage"] = "start" → mark running, "done" → store result
 func (s *Server) ExecuteCommand(ctx context.Context, req *pb.ExecuteCommandRequest) (*pb.ExecuteCommandResponse, error) {
-	log.Printf("ExecuteCommand: agent_id=%s machine_id=%s command=%s stage=%s",
-		req.AgentId, req.MachineId, req.Command, req.Env["stage"])
+	log.Printf("ExecuteCommand: machine_id=%s command=%s stage=%s",
+		req.MachineId, req.Command, req.Env["stage"])
 
 	if s.commandRepo == nil {
 		return &pb.ExecuteCommandResponse{Success: true}, nil
@@ -255,8 +297,8 @@ func (s *Server) ExecuteCommand(ctx context.Context, req *pb.ExecuteCommandReque
 
 // StreamLogs — server pushes events/logs to the agent (server-streaming)
 func (s *Server) StreamLogs(req *pb.StreamLogsRequest, stream pb.AgentService_StreamLogsServer) error {
-	log.Printf("StreamLogs: agent_id=%s machine_id=%s level=%s",
-		req.AgentId, req.MachineId, req.Level)
+	log.Printf("StreamLogs: machine_id=%s level=%s",
+		req.MachineId, req.Level)
 
 	// Send an initial acknowledgement log message
 	if err := stream.Send(&pb.LogMessage{
@@ -268,6 +310,13 @@ func (s *Server) StreamLogs(req *pb.StreamLogsRequest, stream pb.AgentService_St
 		return err
 	}
 
+	// Parse machine ID
+	machineID, err := primitive.ObjectIDFromHex(req.MachineId)
+	if err != nil {
+		log.Printf("StreamLogs: invalid machine_id: %v", err)
+		return fmt.Errorf("invalid machine_id: %w", err)
+	}
+
 	// Keep stream open — poll for pending commands and push them as log events
 	// This gives the agent a real-time channel for commands
 	ticker := time.NewTicker(5 * time.Second)
@@ -276,12 +325,12 @@ func (s *Server) StreamLogs(req *pb.StreamLogsRequest, stream pb.AgentService_St
 	for {
 		select {
 		case <-stream.Context().Done():
-			log.Printf("StreamLogs: client %s disconnected", req.AgentId)
+			log.Printf("StreamLogs: client %s disconnected", req.MachineId)
 			return nil
 		case <-ticker.C:
 			// Check for pending commands and notify agent
 			if s.commandRepo != nil {
-				pending, err := s.commandRepo.GetPendingByAgentID(stream.Context(), req.AgentId)
+				pending, err := s.commandRepo.GetPendingByMachineID(stream.Context(), machineID)
 				if err == nil && len(pending) > 0 {
 					for _, cmd := range pending {
 						msg := fmt.Sprintf("PENDING_CMD:%s:%s", cmd.ID.Hex(), cmd.Command)

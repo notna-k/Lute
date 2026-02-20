@@ -36,35 +36,27 @@ type User struct {
 	FirebaseUID string `json:"firebase_uid" bson:"firebase_uid"`
 }
 
-// Machine represents a virtual machine
+// Machine represents a virtual machine with embedded agent data
 type Machine struct {
 	BaseModel
-	UserID      primitive.ObjectID `json:"user_id" bson:"user_id"`
-	Name        string             `json:"name" bson:"name"`
-	Description string             `json:"description" bson:"description"`
-	Status      string             `json:"status" bson:"status"` // "running", "stopped", "pending"
-	IsPublic    bool               `json:"is_public" bson:"is_public"`
-	AgentID     string             `json:"agent_id,omitempty" bson:"agent_id,omitempty"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
+	UserID       primitive.ObjectID     `json:"user_id" bson:"user_id"`
+	Name         string                 `json:"name" bson:"name"`
+	Description  string                 `json:"description" bson:"description"`
+	Status       string                 `json:"status" bson:"status"` // "pending", "registered", "alive", "dead"
+	IsPublic     bool                   `json:"is_public" bson:"is_public"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
+	AgentIP      string                 `json:"agent_ip,omitempty" bson:"agent_ip,omitempty"`
+	AgentVersion string                 `json:"agent_version,omitempty" bson:"agent_version,omitempty"`
+	LastSeen     time.Time              `json:"last_seen,omitempty" bson:"last_seen,omitempty"`
+	Metrics      map[string]string      `json:"metrics,omitempty" bson:"metrics,omitempty"`
 }
 
-// Agent represents a Go agent running on a VM
-type Agent struct {
-	BaseModel
-	MachineID primitive.ObjectID `json:"machine_id" bson:"machine_id"`
-	AgentID   string             `json:"agent_id" bson:"agent_id"`
-	Status    string             `json:"status" bson:"status"` // "connected", "disconnected", "registered", "running", "stopped"
-	LastSeen  time.Time          `json:"last_seen" bson:"last_seen"`
-	IPAddress string             `json:"ip_address,omitempty" bson:"ip_address,omitempty"`
-	Version   string             `json:"version,omitempty" bson:"version,omitempty"`
-	Metrics   map[string]string  `json:"metrics,omitempty" bson:"metrics,omitempty"`
-}
+// Agent model has been removed - agent data is now embedded in Machine
 
 // Command represents a queued command for an agent to execute
 type Command struct {
 	BaseModel
 	MachineID primitive.ObjectID `json:"machine_id" bson:"machine_id"`
-	AgentID   string             `json:"agent_id" bson:"agent_id"`
 	Command   string             `json:"command" bson:"command"`
 	Args      []string           `json:"args,omitempty" bson:"args,omitempty"`
 	Env       map[string]string  `json:"env,omitempty" bson:"env,omitempty"`
@@ -82,4 +74,3 @@ type MachineConfig struct {
 	LogLevel          string             `json:"log_level" bson:"log_level"`                   // "debug", "info", "warn", "error"
 	Extra             map[string]string  `json:"extra,omitempty" bson:"extra,omitempty"`
 }
-

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -97,12 +98,9 @@ func (r *MachineRepository) UpdateStatus(ctx context.Context, id primitive.Objec
 }
 
 func (r *MachineRepository) FindByAgentID(ctx context.Context, agentID string) (*models.Machine, error) {
-	var machine models.Machine
-	err := r.Collection.FindOne(ctx, bson.M{"agent_id": agentID}).Decode(&machine)
-	if err != nil {
-		return nil, err
-	}
-	return &machine, nil
+	// This method is kept for backward compatibility but agentID is no longer stored
+	// It's now a no-op that returns an error
+	return nil, mongo.ErrNoDocuments
 }
 
 func (r *MachineRepository) List(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]*models.Machine, error) {
@@ -117,4 +115,76 @@ func (r *MachineRepository) List(ctx context.Context, filter bson.M, opts *optio
 		return nil, err
 	}
 	return machines, nil
+}
+
+// UpdateLastSeen updates the last_seen timestamp for a machine
+func (r *MachineRepository) UpdateLastSeen(ctx context.Context, machineID primitive.ObjectID) error {
+	update := bson.M{
+		"$set": bson.M{
+			"last_seen":  time.Now(),
+			"updated_at": time.Now(),
+		},
+	}
+	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": machineID}, update)
+	return err
+}
+
+// UpdateMetrics updates the metrics for a machine
+func (r *MachineRepository) UpdateMetrics(ctx context.Context, machineID primitive.ObjectID, metrics map[string]string) error {
+	update := bson.M{
+		"$set": bson.M{
+			"metrics":    metrics,
+			"updated_at": time.Now(),
+		},
+	}
+	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": machineID}, update)
+	return err
+}
+
+// UpdateAgentInfo updates agent-related fields (IP, version, last_seen)
+func (r *MachineRepository) UpdateAgentInfo(ctx context.Context, machineID primitive.ObjectID, ipAddress string, version string) error {
+	update := bson.M{
+		"$set": bson.M{
+			"agent_ip":      ipAddress,
+			"agent_version": version,
+			"last_seen":     time.Now(),
+			"updated_at":    time.Now(),
+		},
+	}
+	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": machineID}, update)
+	return err
+}
+
+// ListByStatus returns all machines with a given status
+func (r *MachineRepository) ListByStatus(ctx context.Context, status string) ([]*models.Machine, error) {
+	cursor, err := r.Collection.Find(ctx, bson.M{"status": status})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var machines []*models.Machine
+	if err := cursor.All(ctx, &machines); err != nil {
+		return nil, err
+	}
+	return machines, nil
+}
+
+// UpdateStatusAndLastSeen updates both status and last_seen in a single operation
+func (r *MachineRepository) UpdateStatusAndLastSeen(ctx context.Context, machineID primitive.ObjectID, status string) error {
+	update := bson.M{
+		"$set": bson.M{
+			"status":     status,
+			"last_seen":  time.Now(),
+			"updated_at": time.Now(),
+		},
+	}
+	result, err := r.Collection.UpdateOne(ctx, bson.M{"_id": machineID}, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }

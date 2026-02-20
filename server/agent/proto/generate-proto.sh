@@ -9,8 +9,6 @@ OUTPUT_DIR="."
 
 echo "Generating protobuf code..."
 
-cd proto
-
 protoc \
   --go_out=${OUTPUT_DIR} \
   --go_opt=paths=source_relative \

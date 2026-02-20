@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/lute/agent/commands"
-	"github.com/lute/agent/types"
+	"github.com/lute/agent/setup/types"
 
 	pb "github.com/lute/agent/proto/agent"
 )
 
 // PollLoop periodically fetches config and executes pending commands
-func PollLoop(ctx context.Context, client pb.AgentServiceClient, agentID, machineID string, interval time.Duration) {
+func PollLoop(ctx context.Context, client pb.AgentServiceClient, machineID string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -25,18 +25,17 @@ func PollLoop(ctx context.Context, client pb.AgentServiceClient, agentID, machin
 			log.Println("Config poll stopped")
 			return
 		case <-ticker.C:
-			pollConfig(ctx, client, agentID, machineID)
+			pollConfig(ctx, client, machineID)
 		}
 	}
 }
 
 // pollConfig fetches config from server and applies it
-func pollConfig(ctx context.Context, client pb.AgentServiceClient, agentID, machineID string) {
+func pollConfig(ctx context.Context, client pb.AgentServiceClient, machineID string) {
 	pollCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	resp, err := client.GetMachineConfig(pollCtx, &pb.GetMachineConfigRequest{
-		AgentId:   agentID,
 		MachineId: machineID,
 	})
 	if err != nil {
@@ -53,7 +52,7 @@ func pollConfig(ctx context.Context, client pb.AgentServiceClient, agentID, mach
 	Apply(resp.Config)
 
 	// Execute any pending commands
-	executePendingCommands(ctx, client, agentID, machineID, resp.Config)
+	executePendingCommands(ctx, client, machineID, resp.Config)
 }
 
 // Apply applies server-pushed configuration
@@ -69,7 +68,7 @@ func Apply(cfg map[string]string) {
 }
 
 // executePendingCommands parses and executes pending commands from config
-func executePendingCommands(ctx context.Context, client pb.AgentServiceClient, agentID, machineID string, cfg map[string]string) {
+func executePendingCommands(ctx context.Context, client pb.AgentServiceClient, machineID string, cfg map[string]string) {
 	raw, ok := cfg["pending_commands"]
 	if !ok || raw == "" {
 		return
@@ -82,7 +81,7 @@ func executePendingCommands(ctx context.Context, client pb.AgentServiceClient, a
 	}
 
 	for _, cmd := range cmds {
-		go commands.Execute(ctx, client, agentID, machineID, commands.Cmd{
+		go commands.Execute(ctx, client, machineID, commands.Cmd{
 			ID:      cmd.ID,
 			Command: cmd.Command,
 			Args:    cmd.Args,

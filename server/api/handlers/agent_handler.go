@@ -45,7 +45,6 @@ type AgentSetupRequest struct {
 // AgentSetupResponse is returned after the agent registers a new machine
 type AgentSetupResponse struct {
 	MachineID   string `json:"machine_id"`
-	AgentID     string `json:"agent_id"`
 	GRPCAddress string `json:"grpc_address"`
 	Message     string `json:"message"`
 }
@@ -57,7 +56,6 @@ type AgentHandler struct {
 	cache       map[string]*AgentBinaryInfo // key: "os/arch"
 	cfg         *config.Config
 	machineRepo *repository.MachineRepository
-	agentRepo   *repository.AgentRepository
 	commandRepo *repository.CommandRepository
 }
 
@@ -74,7 +72,6 @@ func NewAgentHandler(
 	binaryDir string,
 	cfg *config.Config,
 	machineRepo *repository.MachineRepository,
-	agentRepo *repository.AgentRepository,
 	commandRepo *repository.CommandRepository,
 ) *AgentHandler {
 	h := &AgentHandler{
@@ -82,7 +79,6 @@ func NewAgentHandler(
 		cache:       make(map[string]*AgentBinaryInfo),
 		cfg:         cfg,
 		machineRepo: machineRepo,
-		agentRepo:   agentRepo,
 		commandRepo: commandRepo,
 	}
 	h.refreshCache()
@@ -322,31 +318,18 @@ func (h *AgentHandler) RegisterFromAgent(c *gin.Context) {
 		return
 	}
 
-	// Generate a unique agent ID
-	agentID := fmt.Sprintf("agent-%s-%d", req.Hostname, time.Now().UnixNano())
-
-	// Create the agent record
-	agent := &models.Agent{
-		MachineID: machine.ID,
-		AgentID:   agentID,
-		Status:    "registered",
-		LastSeen:  time.Now(),
-		IPAddress: req.IP,
-		Version:   req.Version,
-	}
-	if err := h.agentRepo.Create(ctx, agent); err != nil {
-		log.Printf("Failed to create agent: %v", err)
+	// Update machine with agent information
+	machine.Status = "registered"
+	machine.AgentIP = req.IP
+	machine.AgentVersion = req.Version
+	machine.LastSeen = time.Now()
+	
+	if err := h.machineRepo.Update(ctx, machine.ID, machine); err != nil {
+		log.Printf("Failed to update machine with agent info: %v", err)
 		// Clean up: delete the machine we just created
 		_ = h.machineRepo.Delete(ctx, machine.ID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create agent"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register agent"})
 		return
-	}
-
-	// Link the agent to the machine
-	machine.AgentID = agentID
-	machine.Status = "registered"
-	if err := h.machineRepo.Update(ctx, machine.ID, machine); err != nil {
-		log.Printf("Failed to update machine with agent ID: %v", err)
 	}
 
 	// Derive gRPC address from the request's Host header
@@ -371,12 +354,11 @@ func (h *AgentHandler) RegisterFromAgent(c *gin.Context) {
 
 	grpcAddr := fmt.Sprintf("%s:%s", host, h.cfg.GRPC.Port)
 
-	log.Printf("Agent registered: machine=%s agent=%s host=%s grpc=%s",
-		machine.ID.Hex(), agentID, req.Hostname, grpcAddr)
+	log.Printf("Agent registered: machine=%s host=%s grpc=%s",
+		machine.ID.Hex(), req.Hostname, grpcAddr)
 
 	c.JSON(http.StatusCreated, AgentSetupResponse{
 		MachineID:   machine.ID.Hex(),
-		AgentID:     agentID,
 		GRPCAddress: grpcAddr,
 		Message:     "Machine registered successfully",
 	})
@@ -463,14 +445,13 @@ func (h *AgentHandler) SendCommand(c *gin.Context) {
 		return
 	}
 
-	if machine.AgentID == "" {
+	if machine.Status == "" || machine.Status == "pending" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "machine has no agent connected"})
 		return
 	}
 
 	cmd := &models.Command{
 		MachineID: machineID,
-		AgentID:   machine.AgentID,
 		Command:   req.Command,
 		Args:      req.Args,
 		Env:       req.Env,
@@ -538,16 +519,11 @@ func (h *AgentHandler) GetAgentStatus(c *gin.Context) {
 		"machine_status": machine.Status,
 	}
 
-	if machine.AgentID != "" {
-		agent, err := h.agentRepo.GetByAgentID(ctx, machine.AgentID)
-		if err == nil {
-			result["agent_id"] = agent.AgentID
-			result["agent_status"] = agent.Status
-			result["agent_last_seen"] = agent.LastSeen
-			result["agent_version"] = agent.Version
-			result["agent_ip"] = agent.IPAddress
-			result["agent_metrics"] = agent.Metrics
-		}
+	if machine.Status != "pending" && !machine.LastSeen.IsZero() {
+		result["agent_ip"] = machine.AgentIP
+		result["agent_version"] = machine.AgentVersion
+		result["last_seen"] = machine.LastSeen
+		result["metrics"] = machine.Metrics
 	}
 
 	c.JSON(http.StatusOK, result)

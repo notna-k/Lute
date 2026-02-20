@@ -11,7 +11,7 @@ import (
 )
 
 // Loop sends periodic heartbeats with status and system metrics
-func Loop(ctx context.Context, client pb.AgentServiceClient, agentID string, interval time.Duration) {
+func Loop(ctx context.Context, client pb.AgentServiceClient, machineID string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -23,18 +23,19 @@ func Loop(ctx context.Context, client pb.AgentServiceClient, agentID string, int
 			log.Println("Heartbeat loop stopped")
 			return
 		case <-ticker.C:
-			sendHeartbeat(ctx, client, agentID)
+			sendHeartbeat(ctx, client, machineID)
 		}
 	}
 }
 
 // sendHeartbeat sends a single heartbeat to the server
-func sendHeartbeat(ctx context.Context, client pb.AgentServiceClient, agentID string) {
+func sendHeartbeat(ctx context.Context, client pb.AgentServiceClient, machineID string) {
 	hbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	log.Printf("Ololo sent")
 
 	_, err := client.Heartbeat(hbCtx, &pb.HeartbeatRequest{
-		AgentId: agentID,
+		AgentId: machineID, // Using machine_id for AgentId field
 		Status:  "running",
 		Metrics: metrics.Collect(),
 	})
@@ -45,12 +46,12 @@ func sendHeartbeat(ctx context.Context, client pb.AgentServiceClient, agentID st
 }
 
 // SendFinal sends a final heartbeat before shutdown
-func SendFinal(ctx context.Context, client pb.AgentServiceClient, agentID string) {
+func SendFinal(ctx context.Context, client pb.AgentServiceClient, machineID string) {
 	hbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	_, _ = client.Heartbeat(hbCtx, &pb.HeartbeatRequest{
-		AgentId: agentID,
+		AgentId: machineID, // Using machine_id for AgentId field
 		Status:  "stopped",
 	})
 }
