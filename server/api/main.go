@@ -26,7 +26,6 @@ func main() {
 		deps.Database,
 		deps.MachineRepo,
 		deps.UserRepo,
-		deps.AgentRepo,
 		deps.CommandRepo,
 	)
 

@@ -4,20 +4,25 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/lute/api/config"
 	"github.com/lute/api/database"
 	"github.com/lute/api/grpc"
 	"github.com/lute/api/repository"
 	"github.com/lute/api/router"
+	"github.com/lute/api/services"
 	"github.com/lute/api/websocket"
 )
 
 // Server holds HTTP and gRPC server instances
 type Server struct {
-	HTTP *http.Server
-	GRPC *grpc.Server
-	Hub  *websocket.Hub
+	HTTP         *http.Server
+	GRPC         *grpc.Server
+	Hub          *websocket.Hub
+	AgentMonitor *services.AgentMonitor
+	monitorCtx   context.Context
+	monitorStop  context.CancelFunc
 }
 
 // New creates and configures HTTP and gRPC servers
@@ -26,7 +31,6 @@ func New(
 	db *database.MongoDB,
 	machineRepo *repository.MachineRepository,
 	userRepo *repository.UserRepository,
-	agentRepo *repository.AgentRepository,
 	commandRepo *repository.CommandRepository,
 ) *Server {
 	// Initialize WebSocket hub
@@ -34,10 +38,10 @@ func New(
 	go hub.Run()
 
 	// Initialize gRPC server
-	grpcServer := grpc.NewServer(cfg, machineRepo, agentRepo, commandRepo)
+	grpcServer := grpc.NewServer(cfg, machineRepo, commandRepo)
 
 	// Setup HTTP router
-	r := router.SetupRouter(cfg, db, machineRepo, userRepo, agentRepo, commandRepo, hub)
+	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, hub)
 
 	// Create HTTP server
 	httpServer := &http.Server{
@@ -48,15 +52,23 @@ func New(
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
+	// Create agent monitor (check every 30s, timeout after 90s without heartbeat)
+	agentMonitor := services.NewAgentMonitor(machineRepo, 30*time.Second, 90*time.Second)
+
 	return &Server{
-		HTTP: httpServer,
-		GRPC: grpcServer,
-		Hub:  hub,
+		HTTP:         httpServer,
+		GRPC:         grpcServer,
+		Hub:          hub,
+		AgentMonitor: agentMonitor,
 	}
 }
 
 // Start starts both HTTP and gRPC servers
 func (s *Server) Start() error {
+	// Start agent monitor
+	s.monitorCtx, s.monitorStop = context.WithCancel(context.Background())
+	go s.AgentMonitor.Start(s.monitorCtx)
+
 	// Start gRPC server
 	go func() {
 		if err := s.GRPC.Start(); err != nil {
@@ -78,6 +90,11 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down both servers
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Println("Shutting down server...")
+
+	// Stop agent monitor
+	if s.monitorStop != nil {
+		s.monitorStop()
+	}
 
 	// Stop gRPC server
 	s.GRPC.Stop()

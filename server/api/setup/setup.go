@@ -17,7 +17,6 @@ type Dependencies struct {
 	Database    *database.MongoDB
 	MachineRepo *repository.MachineRepository
 	UserRepo    *repository.UserRepository
-	AgentRepo   *repository.AgentRepository
 	CommandRepo *repository.CommandRepository
 }
 
@@ -44,7 +43,6 @@ func Initialize() (*Dependencies, error) {
 		Database:    db,
 		MachineRepo: repos.MachineRepo,
 		UserRepo:    repos.UserRepo,
-		AgentRepo:   repos.AgentRepo,
 		CommandRepo: repos.CommandRepo,
 	}, nil
 }
@@ -95,7 +93,6 @@ func initializeDatabase(cfg *config.Config) (*database.MongoDB, error) {
 type Repositories struct {
 	MachineRepo *repository.MachineRepository
 	UserRepo    *repository.UserRepository
-	AgentRepo   *repository.AgentRepository
 	CommandRepo *repository.CommandRepository
 }
 
@@ -104,7 +101,6 @@ func initializeRepositories(db *database.MongoDB) *Repositories {
 	return &Repositories{
 		MachineRepo: repository.NewMachineRepository(db.Database),
 		UserRepo:    repository.NewUserRepository(db.Database),
-		AgentRepo:   repository.NewAgentRepository(db.Database),
 		CommandRepo: repository.NewCommandRepository(db.Database),
 	}
 }

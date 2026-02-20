@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -9,12 +10,11 @@ import (
 )
 
 // UpdateStatus updates the machine status on the server
-func UpdateStatus(client pb.AgentServiceClient, agentID, machineID, status, message string) {
+func UpdateStatus(client pb.AgentServiceClient, machineID, status, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := client.UpdateMachineStatus(ctx, &pb.UpdateMachineStatusRequest{
-		AgentId:   agentID,
 		MachineId: machineID,
 		Status:    status,
 		Message:   message,
@@ -27,13 +27,21 @@ func UpdateStatus(client pb.AgentServiceClient, agentID, machineID, status, mess
 }
 
 // Register registers the agent with the server
-func Register(ctx context.Context, client pb.AgentServiceClient, agentID, machineID, version, ipAddress string, metadata map[string]string) (*pb.RegisterAgentResponse, error) {
+// If machineID is empty, server will create a new machine
+// Returns the machine_id (either provided or newly created)
+func Register(ctx context.Context, client pb.AgentServiceClient, machineID, version, ipAddress, hostname string, metadata map[string]string) (string, error) {
 	resp, err := client.RegisterAgent(ctx, &pb.RegisterAgentRequest{
-		AgentId:   agentID,
 		MachineId: machineID,
 		Version:   version,
 		IpAddress: ipAddress,
+		Hostname:  hostname,
 		Metadata:  metadata,
 	})
-	return resp, err
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success {
+		return "", fmt.Errorf("%s", resp.Message)
+	}
+	return resp.MachineId, nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 // Execute runs a command locally and reports the result back to the server
-func Execute(ctx context.Context, client pb.AgentServiceClient, agentID, machineID string, cmd Cmd) {
+func Execute(ctx context.Context, client pb.AgentServiceClient, machineID string, cmd Cmd) {
 	log.Printf("Executing command %s: %s %v", cmd.ID, cmd.Command, cmd.Args)
 
 	// Notify server that we're picking up this command
@@ -19,7 +19,6 @@ func Execute(ctx context.Context, client pb.AgentServiceClient, agentID, machine
 	defer cancel()
 
 	_, _ = client.ExecuteCommand(execCtx, &pb.ExecuteCommandRequest{
-		AgentId:   agentID,
 		MachineId: machineID,
 		Command:   cmd.Command,
 		Args:      cmd.Args,
@@ -43,7 +42,6 @@ func Execute(ctx context.Context, client pb.AgentServiceClient, agentID, machine
 
 	// Report result back
 	_, reportErr := client.ExecuteCommand(execCtx, &pb.ExecuteCommandRequest{
-		AgentId:   agentID,
 		MachineId: machineID,
 		Command:   cmd.Command,
 		Args:      cmd.Args,

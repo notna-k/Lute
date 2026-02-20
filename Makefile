@@ -55,7 +55,7 @@ dev-clean:
 # Build all images without cache
 dev-build:
 	@echo "Building all images (this may take a while)..."
-	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build --no-cache
+	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build
 	@echo "Build complete."
 
 # Stop all services

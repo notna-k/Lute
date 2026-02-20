@@ -15,7 +15,6 @@ type SetupRequest struct {
 // SetupResponse is returned by the server after registration
 type SetupResponse struct {
 	MachineID   string `json:"machine_id"`
-	AgentID     string `json:"agent_id"`
 	GRPCAddress string `json:"grpc_address"`
 	Message     string `json:"message"`
 }
@@ -26,4 +25,3 @@ type PendingCmd struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args,omitempty"`
 }
-

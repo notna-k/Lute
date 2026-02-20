@@ -40,12 +40,12 @@ func (r *CommandRepository) GetByID(ctx context.Context, id primitive.ObjectID) 
 	return &cmd, nil
 }
 
-// GetPendingByAgentID returns all pending commands for an agent, ordered by creation time
-func (r *CommandRepository) GetPendingByAgentID(ctx context.Context, agentID string) ([]*models.Command, error) {
+// GetPendingByMachineID returns all pending commands for a machine, ordered by creation time
+func (r *CommandRepository) GetPendingByMachineID(ctx context.Context, machineID primitive.ObjectID) ([]*models.Command, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
 	cursor, err := r.Collection.Find(ctx, bson.M{
-		"agent_id": agentID,
-		"status":   "pending",
+		"machine_id": machineID,
+		"status":     "pending",
 	}, opts)
 	if err != nil {
 		return nil, err
@@ -57,6 +57,12 @@ func (r *CommandRepository) GetPendingByAgentID(ctx context.Context, agentID str
 		return nil, err
 	}
 	return commands, nil
+}
+
+// GetPendingByAgentID is deprecated - use GetPendingByMachineID instead
+func (r *CommandRepository) GetPendingByAgentID(ctx context.Context, agentID string) ([]*models.Command, error) {
+	// AgentID is no longer used - return empty list
+	return []*models.Command{}, nil
 }
 
 // GetByMachineID returns all commands for a machine, ordered by creation time (newest first)

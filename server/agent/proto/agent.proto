@@ -27,11 +27,11 @@ service AgentService {
 
 // RegisterAgentRequest contains agent registration information
 message RegisterAgentRequest {
-  string agent_id = 1;
-  string machine_id = 2;
-  string version = 3;
-  string ip_address = 4;
-  map<string, string> metadata = 5;
+  string machine_id = 1; // Optional: if empty, server creates new machine
+  string version = 2;
+  string ip_address = 3;
+  map<string, string> metadata = 4;
+  string hostname = 5; // Required for new machine creation
 }
 
 // RegisterAgentResponse contains registration result
@@ -39,11 +39,12 @@ message RegisterAgentResponse {
   bool success = 1;
   string message = 2;
   string server_version = 3;
+  string machine_id = 4; // The machine ID (either provided or newly created)
 }
 
 // HeartbeatRequest contains heartbeat information
 message HeartbeatRequest {
-  string agent_id = 1;
+  string machine_id = 1;
   string status = 2; // "running", "stopped", etc.
   map<string, string> metrics = 3;
 }
@@ -56,10 +57,9 @@ message HeartbeatResponse {
 
 // UpdateMachineStatusRequest updates machine status
 message UpdateMachineStatusRequest {
-  string agent_id = 1;
-  string machine_id = 2;
-  string status = 3; // "running", "stopped", "error"
-  string message = 4;
+  string machine_id = 1;
+  string status = 2; // "running", "stopped", "error"
+  string message = 3;
 }
 
 // UpdateMachineStatusResponse confirms status update
@@ -70,8 +70,7 @@ message UpdateMachineStatusResponse {
 
 // GetMachineConfigRequest requests machine configuration
 message GetMachineConfigRequest {
-  string agent_id = 1;
-  string machine_id = 2;
+  string machine_id = 1;
 }
 
 // GetMachineConfigResponse contains machine configuration
@@ -83,11 +82,10 @@ message GetMachineConfigResponse {
 
 // ExecuteCommandRequest requests command execution
 message ExecuteCommandRequest {
-  string agent_id = 1;
-  string machine_id = 2;
-  string command = 3;
-  repeated string args = 4;
-  map<string, string> env = 5;
+  string machine_id = 1;
+  string command = 2;
+  repeated string args = 3;
+  map<string, string> env = 4;
 }
 
 // ExecuteCommandResponse contains command execution result
@@ -100,9 +98,8 @@ message ExecuteCommandResponse {
 
 // StreamLogsRequest requests log streaming
 message StreamLogsRequest {
-  string agent_id = 1;
-  string machine_id = 2;
-  string level = 3; // "info", "warn", "error", "debug"
+  string machine_id = 1;
+  string level = 2; // "info", "warn", "error", "debug"
 }
 
 // LogMessage contains a log entry

@@ -17,7 +17,6 @@ func SetupRouter(
 	db *database.MongoDB,
 	machineRepo *repository.MachineRepository,
 	userRepo *repository.UserRepository,
-	agentRepo *repository.AgentRepository,
 	commandRepo *repository.CommandRepository,
 	hub *websocket.Hub,
 ) *gin.Engine {
@@ -48,7 +47,7 @@ func SetupRouter(
 
 	// Initialize handlers
 	machineHandler := handlers.NewMachineHandler(machineService)
-	agentHandler := handlers.NewAgentHandler(cfg.AgentBinary.Dir, cfg, machineRepo, agentRepo, commandRepo)
+	agentHandler := handlers.NewAgentHandler(cfg.AgentBinary.Dir, cfg, machineRepo, commandRepo)
 
 	// Protected API routes
 	v1 := api.Group("/v1")

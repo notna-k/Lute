@@ -33,25 +33,25 @@ RUN mkdir -p /app/agent-binaries && \
     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
     -o /app/agent-binaries/lute-agent-linux-amd64 .
 
-# Linux arm64
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo \
-    -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-linux-arm64 .
+# # Linux arm64
+# RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo \
+#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+#     -o /app/agent-binaries/lute-agent-linux-arm64 .
 
-# Darwin (macOS) amd64
-RUN CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -a -installsuffix cgo \
-    -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-darwin-amd64 .
+# # Darwin (macOS) amd64
+# RUN CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -a -installsuffix cgo \
+#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+#     -o /app/agent-binaries/lute-agent-darwin-amd64 .
 
-# Darwin (macOS) arm64
-RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -a -installsuffix cgo \
-    -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-darwin-arm64 .
+# # Darwin (macOS) arm64
+# RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -a -installsuffix cgo \
+#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+#     -o /app/agent-binaries/lute-agent-darwin-arm64 .
 
-# Windows amd64
-RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -a -installsuffix cgo \
-    -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-windows-amd64.exe .
+# # Windows amd64
+# RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -a -installsuffix cgo \
+#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+#     -o /app/agent-binaries/lute-agent-windows-amd64.exe .
 
 # Write the version file
 RUN echo "${AGENT_VERSION}" > /app/agent-binaries/VERSION
