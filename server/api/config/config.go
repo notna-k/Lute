@@ -10,9 +10,16 @@ type Config struct {
 	Server      ServerConfig
 	MongoDB     MongoDBConfig
 	GRPC        GRPCConfig
+	Heartbeat   HeartbeatConfig
 	WebSocket   WebSocketConfig
 	Firebase    FirebaseConfig
 	AgentBinary AgentBinaryConfig
+}
+
+type HeartbeatConfig struct {
+	CheckInterval time.Duration
+	PingTimeout   time.Duration
+	MaxRetries    int
 }
 
 type AgentBinaryConfig struct {
@@ -73,6 +80,11 @@ func Load() (*Config, error) {
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),
 			Host: getEnv("GRPC_HOST", "0.0.0.0"),
+		},
+		Heartbeat: HeartbeatConfig{
+			CheckInterval: getDurationEnv("HEARTBEAT_CHECK_INTERVAL", 30*time.Second),
+			PingTimeout:   getDurationEnv("HEARTBEAT_PING_TIMEOUT", 5*time.Second),
+			MaxRetries:    getIntEnv("HEARTBEAT_MAX_RETRIES", 3),
 		},
 		WebSocket: WebSocketConfig{
 			ReadBufferSize:  getIntEnv("WS_READ_BUFFER_SIZE", 1024),

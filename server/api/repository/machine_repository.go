@@ -188,3 +188,63 @@ func (r *MachineRepository) UpdateStatusAndLastSeen(ctx context.Context, machine
 	}
 	return nil
 }
+
+// UpdateHeartbeat sets status to alive, resets heartbeat_retry, updates
+// last_seen, and stores metrics in a single write.
+func (r *MachineRepository) UpdateHeartbeat(ctx context.Context, machineID primitive.ObjectID, metrics map[string]string) error {
+	now := time.Now()
+	set := bson.M{
+		"status":          "alive",
+		"heartbeat_retry": 0,
+		"last_seen":       now,
+		"updated_at":      now,
+	}
+	if len(metrics) > 0 {
+		set["metrics"] = metrics
+	}
+	result, err := r.Collection.UpdateOne(ctx, bson.M{"_id": machineID}, bson.M{"$set": set})
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// IncrementHeartbeatRetry atomically increments heartbeat_retry and returns
+// the new value.
+func (r *MachineRepository) IncrementHeartbeatRetry(ctx context.Context, machineID primitive.ObjectID) (int, error) {
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	var updated models.Machine
+	err := r.Collection.FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": machineID},
+		bson.M{
+			"$inc": bson.M{"heartbeat_retry": 1},
+			"$set": bson.M{"updated_at": time.Now()},
+		},
+		opts,
+	).Decode(&updated)
+	if err != nil {
+		return 0, err
+	}
+	return updated.HeartbeatRetry, nil
+}
+
+// ListMonitored returns machines with status "alive" or "registered".
+func (r *MachineRepository) ListMonitored(ctx context.Context) ([]*models.Machine, error) {
+	cursor, err := r.Collection.Find(ctx, bson.M{
+		"status": bson.M{"$in": []string{"alive", "registered"}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var machines []*models.Machine
+	if err := cursor.All(ctx, &machines); err != nil {
+		return nil, err
+	}
+	return machines, nil
+}

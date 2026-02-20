@@ -47,8 +47,9 @@ type Machine struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
 	AgentIP      string                 `json:"agent_ip,omitempty" bson:"agent_ip,omitempty"`
 	AgentVersion string                 `json:"agent_version,omitempty" bson:"agent_version,omitempty"`
-	LastSeen     time.Time              `json:"last_seen,omitempty" bson:"last_seen,omitempty"`
-	Metrics      map[string]string      `json:"metrics,omitempty" bson:"metrics,omitempty"`
+	LastSeen       time.Time              `json:"last_seen,omitempty" bson:"last_seen,omitempty"`
+	Metrics        map[string]string      `json:"metrics,omitempty" bson:"metrics,omitempty"`
+	HeartbeatRetry int                    `json:"-" bson:"heartbeat_retry"`
 }
 
 // Agent model has been removed - agent data is now embedded in Machine

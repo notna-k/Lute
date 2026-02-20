@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build stage
 FROM golang:1.24-alpine AS builder
 
@@ -10,16 +11,21 @@ RUN apk add --no-cache git make
 COPY server/api/go.mod server/api/go.sum server/api/
 COPY server/agent/go.mod server/agent/go.sum server/agent/
 
-RUN cd server/api && go mod download
-RUN cd server/agent && go mod download
+# Download deps with cache mount so repeated builds skip download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd server/api && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd server/agent && go mod download
 
 # Copy source code
 COPY server/api server/api
 COPY server/agent server/agent
 
-# Build the API server
+# Build the API server (use Go build cache for faster recompiles)
+# Output to "api" to avoid clashing with the server/ package directory
 WORKDIR /app/server/api
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server .
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o api .
 
 # ---- Build agent binaries for multiple platforms ----
 ARG AGENT_VERSION=dev
@@ -28,30 +34,35 @@ ARG BUILD_TIME=unknown
 WORKDIR /app/server/agent
 
 # Linux amd64
-RUN mkdir -p /app/agent-binaries && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
-    -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /app/agent-binaries && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
     -o /app/agent-binaries/lute-agent-linux-amd64 .
 
-# # Linux arm64
-# RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo \
-#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-#     -o /app/agent-binaries/lute-agent-linux-arm64 .
+# Linux arm64
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/agent-binaries/lute-agent-linux-arm64 .
 
-# # Darwin (macOS) amd64
-# RUN CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -a -installsuffix cgo \
-#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-#     -o /app/agent-binaries/lute-agent-darwin-amd64 .
+# Darwin (macOS) amd64
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
+    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/agent-binaries/lute-agent-darwin-amd64 .
 
-# # Darwin (macOS) arm64
-# RUN CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -a -installsuffix cgo \
-#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-#     -o /app/agent-binaries/lute-agent-darwin-arm64 .
+# Darwin (macOS) arm64
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build \
+    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/agent-binaries/lute-agent-darwin-arm64 .
 
-# # Windows amd64
-# RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -a -installsuffix cgo \
-#     -ldflags "-X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-#     -o /app/agent-binaries/lute-agent-windows-amd64.exe .
+# Windows amd64
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
+    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/agent-binaries/lute-agent-windows-amd64.exe .
 
 # Write the version file
 RUN echo "${AGENT_VERSION}" > /app/agent-binaries/VERSION
@@ -64,7 +75,7 @@ RUN apk --no-cache add ca-certificates wget
 WORKDIR /root/
 
 # Copy server binary
-COPY --from=builder /app/server/api/server .
+COPY --from=builder /app/server/api/api .
 
 # Copy agent binaries into the directory the server will serve
 COPY --from=builder /app/agent-binaries /opt/lute/agent-binaries
