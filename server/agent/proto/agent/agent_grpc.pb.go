@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v3.19.6
-// source: agent.proto
+// source: proto/agent.proto
 
 package agent
 
@@ -19,32 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_RegisterAgent_FullMethodName       = "/agent.AgentService/RegisterAgent"
-	AgentService_Heartbeat_FullMethodName           = "/agent.AgentService/Heartbeat"
-	AgentService_UpdateMachineStatus_FullMethodName = "/agent.AgentService/UpdateMachineStatus"
-	AgentService_GetMachineConfig_FullMethodName    = "/agent.AgentService/GetMachineConfig"
-	AgentService_ExecuteCommand_FullMethodName      = "/agent.AgentService/ExecuteCommand"
-	AgentService_StreamLogs_FullMethodName          = "/agent.AgentService/StreamLogs"
+	AgentService_Connect_FullMethodName = "/agent.AgentService/Connect"
 )
 
 // AgentServiceClient is the client API for AgentService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// AgentService handles communication with Go agents running on VMs
+// AgentService — a single bidirectional stream between agent and API server.
+// The agent opens the stream after REST registration; the API sends heartbeat
+// pings and the agent responds with pongs carrying status and metrics.
 type AgentServiceClient interface {
-	// RegisterAgent registers a new agent connection
-	RegisterAgent(ctx context.Context, in *RegisterAgentRequest, opts ...grpc.CallOption) (*RegisterAgentResponse, error)
-	// Heartbeat sends periodic heartbeat from agent to server
-	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
-	// UpdateMachineStatus updates the status of a machine
-	UpdateMachineStatus(ctx context.Context, in *UpdateMachineStatusRequest, opts ...grpc.CallOption) (*UpdateMachineStatusResponse, error)
-	// GetMachineConfig retrieves configuration for a machine
-	GetMachineConfig(ctx context.Context, in *GetMachineConfigRequest, opts ...grpc.CallOption) (*GetMachineConfigResponse, error)
-	// ExecuteCommand executes a command on the machine
-	ExecuteCommand(ctx context.Context, in *ExecuteCommandRequest, opts ...grpc.CallOption) (*ExecuteCommandResponse, error)
-	// StreamLogs streams logs from the agent
-	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogMessage], error)
+	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, ServerMessage], error)
 }
 
 type agentServiceClient struct {
@@ -55,93 +41,28 @@ func NewAgentServiceClient(cc grpc.ClientConnInterface) AgentServiceClient {
 	return &agentServiceClient{cc}
 }
 
-func (c *agentServiceClient) RegisterAgent(ctx context.Context, in *RegisterAgentRequest, opts ...grpc.CallOption) (*RegisterAgentResponse, error) {
+func (c *agentServiceClient) Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AgentMessage, ServerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RegisterAgentResponse)
-	err := c.cc.Invoke(ctx, AgentService_RegisterAgent_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[0], AgentService_Connect_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
-}
-
-func (c *agentServiceClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HeartbeatResponse)
-	err := c.cc.Invoke(ctx, AgentService_Heartbeat_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *agentServiceClient) UpdateMachineStatus(ctx context.Context, in *UpdateMachineStatusRequest, opts ...grpc.CallOption) (*UpdateMachineStatusResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UpdateMachineStatusResponse)
-	err := c.cc.Invoke(ctx, AgentService_UpdateMachineStatus_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *agentServiceClient) GetMachineConfig(ctx context.Context, in *GetMachineConfigRequest, opts ...grpc.CallOption) (*GetMachineConfigResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetMachineConfigResponse)
-	err := c.cc.Invoke(ctx, AgentService_GetMachineConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *agentServiceClient) ExecuteCommand(ctx context.Context, in *ExecuteCommandRequest, opts ...grpc.CallOption) (*ExecuteCommandResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ExecuteCommandResponse)
-	err := c.cc.Invoke(ctx, AgentService_ExecuteCommand_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *agentServiceClient) StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogMessage], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[0], AgentService_StreamLogs_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[StreamLogsRequest, LogMessage]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
+	x := &grpc.GenericClientStream[AgentMessage, ServerMessage]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type AgentService_StreamLogsClient = grpc.ServerStreamingClient[LogMessage]
+type AgentService_ConnectClient = grpc.BidiStreamingClient[AgentMessage, ServerMessage]
 
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
 //
-// AgentService handles communication with Go agents running on VMs
+// AgentService — a single bidirectional stream between agent and API server.
+// The agent opens the stream after REST registration; the API sends heartbeat
+// pings and the agent responds with pongs carrying status and metrics.
 type AgentServiceServer interface {
-	// RegisterAgent registers a new agent connection
-	RegisterAgent(context.Context, *RegisterAgentRequest) (*RegisterAgentResponse, error)
-	// Heartbeat sends periodic heartbeat from agent to server
-	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
-	// UpdateMachineStatus updates the status of a machine
-	UpdateMachineStatus(context.Context, *UpdateMachineStatusRequest) (*UpdateMachineStatusResponse, error)
-	// GetMachineConfig retrieves configuration for a machine
-	GetMachineConfig(context.Context, *GetMachineConfigRequest) (*GetMachineConfigResponse, error)
-	// ExecuteCommand executes a command on the machine
-	ExecuteCommand(context.Context, *ExecuteCommandRequest) (*ExecuteCommandResponse, error)
-	// StreamLogs streams logs from the agent
-	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[LogMessage]) error
+	Connect(grpc.BidiStreamingServer[AgentMessage, ServerMessage]) error
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -152,23 +73,8 @@ type AgentServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAgentServiceServer struct{}
 
-func (UnimplementedAgentServiceServer) RegisterAgent(context.Context, *RegisterAgentRequest) (*RegisterAgentResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RegisterAgent not implemented")
-}
-func (UnimplementedAgentServiceServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
-}
-func (UnimplementedAgentServiceServer) UpdateMachineStatus(context.Context, *UpdateMachineStatusRequest) (*UpdateMachineStatusResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateMachineStatus not implemented")
-}
-func (UnimplementedAgentServiceServer) GetMachineConfig(context.Context, *GetMachineConfigRequest) (*GetMachineConfigResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetMachineConfig not implemented")
-}
-func (UnimplementedAgentServiceServer) ExecuteCommand(context.Context, *ExecuteCommandRequest) (*ExecuteCommandResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ExecuteCommand not implemented")
-}
-func (UnimplementedAgentServiceServer) StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[LogMessage]) error {
-	return status.Error(codes.Unimplemented, "method StreamLogs not implemented")
+func (UnimplementedAgentServiceServer) Connect(grpc.BidiStreamingServer[AgentMessage, ServerMessage]) error {
+	return status.Error(codes.Unimplemented, "method Connect not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -191,106 +97,12 @@ func RegisterAgentServiceServer(s grpc.ServiceRegistrar, srv AgentServiceServer)
 	s.RegisterService(&AgentService_ServiceDesc, srv)
 }
 
-func _AgentService_RegisterAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterAgentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).RegisterAgent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_RegisterAgent_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).RegisterAgent(ctx, req.(*RegisterAgentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AgentService_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HeartbeatRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).Heartbeat(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_Heartbeat_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).Heartbeat(ctx, req.(*HeartbeatRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AgentService_UpdateMachineStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateMachineStatusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).UpdateMachineStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_UpdateMachineStatus_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).UpdateMachineStatus(ctx, req.(*UpdateMachineStatusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AgentService_GetMachineConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetMachineConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).GetMachineConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_GetMachineConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).GetMachineConfig(ctx, req.(*GetMachineConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AgentService_ExecuteCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExecuteCommandRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).ExecuteCommand(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_ExecuteCommand_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).ExecuteCommand(ctx, req.(*ExecuteCommandRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AgentService_StreamLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(StreamLogsRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(AgentServiceServer).StreamLogs(m, &grpc.GenericServerStream[StreamLogsRequest, LogMessage]{ServerStream: stream})
+func _AgentService_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).Connect(&grpc.GenericServerStream[AgentMessage, ServerMessage]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type AgentService_StreamLogsServer = grpc.ServerStreamingServer[LogMessage]
+type AgentService_ConnectServer = grpc.BidiStreamingServer[AgentMessage, ServerMessage]
 
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -298,34 +110,14 @@ type AgentService_StreamLogsServer = grpc.ServerStreamingServer[LogMessage]
 var AgentService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "agent.AgentService",
 	HandlerType: (*AgentServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "RegisterAgent",
-			Handler:    _AgentService_RegisterAgent_Handler,
-		},
-		{
-			MethodName: "Heartbeat",
-			Handler:    _AgentService_Heartbeat_Handler,
-		},
-		{
-			MethodName: "UpdateMachineStatus",
-			Handler:    _AgentService_UpdateMachineStatus_Handler,
-		},
-		{
-			MethodName: "GetMachineConfig",
-			Handler:    _AgentService_GetMachineConfig_Handler,
-		},
-		{
-			MethodName: "ExecuteCommand",
-			Handler:    _AgentService_ExecuteCommand_Handler,
-		},
-	},
+	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "StreamLogs",
-			Handler:       _AgentService_StreamLogs_Handler,
+			StreamName:    "Connect",
+			Handler:       _AgentService_Connect_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
-	Metadata: "agent.proto",
+	Metadata: "proto/agent.proto",
 }

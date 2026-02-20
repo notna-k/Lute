@@ -4,109 +4,32 @@ package agent;
 
 option go_package = "github.com/lute/agent/proto/agent";
 
-// AgentService handles communication with Go agents running on VMs
+// AgentService — a single bidirectional stream between agent and API server.
+// The agent opens the stream after REST registration; the API sends heartbeat
+// pings and the agent responds with pongs carrying status and metrics.
 service AgentService {
-  // RegisterAgent registers a new agent connection
-  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
-  
-  // Heartbeat sends periodic heartbeat from agent to server
-  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
-  
-  // UpdateMachineStatus updates the status of a machine
-  rpc UpdateMachineStatus(UpdateMachineStatusRequest) returns (UpdateMachineStatusResponse);
-  
-  // GetMachineConfig retrieves configuration for a machine
-  rpc GetMachineConfig(GetMachineConfigRequest) returns (GetMachineConfigResponse);
-  
-  // ExecuteCommand executes a command on the machine
-  rpc ExecuteCommand(ExecuteCommandRequest) returns (ExecuteCommandResponse);
-  
-  // StreamLogs streams logs from the agent
-  rpc StreamLogs(StreamLogsRequest) returns (stream LogMessage);
+  rpc Connect(stream AgentMessage) returns (stream ServerMessage);
 }
 
-// RegisterAgentRequest contains agent registration information
-message RegisterAgentRequest {
-  string machine_id = 1; // Optional: if empty, server creates new machine
-  string version = 2;
-  string ip_address = 3;
-  map<string, string> metadata = 4;
-  string hostname = 5; // Required for new machine creation
-}
-
-// RegisterAgentResponse contains registration result
-message RegisterAgentResponse {
-  bool success = 1;
-  string message = 2;
-  string server_version = 3;
-  string machine_id = 4; // The machine ID (either provided or newly created)
-}
-
-// HeartbeatRequest contains heartbeat information
-message HeartbeatRequest {
+message AgentMessage {
   string machine_id = 1;
-  string status = 2; // "running", "stopped", etc.
-  map<string, string> metrics = 3;
+  oneof payload {
+    HeartbeatPong heartbeat_pong = 2;
+  }
 }
 
-// HeartbeatResponse acknowledges the heartbeat
-message HeartbeatResponse {
-  bool success = 1;
-  int64 timestamp = 2;
+message ServerMessage {
+  oneof payload {
+    HeartbeatPing heartbeat_ping = 1;
+  }
 }
 
-// UpdateMachineStatusRequest updates machine status
-message UpdateMachineStatusRequest {
-  string machine_id = 1;
-  string status = 2; // "running", "stopped", "error"
-  string message = 3;
+message HeartbeatPing {
+  int64 timestamp = 1;
 }
 
-// UpdateMachineStatusResponse confirms status update
-message UpdateMachineStatusResponse {
-  bool success = 1;
-  string message = 2;
-}
-
-// GetMachineConfigRequest requests machine configuration
-message GetMachineConfigRequest {
-  string machine_id = 1;
-}
-
-// GetMachineConfigResponse contains machine configuration
-message GetMachineConfigResponse {
-  bool success = 1;
-  map<string, string> config = 2;
-  string message = 3;
-}
-
-// ExecuteCommandRequest requests command execution
-message ExecuteCommandRequest {
-  string machine_id = 1;
-  string command = 2;
-  repeated string args = 3;
-  map<string, string> env = 4;
-}
-
-// ExecuteCommandResponse contains command execution result
-message ExecuteCommandResponse {
-  bool success = 1;
-  string output = 2;
-  int32 exit_code = 3;
-  string error = 4;
-}
-
-// StreamLogsRequest requests log streaming
-message StreamLogsRequest {
-  string machine_id = 1;
-  string level = 2; // "info", "warn", "error", "debug"
-}
-
-// LogMessage contains a log entry
-message LogMessage {
-  string level = 1;
-  string message = 2;
+message HeartbeatPong {
+  string status = 1;
+  map<string, string> metrics = 2;
   int64 timestamp = 3;
-  string source = 4;
 }
-
