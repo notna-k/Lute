@@ -130,7 +130,7 @@ func (r *MachineRepository) UpdateLastSeen(ctx context.Context, machineID primit
 }
 
 // UpdateMetrics updates the metrics for a machine
-func (r *MachineRepository) UpdateMetrics(ctx context.Context, machineID primitive.ObjectID, metrics map[string]string) error {
+func (r *MachineRepository) UpdateMetrics(ctx context.Context, machineID primitive.ObjectID, metrics map[string]interface{}) error {
 	update := bson.M{
 		"$set": bson.M{
 			"metrics":    metrics,
@@ -191,7 +191,7 @@ func (r *MachineRepository) UpdateStatusAndLastSeen(ctx context.Context, machine
 
 // UpdateHeartbeat sets status to alive, resets heartbeat_retry, updates
 // last_seen, and stores metrics in a single write.
-func (r *MachineRepository) UpdateHeartbeat(ctx context.Context, machineID primitive.ObjectID, metrics map[string]string) error {
+func (r *MachineRepository) UpdateHeartbeat(ctx context.Context, machineID primitive.ObjectID, metrics map[string]interface{}) error {
 	now := time.Now()
 	set := bson.M{
 		"status":          "alive",
@@ -247,4 +247,36 @@ func (r *MachineRepository) ListMonitored(ctx context.Context) ([]*models.Machin
 		return nil, err
 	}
 	return machines, nil
+}
+
+// CountByUserIDAndStatusResult is one row from AggregateCountsByUserID.
+type CountByUserIDAndStatusResult struct {
+	UserID primitive.ObjectID `bson:"_id"`
+	Alive  int                `bson:"alive"`
+	Dead   int                `bson:"dead"`
+	Total  int                `bson:"total"`
+}
+
+// AggregateCountsByUserID groups machines by user_id (excluding nil user_id) and counts alive, dead, total.
+func (r *MachineRepository) AggregateCountsByUserID(ctx context.Context) ([]CountByUserIDAndStatusResult, error) {
+	pipe := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"user_id": bson.M{"$ne": primitive.NilObjectID}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":   "$user_id",
+			"alive": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "alive"}}, 1, 0}}},
+			"dead":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "dead"}}, 1, 0}}},
+			"total": bson.M{"$sum": 1},
+		}}},
+	}
+	cursor, err := r.Collection.Aggregate(ctx, pipe)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var out []CountByUserIDAndStatusResult
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

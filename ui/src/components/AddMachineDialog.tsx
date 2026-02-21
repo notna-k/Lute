@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,20 +7,18 @@ import {
   Button,
   Typography,
   Box,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
   IconButton,
   Tooltip,
   Paper,
   Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   ContentCopy as CopyIcon,
   Check as CheckIcon,
   Terminal as TerminalIcon,
 } from '@mui/icons-material';
+import { apiClient } from '../services/api';
 
 interface AddMachineDialogProps {
   open: boolean;
@@ -29,82 +27,59 @@ interface AddMachineDialogProps {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
+interface ClaimCodeResponse {
+  code: string;
+  expires_at: string;
+}
+
 const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
-  const [copiedStep, setCopiedStep] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [claimCode, setClaimCode] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimLoading, setClaimLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setClaimCode(null);
+    setClaimError(null);
+    setClaimLoading(true);
+    apiClient
+      .post<ClaimCodeResponse>('/api/v1/agent/claim-code')
+      .then((res) => {
+        setClaimCode(res.code);
+        setClaimError(null);
+      })
+      .catch((err: Error) => {
+        setClaimCode(null);
+        setClaimError(err.message || 'Failed to get claim code');
+      })
+      .finally(() => setClaimLoading(false));
+  }, [open]);
 
   const installCommand = `curl -sSL ${API_URL}/api/v1/agent/install.sh | bash`;
   const setupCommand = `lute-agent --setup --api ${API_URL}`;
+  const fullCommand =
+    claimCode != null
+      ? `${installCommand} && ${setupCommand} --claim-code ${claimCode}`
+      : '';
 
-  const handleCopy = async (text: string, step: number) => {
+  const handleCopy = async () => {
+    if (!fullCommand) return;
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedStep(step);
-      setTimeout(() => setCopiedStep(null), 2000);
+      await navigator.clipboard.writeText(fullCommand);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
       const textarea = document.createElement('textarea');
-      textarea.value = text;
+      textarea.value = fullCommand;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      setCopiedStep(step);
-      setTimeout(() => setCopiedStep(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
-
-  const CodeBlock = ({ code, step }: { code: string; step: number }) => (
-    <Paper
-      elevation={0}
-      sx={{
-        bgcolor: 'grey.900',
-        color: 'grey.100',
-        p: 2,
-        borderRadius: 1,
-        fontFamily: 'monospace',
-        fontSize: '0.85rem',
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-      }}
-    >
-      <Typography
-        component="span"
-        sx={{
-          color: 'success.light',
-          fontFamily: 'monospace',
-          fontSize: '0.85rem',
-          mr: 0.5,
-        }}
-      >
-        $
-      </Typography>
-      <Box
-        component="code"
-        sx={{
-          flex: 1,
-          wordBreak: 'break-all',
-          whiteSpace: 'pre-wrap',
-        }}
-      >
-        {code}
-      </Box>
-      <Tooltip title={copiedStep === step ? 'Copied!' : 'Copy'}>
-        <IconButton
-          size="small"
-          onClick={() => handleCopy(code, step)}
-          sx={{ color: 'grey.400', '&:hover': { color: 'grey.100' } }}
-        >
-          {copiedStep === step ? (
-            <CheckIcon fontSize="small" sx={{ color: 'success.light' }} />
-          ) : (
-            <CopyIcon fontSize="small" />
-          )}
-        </IconButton>
-      </Tooltip>
-    </Paper>
-  );
 
   return (
     <Dialog
@@ -124,53 +99,92 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
       </DialogTitle>
 
       <DialogContent>
-        <Alert severity="info" sx={{ mb: 3 }}>
-          Run these commands on the target VM to install and register the agent.
-          The agent will collect system information and create the machine automatically.
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Run the command below on the target VM. It will install the agent and
+          register the machine to your account. The machine will appear in your
+          list automatically.
         </Alert>
 
-        <Stepper orientation="vertical" activeStep={-1}>
-          {/* Step 1 */}
-          <Step active>
-            <StepLabel>
-              <Typography fontWeight="medium">Install the agent</Typography>
-            </StepLabel>
-            <StepContent>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                Download and install the Lute agent binary on your VM.
-                This auto-detects the OS and architecture.
-              </Typography>
-              <CodeBlock code={installCommand} step={1} />
-            </StepContent>
-          </Step>
+        {claimLoading && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <CircularProgress size={20} />
+            <Typography variant="body2" color="text.secondary">
+              Generating your claim code…
+            </Typography>
+          </Box>
+        )}
 
-          {/* Step 2 */}
-          <Step active>
-            <StepLabel>
-              <Typography fontWeight="medium">Run setup</Typography>
-            </StepLabel>
-            <StepContent>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                The agent will ask for a service name, collect system info
-                (hostname, OS, CPU, memory, IP), and register with the server.
-              </Typography>
-              <CodeBlock code={setupCommand} step={2} />
-            </StepContent>
-          </Step>
+        {claimError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {claimError}. A claim code is required to add a machine. Make sure
+            you are logged in and try again.
+          </Alert>
+        )}
 
-          {/* Step 3 */}
-          <Step active>
-            <StepLabel>
-              <Typography fontWeight="medium">Done!</Typography>
-            </StepLabel>
-            <StepContent>
-              <Typography variant="body2" color="text.secondary">
-                The machine will appear in your list automatically.
-                The agent will keep running and send heartbeats to the server.
+        {claimCode && (
+          <>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Your claim code expires in 15 minutes. Run the command on the VM
+              before it expires.
+            </Typography>
+
+            <Paper
+              elevation={0}
+              sx={{
+                bgcolor: 'grey.900',
+                color: 'grey.100',
+                p: 2,
+                borderRadius: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+              }}
+            >
+              <Typography
+                component="span"
+                sx={{
+                  color: 'success.light',
+                  fontFamily: 'monospace',
+                  fontSize: '0.85rem',
+                  flexShrink: 0,
+                }}
+              >
+                $
               </Typography>
-            </StepContent>
-          </Step>
-        </Stepper>
+              <Box
+                component="code"
+                sx={{
+                  flex: 1,
+                  wordBreak: 'break-all',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {fullCommand}
+              </Box>
+              <Tooltip title={copied ? 'Copied!' : 'Copy'}>
+                <IconButton
+                  size="small"
+                  onClick={handleCopy}
+                  sx={{ color: 'grey.400', '&:hover': { color: 'grey.100' } }}
+                >
+                  {copied ? (
+                    <CheckIcon fontSize="small" sx={{ color: 'success.light' }} />
+                  ) : (
+                    <CopyIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </Tooltip>
+            </Paper>
+          </>
+        )}
+
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          The agent will prompt for a service name, collect system info, then
+          start in the background and send heartbeats to the server.
+        </Typography>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -183,4 +197,3 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
 };
 
 export default AddMachineDialog;
-

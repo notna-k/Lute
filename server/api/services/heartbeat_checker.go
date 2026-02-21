@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	pb "github.com/lute/agent/proto/agent"
 	luteGrpc "github.com/lute/api/grpc"
 	"github.com/lute/api/repository"
 )
@@ -19,6 +20,7 @@ type HeartbeatChecker struct {
 	interval    time.Duration
 	pingTimeout time.Duration
 	maxRetries  int
+	runNow      chan struct{} // trigger an immediate check (e.g. when a new connection registers)
 }
 
 func NewHeartbeatChecker(
@@ -34,6 +36,16 @@ func NewHeartbeatChecker(
 		interval:    interval,
 		pingTimeout: pingTimeout,
 		maxRetries:  maxRetries,
+		runNow:      make(chan struct{}, 1),
+	}
+}
+
+// TriggerCheck schedules an immediate check (e.g. when a new agent connects).
+// Non-blocking; if a run is already scheduled, this is a no-op.
+func (h *HeartbeatChecker) TriggerCheck() {
+	select {
+	case h.runNow <- struct{}{}:
+	default:
 	}
 }
 
@@ -44,12 +56,17 @@ func (h *HeartbeatChecker) Start(ctx context.Context) {
 	log.Printf("Heartbeat checker started (interval %s, ping timeout %s, max retries %d)",
 		h.interval, h.pingTimeout, h.maxRetries)
 
+	// Run first check immediately so new connections get a ping without waiting a full interval
+	h.check(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Heartbeat checker stopped")
 			return
 		case <-ticker.C:
+			h.check(ctx)
+		case <-h.runNow:
 			h.check(ctx)
 		}
 	}
@@ -71,6 +88,7 @@ func (h *HeartbeatChecker) check(ctx context.Context) {
 			continue
 		}
 
+		log.Printf("Heartbeat checker: pinging machine %s", machineID)
 		pong, err := conn.Ping(h.pingTimeout)
 		if err != nil {
 			log.Printf("Heartbeat checker: ping %s failed: %v", machineID, err)
@@ -78,12 +96,14 @@ func (h *HeartbeatChecker) check(ctx context.Context) {
 			continue
 		}
 
-		var metrics map[string]string
+		var metrics map[string]interface{}
 		if pong != nil {
-			metrics = pong.GetMetrics()
+			metrics = metricValueMapToInterface(pong.GetMetrics())
 		}
 		if err := h.machineRepo.UpdateHeartbeat(ctx, m.ID, metrics); err != nil {
 			log.Printf("Heartbeat checker: update heartbeat %s: %v", machineID, err)
+		} else {
+			log.Printf("Heartbeat checker: machine %s OK", machineID)
 		}
 	}
 }
@@ -107,4 +127,35 @@ func (h *HeartbeatChecker) handleMiss(ctx context.Context, machineID string) {
 		}
 		log.Printf("Heartbeat checker: marked %s as dead (retry %d >= %d)", machineID, newRetry, h.maxRetries)
 	}
+}
+
+// Canonical metric keys stored on Machine.Metrics (same as agent and machine_snapshots).
+var canonicalMetricKeys = map[string]bool{
+	"cpu_load": true, "mem_usage_mb": true, "disk_used_gb": true, "disk_total_gb": true,
+}
+
+// metricValueMapToInterface converts proto map[string]*MetricValue to map[string]interface{} for storage.
+// Only canonical keys (cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb) are stored on Machine.Metrics.
+func metricValueMapToInterface(proto map[string]*pb.MetricValue) map[string]interface{} {
+	if len(proto) == 0 {
+		return nil
+	}
+	out := make(map[string]interface{}, len(canonicalMetricKeys))
+	for k, mv := range proto {
+		if !canonicalMetricKeys[k] || mv == nil {
+			continue
+		}
+		switch v := mv.Kind.(type) {
+		case *pb.MetricValue_I:
+			out[k] = v.I
+		case *pb.MetricValue_F:
+			out[k] = v.F
+		case *pb.MetricValue_S:
+			out[k] = v.S
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

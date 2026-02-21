@@ -13,11 +13,13 @@ import (
 
 // Dependencies holds all initialized dependencies
 type Dependencies struct {
-	Config      *config.Config
-	Database    *database.MongoDB
-	MachineRepo *repository.MachineRepository
-	UserRepo    *repository.UserRepository
-	CommandRepo *repository.CommandRepository
+	Config               *config.Config
+	Database             *database.MongoDB
+	MachineRepo          *repository.MachineRepository
+	UserRepo             *repository.UserRepository
+	CommandRepo          *repository.CommandRepository
+	UptimeSnapshotRepo   *repository.UptimeSnapshotRepository
+	MachineSnapshotRepo  *repository.MachineSnapshotRepository
 }
 
 // Initialize loads configuration and initializes all dependencies
@@ -39,11 +41,13 @@ func Initialize() (*Dependencies, error) {
 	repos := initializeRepositories(db)
 
 	return &Dependencies{
-		Config:      cfg,
-		Database:    db,
-		MachineRepo: repos.MachineRepo,
-		UserRepo:    repos.UserRepo,
-		CommandRepo: repos.CommandRepo,
+		Config:              cfg,
+		Database:            db,
+		MachineRepo:         repos.MachineRepo,
+		UserRepo:            repos.UserRepo,
+		CommandRepo:         repos.CommandRepo,
+		UptimeSnapshotRepo:  repos.UptimeSnapshotRepo,
+		MachineSnapshotRepo: repos.MachineSnapshotRepo,
 	}, nil
 }
 
@@ -91,16 +95,20 @@ func initializeDatabase(cfg *config.Config) (*database.MongoDB, error) {
 
 // Repositories holds all repository instances
 type Repositories struct {
-	MachineRepo *repository.MachineRepository
-	UserRepo    *repository.UserRepository
-	CommandRepo *repository.CommandRepository
+	MachineRepo        *repository.MachineRepository
+	UserRepo           *repository.UserRepository
+	CommandRepo        *repository.CommandRepository
+	UptimeSnapshotRepo *repository.UptimeSnapshotRepository
+	MachineSnapshotRepo *repository.MachineSnapshotRepository
 }
 
 // initializeRepositories creates all repository instances
 func initializeRepositories(db *database.MongoDB) *Repositories {
 	return &Repositories{
-		MachineRepo: repository.NewMachineRepository(db.Database),
-		UserRepo:    repository.NewUserRepository(db.Database),
-		CommandRepo: repository.NewCommandRepository(db.Database),
+		MachineRepo:         repository.NewMachineRepository(db.Database),
+		UserRepo:            repository.NewUserRepository(db.Database),
+		CommandRepo:         repository.NewCommandRepository(db.Database),
+		UptimeSnapshotRepo:  repository.NewUptimeSnapshotRepository(db.Database),
+		MachineSnapshotRepo: repository.NewMachineSnapshotRepository(db.Database),
 	}
 }

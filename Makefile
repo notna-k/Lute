@@ -36,7 +36,7 @@ dev-up-clean:
 	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose down -v --remove-orphans || true
 	@echo ""
 	@echo "=== Building all images (cache used; code changes trigger rebuild) ==="
-	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build
+	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build --no-cache
 	@echo ""
 	@echo "=== Starting all services ==="
 	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose up -d

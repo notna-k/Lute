@@ -23,8 +23,9 @@ func SetupAgentRoutes(r *gin.RouterGroup, agentHandler *handlers.AgentHandler, u
 		protected := agent.Group("")
 		protected.Use(middleware.AuthMiddleware(userRepo))
 		{
-			agent.GET("/binaries", agentHandler.ListBinaries)
-			agent.POST("/refresh", agentHandler.RefreshBinaries)
+			protected.GET("/binaries", agentHandler.ListBinaries)
+			protected.POST("/refresh", agentHandler.RefreshBinaries)
+			protected.POST("/claim-code", agentHandler.CreateClaimCode)
 
 			// Agent management (UI-facing)
 			protected.POST("/command/:machineId", agentHandler.SendCommand)

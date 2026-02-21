@@ -2,14 +2,15 @@ package types
 
 // SetupRequest is sent to the server to register a new machine
 type SetupRequest struct {
-	Name     string            `json:"name"`
-	Hostname string            `json:"hostname"`
-	OS       string            `json:"os"`
-	Arch     string            `json:"arch"`
-	CPUs     int               `json:"cpus"`
-	IP       string            `json:"ip"`
-	Version  string            `json:"version"`
-	Metadata map[string]string `json:"metadata,omitempty"`
+	Name      string            `json:"name"`
+	Hostname  string            `json:"hostname"`
+	OS        string            `json:"os"`
+	Arch      string            `json:"arch"`
+	CPUs      int               `json:"cpus"`
+	IP        string            `json:"ip"`
+	Version   string            `json:"version"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	ClaimCode string            `json:"claim_code,omitempty"` // optional; links machine to user
 }
 
 // SetupResponse is returned by the server after registration

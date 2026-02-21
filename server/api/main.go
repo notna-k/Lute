@@ -27,6 +27,8 @@ func main() {
 		deps.MachineRepo,
 		deps.UserRepo,
 		deps.CommandRepo,
+		deps.UptimeSnapshotRepo,
+		deps.MachineSnapshotRepo,
 	)
 
 	if err := srv.Start(); err != nil {
