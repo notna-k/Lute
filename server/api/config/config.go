@@ -14,6 +14,13 @@ type Config struct {
 	WebSocket   WebSocketConfig
 	Firebase    FirebaseConfig
 	AgentBinary AgentBinaryConfig
+	Metrics     MetricsConfig
+}
+
+// MetricsConfig controls machine snapshot job and dashboard polling.
+type MetricsConfig struct {
+	// SnapshotInterval is how often the snapshot job runs (e.g. 5m). UI should poll at this interval.
+	SnapshotInterval time.Duration
 }
 
 type HeartbeatConfig struct {
@@ -100,6 +107,9 @@ func Load() (*Config, error) {
 		},
 		AgentBinary: AgentBinaryConfig{
 			Dir: getEnv("AGENT_BINARY_DIR", "/opt/lute/agent-binaries"),
+		},
+		Metrics: MetricsConfig{
+			SnapshotInterval: getDurationEnv("METRICS_SNAPSHOT_INTERVAL", 5*time.Minute),
 		},
 	}
 

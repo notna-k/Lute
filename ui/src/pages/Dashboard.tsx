@@ -9,24 +9,10 @@ import {
   Paper,
   Link as MuiLink,
   Skeleton,
-  ToggleButton,
-  ToggleButtonGroup,
-  useTheme,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Area,
-  AreaChart,
-} from 'recharts';
 import AddMachineDialog from '../components/AddMachineDialog';
 import { useUserMachines, usePublicMachines } from '../hooks/useMachines';
-import { useDashboardUptime } from '../hooks/useDashboard';
-import type { DashboardUptimePeriod } from '../services/dashboardService';
 
 const statCards = [
   { key: 'total', name: 'Total Machines' },
@@ -36,13 +22,10 @@ const statCards = [
 ] as const;
 
 const Dashboard = () => {
-  const theme = useTheme();
   const { user } = useAuth();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [uptimePeriod, setUptimePeriod] = useState<DashboardUptimePeriod>('7d');
   const { data: userMachinesData, isLoading: userLoading, isError: userError } = useUserMachines();
   const { data: publicMachinesData, isLoading: publicLoading, isError: publicError } = usePublicMachines();
-  const { data: uptimeData, isLoading: uptimeLoading } = useDashboardUptime(uptimePeriod);
 
   const userMachines = userMachinesData ?? [];
   const publicMachines = publicMachinesData ?? [];
@@ -117,10 +100,7 @@ const Dashboard = () => {
                   p: 3,
                   border: 1,
                   borderColor: 'divider',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: 'action.hover',
-                  },
+                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
                   cursor: 'pointer',
                 }}
               >
@@ -146,10 +126,7 @@ const Dashboard = () => {
                   p: 3,
                   border: 1,
                   borderColor: 'divider',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: 'action.hover',
-                  },
+                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
                   cursor: 'pointer',
                 }}
               >
@@ -169,10 +146,7 @@ const Dashboard = () => {
                 p: 3,
                 border: 1,
                 borderColor: 'divider',
-                '&:hover': {
-                  borderColor: 'primary.main',
-                  bgcolor: 'action.hover',
-                },
+                '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
                 cursor: 'pointer',
               }}
               onClick={() => setAddDialogOpen(true)}
@@ -186,73 +160,6 @@ const Dashboard = () => {
             </Paper>
           </Grid>
         </Grid>
-      </Paper>
-
-      {/* Average uptime graph */}
-      <Paper sx={{ p: 3, mb: 4 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2 }}>
-          <Typography variant="h6" fontWeight="medium">
-            Machines uptime
-          </Typography>
-          <ToggleButtonGroup
-            value={uptimePeriod}
-            exclusive
-            onChange={(_, v) => v != null && setUptimePeriod(v)}
-            size="small"
-          >
-            <ToggleButton value="24h">24h</ToggleButton>
-            <ToggleButton value="7d">7 days</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-        {uptimeLoading ? (
-          <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 1 }} />
-        ) : !uptimeData?.points?.length ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
-            No uptime data yet; data is collected every few minutes.
-          </Typography>
-        ) : (
-          <Box sx={{ width: '100%', height: 280 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={uptimeData.points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="at"
-                  tickFormatter={(v) => {
-                    const d = new Date(v);
-                    return uptimePeriod === '24h' ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-                  }}
-                />
-                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                <Tooltip
-                  formatter={(value: number | undefined) => [value != null ? `${value.toFixed(1)}%` : '—', 'Uptime']}
-                  labelFormatter={(label) => new Date(label).toLocaleString()}
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length || !label) return null;
-                    const point = payload[0]?.payload as { at: string; uptime_pct?: number; metrics?: { cpu_load?: number; mem_usage_mb?: number; disk_used_gb?: number; disk_total_gb?: number } };
-                    const m = point?.metrics;
-                    const diskPct = m && m.disk_total_gb != null && m.disk_total_gb > 0 && m.disk_used_gb != null
-                      ? ((m.disk_used_gb / m.disk_total_gb) * 100).toFixed(1) + '%'
-                      : null;
-                    return (
-                      <Paper sx={{ p: 1.5, minWidth: 160 }} elevation={2}>
-                        <Typography variant="caption" color="text.secondary">{new Date(label).toLocaleString()}</Typography>
-                        <Typography variant="body2">Uptime: {point?.uptime_pct != null ? `${point.uptime_pct.toFixed(1)}%` : '—'}</Typography>
-                        {m && (m.cpu_load != null || m.mem_usage_mb != null || diskPct) && (
-                          <>
-                            {m.cpu_load != null && <Typography variant="caption" display="block">CPU load: {m.cpu_load.toFixed(2)}</Typography>}
-                            {m.mem_usage_mb != null && <Typography variant="caption" display="block">Mem: {m.mem_usage_mb.toFixed(1)} MB</Typography>}
-                            {diskPct != null && <Typography variant="caption" display="block">Disk: {diskPct}</Typography>}
-                          </>
-                        )}
-                      </Paper>
-                    );
-                  }}
-                />
-                <Area type="monotone" dataKey="uptime_pct" stroke={theme.palette.primary.main} fill={theme.palette.primary.main} fillOpacity={0.2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Box>
-        )}
       </Paper>
 
       {/* Recent Activity */}

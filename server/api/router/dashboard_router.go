@@ -13,6 +13,7 @@ func SetupDashboardRoutes(r *gin.RouterGroup, dashboardHandler *handlers.Dashboa
 	dashboard := r.Group("/dashboard")
 	dashboard.Use(middleware.AuthMiddleware(userRepo))
 	{
+		dashboard.GET("/config", dashboardHandler.GetConfig)
 		dashboard.GET("/stats", dashboardHandler.GetStats)
 		dashboard.GET("/uptime", dashboardHandler.GetUptime)
 	}

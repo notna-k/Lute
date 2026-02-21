@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	"github.com/lute/api/config"
 	"github.com/lute/api/models"
 	"github.com/lute/api/repository"
 	"github.com/lute/api/services"
@@ -15,16 +15,28 @@ import (
 
 // DashboardHandler handles dashboard stats and uptime API.
 type DashboardHandler struct {
+	cfg            *config.Config
 	machineService *services.MachineService
 	snapshotRepo   *repository.MachineSnapshotRepository
 }
 
 // NewDashboardHandler creates a new DashboardHandler.
-func NewDashboardHandler(machineService *services.MachineService, snapshotRepo *repository.MachineSnapshotRepository) *DashboardHandler {
+func NewDashboardHandler(cfg *config.Config, machineService *services.MachineService, snapshotRepo *repository.MachineSnapshotRepository) *DashboardHandler {
 	return &DashboardHandler{
+		cfg:            cfg,
 		machineService: machineService,
 		snapshotRepo:   snapshotRepo,
 	}
+}
+
+// GetConfig returns dashboard/metrics client config (e.g. poll interval to match snapshot job).
+func (h *DashboardHandler) GetConfig(c *gin.Context) {
+	sec := int(h.cfg.Metrics.SnapshotInterval.Seconds())
+	if sec < 1 {
+		sec = 1
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"metrics_poll_interval_seconds": sec})
 }
 
 // GetStats handles GET /api/v1/dashboard/stats (authenticated).
@@ -74,16 +86,151 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	})
 }
 
-// UptimePoint is one point in the uptime time series (aggregated or per-machine; same metrics schema as Machine.Metrics).
-type UptimePoint struct {
-	At        string                 `json:"at"`
-	Status    string                 `json:"status,omitempty"`
-	UptimePct float64                `json:"uptime_pct,omitempty"`
-	Metrics   map[string]interface{} `json:"metrics"` // cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb
+// ChartPoint is one bucket-aligned point for charts (t=unix ms, null metrics = gap / machine was down).
+type ChartPoint struct {
+	T           int64    `json:"t"`
+	CpuLoad     *float64 `json:"cpu_load"`
+	MemUsageMb  *float64 `json:"mem_usage_mb"`
+	DiskUsedGb  *float64 `json:"disk_used_gb"`
+	DiskTotalGb *float64 `json:"disk_total_gb"`
 }
 
-// GetUptime handles GET /api/v1/dashboard/uptime?period=7d (authenticated).
-// Returns { points: [ { at, uptime_pct, metrics } ] } aggregated across the user's machines.
+// ChartResponse is the dashboard uptime API response (chart-ready, backend-bucketed).
+type ChartResponse struct {
+	Points        []ChartPoint `json:"points"`
+	PeriodStartMs int64        `json:"period_start_ms"`
+	PeriodEndMs   int64        `json:"period_end_ms"`
+	DiskYDomain   [2]float64  `json:"disk_y_domain"`
+}
+
+// targetChartPoints is the desired number of data points for any period.
+const targetChartPoints = 80
+
+// bucketDuration returns the chart bucket size for the given period.
+// It targets ~targetChartPoints buckets regardless of snapshot interval.
+// The bucket is snapped up to snapshotInterval so buckets are never smaller than
+// the collection resolution (which would produce guaranteed-empty buckets).
+func bucketDuration(period string, snapshotInterval time.Duration) time.Duration {
+	if snapshotInterval <= 0 {
+		snapshotInterval = time.Minute
+	}
+	var periodDur time.Duration
+	switch period {
+	case "10m":
+		periodDur = 10 * time.Minute
+	case "1h":
+		periodDur = time.Hour
+	case "24h":
+		periodDur = 24 * time.Hour
+	case "7d":
+		periodDur = 7 * 24 * time.Hour
+	default:
+		periodDur = 7 * 24 * time.Hour
+	}
+	bucket := periodDur / targetChartPoints
+	if bucket < snapshotInterval {
+		bucket = snapshotInterval
+	}
+	return bucket
+}
+
+func buildChartPerMachine(snapshots []*models.MachineSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
+	bucketMs := bucketDur.Milliseconds()
+	periodStartMs := periodStart.UnixMilli()
+	periodEndMs := periodEnd.UnixMilli()
+
+	// Group by bucket, keep latest snapshot per bucket (handles ticker jitter).
+	type bucketVal struct {
+		at                      time.Time
+		cpu, mem, diskUsed, diskTotal float64
+	}
+	byBucket := make(map[int64]*bucketVal)
+	for _, s := range snapshots {
+		tMs := s.At.UnixMilli()
+		b := (tMs / bucketMs) * bucketMs
+		existing, ok := byBucket[b]
+		if !ok || s.At.After(existing.at) {
+			byBucket[b] = &bucketVal{
+				at:        s.At,
+				cpu:       floatFrom(s.Metrics, "cpu_load"),
+				mem:       floatFrom(s.Metrics, "mem_usage_mb"),
+				diskUsed:  floatFrom(s.Metrics, "disk_used_gb"),
+				diskTotal: floatFrom(s.Metrics, "disk_total_gb"),
+			}
+		}
+	}
+
+	// Emit one point per bucket. Null metrics = machine was down (gap).
+	diskMax = 1
+	for b := periodStartMs; b <= periodEndMs; b += bucketMs {
+		p := ChartPoint{T: b}
+		if v, ok := byBucket[b]; ok {
+			p.CpuLoad = ptrFloat(roundMetric(v.cpu))
+			p.MemUsageMb = ptrFloat(roundMetric(v.mem))
+			p.DiskUsedGb = ptrFloat(roundMetric(v.diskUsed))
+			p.DiskTotalGb = ptrFloat(roundMetric(v.diskTotal))
+			if v.diskTotal > diskMax {
+				diskMax = v.diskTotal
+			}
+		}
+		points = append(points, p)
+	}
+	return points, diskMax
+}
+
+func buildChartAggregated(snapshots []*models.MachineSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
+	bucketMs := bucketDur.Milliseconds()
+	periodStartMs := periodStart.UnixMilli()
+	periodEndMs := periodEnd.UnixMilli()
+
+	type agg struct {
+		n            int
+		sumCpu       float64
+		sumMem       float64
+		sumDiskUsed  float64
+		sumDiskTotal float64
+	}
+	byBucket := make(map[int64]*agg)
+	for _, s := range snapshots {
+		tMs := s.At.UnixMilli()
+		b := (tMs / bucketMs) * bucketMs
+		a, ok := byBucket[b]
+		if !ok {
+			a = &agg{}
+			byBucket[b] = a
+		}
+		a.n++
+		a.sumCpu += floatFrom(s.Metrics, "cpu_load")
+		a.sumMem += floatFrom(s.Metrics, "mem_usage_mb")
+		a.sumDiskUsed += floatFrom(s.Metrics, "disk_used_gb")
+		a.sumDiskTotal += floatFrom(s.Metrics, "disk_total_gb")
+	}
+
+	// Emit one point per bucket. Null metrics = all machines were down (gap).
+	diskMax = 1
+	for b := periodStartMs; b <= periodEndMs; b += bucketMs {
+		p := ChartPoint{T: b}
+		if a, ok := byBucket[b]; ok && a.n > 0 {
+			n := float64(a.n)
+			p.CpuLoad = ptrFloat(roundMetric(a.sumCpu / n))
+			p.MemUsageMb = ptrFloat(roundMetric(a.sumMem / n))
+			p.DiskUsedGb = ptrFloat(roundMetric(a.sumDiskUsed / n))
+			total := a.sumDiskTotal / n
+			p.DiskTotalGb = ptrFloat(roundMetric(total))
+			if total > diskMax {
+				diskMax = total
+			}
+		}
+		points = append(points, p)
+	}
+	return points, diskMax
+}
+
+func ptrFloat(f float64) *float64 { return &f }
+
+// GetUptime handles GET /api/v1/dashboard/uptime?period=7d (optional: machine_id=hex) (authenticated).
+// If machine_id is set: returns per-machine points (at, status, uptime_pct 0|100, metrics) after validating ownership.
+// If machine_id is absent: returns aggregated points across the user's machines.
 func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -97,77 +244,97 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	}
 
 	period := c.DefaultQuery("period", "7d")
-	var since time.Time
+	now := time.Now()
+	bucketDur := bucketDuration(period, h.cfg.Metrics.SnapshotInterval)
+	bucketMs := bucketDur.Milliseconds()
+
+	var rawStart time.Time
 	switch period {
+	case "10m":
+		rawStart = now.Add(-10 * time.Minute)
+	case "1h":
+		rawStart = now.Add(-1 * time.Hour)
 	case "24h":
-		since = time.Now().Add(-24 * time.Hour)
+		rawStart = now.Add(-24 * time.Hour)
 	case "7d":
-		since = time.Now().Add(-7 * 24 * time.Hour)
+		rawStart = now.Add(-7 * 24 * time.Hour)
 	default:
-		since = time.Now().Add(-7 * 24 * time.Hour)
+		rawStart = now.Add(-7 * 24 * time.Hour)
 	}
+	// Align periodStart to the bucket boundary so the first bucket in the loop
+	// always has data when the machine was alive, avoiding a phantom leading gap.
+	periodStart := time.UnixMilli((rawStart.UnixMilli() / bucketMs) * bucketMs)
+	periodEnd := time.UnixMilli((now.UnixMilli() / bucketMs) * bucketMs)
 
 	ctx := c.Request.Context()
+	machineIDHex := c.Query("machine_id")
+	if machineIDHex != "" {
+		// Per-machine: validate ownership, bucket snapshots, return chart response
+		machineID, err := primitive.ObjectIDFromHex(machineIDHex)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
+			return
+		}
+		machine, err := h.machineService.GetByID(ctx, machineID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+			return
+		}
+		if machine.UserID != userIDObj {
+			c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+			return
+		}
+		snapshots, err := h.snapshotRepo.GetByMachineID(ctx, machineID, periodStart)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		points, diskMax := buildChartPerMachine(snapshots, periodStart, periodEnd, bucketDur)
+		resp := ChartResponse{
+			Points:        points,
+			PeriodStartMs: periodStart.UnixMilli(),
+			PeriodEndMs:   periodEnd.UnixMilli(),
+			DiskYDomain:   [2]float64{0, diskMax},
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	// Aggregated: all user's machines
 	machines, err := h.machineService.GetByUserID(ctx, userIDObj)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if len(machines) == 0 {
-		c.JSON(http.StatusOK, gin.H{"points": []UptimePoint{}})
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, ChartResponse{
+			Points:        nil,
+			PeriodStartMs: periodStart.UnixMilli(),
+			PeriodEndMs:   periodEnd.UnixMilli(),
+			DiskYDomain:   [2]float64{0, 1},
+		})
 		return
 	}
 	machineIDs := make([]primitive.ObjectID, 0, len(machines))
 	for _, m := range machines {
 		machineIDs = append(machineIDs, m.ID)
 	}
-	snapshots, err := h.snapshotRepo.GetByMachineIDs(ctx, machineIDs, since)
+	snapshots, err := h.snapshotRepo.GetByMachineIDs(ctx, machineIDs, periodStart)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// Aggregate by at: for each timestamp, compute uptime_pct and average metrics
-	byAt := make(map[time.Time][]*models.MachineSnapshot)
-	for _, s := range snapshots {
-		t := s.At.Truncate(time.Second)
-		byAt[t] = append(byAt[t], s)
+	points, diskMax := buildChartAggregated(snapshots, periodStart, periodEnd, bucketDur)
+	resp := ChartResponse{
+		Points:        points,
+		PeriodStartMs: periodStart.UnixMilli(),
+		PeriodEndMs:   periodEnd.UnixMilli(),
+		DiskYDomain:   [2]float64{0, diskMax},
 	}
-	ats := make([]time.Time, 0, len(byAt))
-	for t := range byAt {
-		ats = append(ats, t)
-	}
-	sort.Slice(ats, func(i, j int) bool { return ats[i].Before(ats[j]) })
-	points := make([]UptimePoint, 0, len(ats))
-	for _, t := range ats {
-		list := byAt[t]
-		alive := 0
-		var sumCpu, sumMem, sumDiskUsed, sumDiskTotal float64
-		for _, s := range list {
-			if s.Status == "alive" {
-				alive++
-			}
-			sumCpu += floatFrom(s.Metrics, "cpu_load")
-			sumMem += floatFrom(s.Metrics, "mem_usage_mb")
-			sumDiskUsed += floatFrom(s.Metrics, "disk_used_gb")
-			sumDiskTotal += floatFrom(s.Metrics, "disk_total_gb")
-		}
-		n := float64(len(list))
-		pct := 0.0
-		if n > 0 {
-			pct = float64(alive) / n * 100
-		}
-		points = append(points, UptimePoint{
-			At:        t.Format(time.RFC3339),
-			UptimePct: pct,
-			Metrics: map[string]interface{}{
-				"cpu_load":      roundMetric(sumCpu / n),
-				"mem_usage_mb":  roundMetric(sumMem / n),
-				"disk_used_gb":  roundMetric(sumDiskUsed / n),
-				"disk_total_gb": roundMetric(sumDiskTotal / n),
-			},
-		})
-	}
-	c.JSON(http.StatusOK, gin.H{"points": points})
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, resp)
 }
 
 func floatFrom(m map[string]interface{}, key string) float64 {

@@ -69,6 +69,19 @@ export const useUpdateMachine = () => {
     });
 };
 
+// Re-enable a dead machine (sets status to "pending" so the agent can connect again)
+export const useReEnableMachine = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => machineService.reEnableMachine(id),
+        onSuccess: (data) => {
+            queryClient.setQueryData(machineKeys.detail(data.id), data);
+            queryClient.invalidateQueries({ queryKey: machineKeys.lists() });
+        },
+    });
+};
+
 // Delete machine mutation
 export const useDeleteMachine = () => {
     const queryClient = useQueryClient();

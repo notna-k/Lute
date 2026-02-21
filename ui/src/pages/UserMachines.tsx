@@ -13,25 +13,35 @@ import {
   Alert,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import { useUserMachines } from '../hooks/useMachines';
+import { Link } from 'react-router-dom';
+import { useUserMachines, useReEnableMachine } from '../hooks/useMachines';
 import { Machine } from '../types';
 import AddMachineDialog from '../components/AddMachineDialog';
 
 const UserMachines = () => {
   const { data: machines, isLoading, error, refetch } = useUserMachines();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const reEnableMutation = useReEnableMachine();
 
   const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
     switch (status) {
+      case 'alive':
       case 'running':
         return 'success';
+      case 'dead':
       case 'stopped':
         return 'error';
+      case 'pending':
+      case 'registered':
       case 'paused':
         return 'warning';
       default:
         return 'default';
     }
+  };
+
+  const handleReEnable = (machineId: string) => {
+    reEnableMutation.mutate(machineId, { onSuccess: () => refetch() });
   };
 
   if (isLoading) {
@@ -123,7 +133,20 @@ const UserMachines = () => {
                         color="secondary"
                       />
                     )}
+                    {machine.status === 'dead' && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        disabled={reEnableMutation.isPending && reEnableMutation.variables === machine.id}
+                        onClick={() => handleReEnable(machine.id)}
+                      >
+                        {reEnableMutation.isPending && reEnableMutation.variables === machine.id ? 'Re-enabling…' : 'Re-enable'}
+                      </Button>
+                    )}
                     <Button
+                      component={Link}
+                      to={`/machines/${machine.id}`}
                       variant="text"
                       color="primary"
                       size="small"

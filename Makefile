@@ -30,13 +30,16 @@ help:
 
 # === Docker / Dev targets ===
 
-# Main command: cleanup, rebuild, and start
+# BuildKit required for cache mounts (npm, go mod, go build cache) so deps aren't re-downloaded each time
+export DOCKER_BUILDKIT := 1
+
+# Main command: cleanup containers (keep volumes), rebuild, and start
 dev-up-clean:
-	@echo "=== Cleaning up existing containers and volumes ==="
-	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose down -v --remove-orphans || true
+	@echo "=== Stopping and removing containers (MongoDB data volume is kept) ==="
+	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose down --remove-orphans || true
 	@echo ""
 	@echo "=== Building all images (cache used; code changes trigger rebuild) ==="
-	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build --no-cache
+	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build --parallel
 	@echo ""
 	@echo "=== Starting all services ==="
 	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose up -d

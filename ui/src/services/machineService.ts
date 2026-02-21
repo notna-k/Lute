@@ -42,6 +42,11 @@ export const machineService = {
         return apiClient.put<Machine>(`/api/v1/machines/${id}`, data);
     },
 
+    // Re-enable a dead machine (sets status to "pending" so the agent can connect again)
+    reEnableMachine: async (id: string): Promise<Machine> => {
+        return apiClient.post<Machine>(`/api/v1/machines/${id}/re-enable`);
+    },
+
     // Delete a machine
     deleteMachine: async (id: string): Promise<void> => {
         return apiClient.delete<void>(`/api/v1/machines/${id}`);

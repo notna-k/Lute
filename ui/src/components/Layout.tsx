@@ -34,7 +34,7 @@ const Layout = ({ children }: LayoutProps) => {
 
   const getTabValue = (): number | false => {
     if (location.pathname === '/dashboard') return 0;
-    if (location.pathname === '/machines') return 1;
+    if (location.pathname === '/machines' || /^\/machines\/[^/]+$/.test(location.pathname)) return 1;
     if (location.pathname === '/public-machines') return 2;
     return false;
   };

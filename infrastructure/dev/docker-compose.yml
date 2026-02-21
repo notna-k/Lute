@@ -54,6 +54,10 @@ services:
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON}
       # Agent binaries
       AGENT_BINARY_DIR: /opt/lute/agent-binaries
+      # Metrics snapshot job: how often we write snapshots to DB (e.g. 5s). Use 5s for chart resolution.
+      METRICS_SNAPSHOT_INTERVAL: ${METRICS_SNAPSHOT_INTERVAL:-5s}
+      # How often we ping agents for status + metrics. Should be <= METRICS_SNAPSHOT_INTERVAL so each snapshot has fresh metrics.
+      HEARTBEAT_CHECK_INTERVAL: ${HEARTBEAT_CHECK_INTERVAL:-5s}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -77,6 +81,7 @@ services:
         - VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID}
         - VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
         - VITE_API_URL=${VITE_API_URL}
+        - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
     container_name: lute-ui
     restart: unless-stopped
     ports:
