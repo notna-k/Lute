@@ -36,6 +36,7 @@ type Flags struct {
 	serverAddr string
 	apiURL     string
 	machineID  string
+	claimCode  string
 	version    bool
 	setupMode  bool
 }
@@ -49,7 +50,7 @@ func main() {
 	}
 
 	if flags.setupMode {
-		setup.Run(flags.apiURL, Version, BuildTime)
+		setup.Run(flags.apiURL, Version, BuildTime, flags.claimCode)
 		return
 	}
 
@@ -61,6 +62,7 @@ func parseFlags() *Flags {
 	flag.StringVar(&f.serverAddr, "server", "localhost:50051", "gRPC server address")
 	flag.StringVar(&f.apiURL, "api", "http://localhost:8080", "HTTP API base URL")
 	flag.StringVar(&f.machineID, "machine-id", "", "Machine ID (skip REST registration if provided)")
+	flag.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this machine to your account")
 	flag.BoolVar(&f.version, "version", false, "Print version and exit")
 	flag.BoolVar(&f.setupMode, "setup", false, "Run interactive setup")
 	flag.Parse()
@@ -212,9 +214,11 @@ func runStream(ctx context.Context, serverAddr, machineID string) error {
 		}
 
 		if ping := msg.GetHeartbeatPing(); ping != nil {
+			log.Printf("Heartbeat ping received")
+			raw := metrics.Collect()
 			pong := &pb.HeartbeatPong{
 				Status:    "running",
-				Metrics:   metrics.Collect(),
+				Metrics:   metricsToProto(raw),
 				Timestamp: time.Now().Unix(),
 			}
 			if err := stream.Send(&pb.AgentMessage{
@@ -224,5 +228,29 @@ func runStream(ctx context.Context, serverAddr, machineID string) error {
 				return fmt.Errorf("send pong: %w", err)
 			}
 		}
+	}
+}
+
+// metricsToProto converts map[string]interface{} (int64, float64, string) to proto MetricValue map.
+func metricsToProto(raw map[string]interface{}) map[string]*pb.MetricValue {
+	out := make(map[string]*pb.MetricValue, len(raw))
+	for k, v := range raw {
+		out[k] = toMetricValue(v)
+	}
+	return out
+}
+
+func toMetricValue(v interface{}) *pb.MetricValue {
+	switch x := v.(type) {
+	case int64:
+		return &pb.MetricValue{Kind: &pb.MetricValue_I{I: x}}
+	case int:
+		return &pb.MetricValue{Kind: &pb.MetricValue_I{I: int64(x)}}
+	case float64:
+		return &pb.MetricValue{Kind: &pb.MetricValue_F{F: x}}
+	case string:
+		return &pb.MetricValue{Kind: &pb.MetricValue_S{S: x}}
+	default:
+		return &pb.MetricValue{Kind: &pb.MetricValue_S{S: fmt.Sprint(v)}}
 	}
 }

@@ -17,8 +17,9 @@ import (
 	"github.com/lute/agent/utils"
 )
 
-// Run executes the interactive setup process
-func Run(apiURL, version, buildTime string) {
+// Run executes the interactive setup process.
+// claimCode is optional; when set, the new machine is linked to that user.
+func Run(apiURL, version, buildTime, claimCode string) {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println()
@@ -32,7 +33,7 @@ func Run(apiURL, version, buildTime string) {
 	serviceName := promptServiceName(reader)
 
 	// 2. Collect system information
-	sysInfo := collectSystemInfo(serviceName, version, buildTime)
+	sysInfo := collectSystemInfo(serviceName, version, buildTime, claimCode)
 	displaySystemInfo(sysInfo)
 
 	// 3. Register with the server
@@ -57,26 +58,28 @@ func promptServiceName(reader *bufio.Reader) string {
 }
 
 // collectSystemInfo gathers system information
-func collectSystemInfo(serviceName, version, buildTime string) *types.SetupRequest {
+func collectSystemInfo(serviceName, version, buildTime, claimCode string) *types.SetupRequest {
 	fmt.Println()
 	fmt.Println("Collecting system information...")
 
 	hostname, _ := os.Hostname()
 	localIP := utils.GetLocalIP()
 
-	return &types.SetupRequest{
-		Name:     serviceName,
-		Hostname: hostname,
-		OS:       runtime.GOOS,
-		Arch:     runtime.GOARCH,
-		CPUs:     runtime.NumCPU(),
-		IP:       localIP,
-		Version:  version,
+	req := &types.SetupRequest{
+		Name:      serviceName,
+		Hostname:  hostname,
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+		CPUs:      runtime.NumCPU(),
+		IP:        localIP,
+		Version:   version,
+		ClaimCode: claimCode,
 		Metadata: map[string]string{
 			"go_version": runtime.Version(),
 			"build_time": buildTime,
 		},
 	}
+	return req
 }
 
 // displaySystemInfo displays collected system information

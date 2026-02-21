@@ -30,7 +30,7 @@ func (b *BaseModel) BeforeUpdate() {
 
 // User represents a user in the system
 type User struct {
-	BaseModel
+	BaseModel        `bson:",inline"`
 	Email       string `json:"email" bson:"email"`
 	DisplayName string `json:"display_name" bson:"display_name"`
 	FirebaseUID string `json:"firebase_uid" bson:"firebase_uid"`
@@ -38,7 +38,7 @@ type User struct {
 
 // Machine represents a virtual machine with embedded agent data
 type Machine struct {
-	BaseModel
+	BaseModel        `bson:",inline"`
 	UserID       primitive.ObjectID     `json:"user_id" bson:"user_id"`
 	Name         string                 `json:"name" bson:"name"`
 	Description  string                 `json:"description" bson:"description"`
@@ -48,7 +48,7 @@ type Machine struct {
 	AgentIP      string                 `json:"agent_ip,omitempty" bson:"agent_ip,omitempty"`
 	AgentVersion string                 `json:"agent_version,omitempty" bson:"agent_version,omitempty"`
 	LastSeen       time.Time              `json:"last_seen,omitempty" bson:"last_seen,omitempty"`
-	Metrics        map[string]string      `json:"metrics,omitempty" bson:"metrics,omitempty"`
+	Metrics        map[string]interface{} `json:"metrics,omitempty" bson:"metrics,omitempty"`
 	HeartbeatRetry int                    `json:"-" bson:"heartbeat_retry"`
 }
 
@@ -56,7 +56,7 @@ type Machine struct {
 
 // Command represents a queued command for an agent to execute
 type Command struct {
-	BaseModel
+	BaseModel        `bson:",inline"`
 	MachineID primitive.ObjectID `json:"machine_id" bson:"machine_id"`
 	Command   string             `json:"command" bson:"command"`
 	Args      []string           `json:"args,omitempty" bson:"args,omitempty"`
@@ -69,9 +69,26 @@ type Command struct {
 
 // MachineConfig holds configuration for a machine/agent
 type MachineConfig struct {
-	BaseModel
+	BaseModel        `bson:",inline"`
 	MachineID         primitive.ObjectID `json:"machine_id" bson:"machine_id"`
 	HeartbeatInterval int                `json:"heartbeat_interval" bson:"heartbeat_interval"` // seconds
 	LogLevel          string             `json:"log_level" bson:"log_level"`                   // "debug", "info", "warn", "error"
 	Extra             map[string]string  `json:"extra,omitempty" bson:"extra,omitempty"`
+}
+
+// UptimeSnapshot is a per-user snapshot of machine counts at a point in time (for dashboard uptime graph).
+type UptimeSnapshot struct {
+	UserID primitive.ObjectID `json:"user_id" bson:"user_id"`
+	At     time.Time          `json:"at" bson:"at"`
+	Alive  int                `json:"alive" bson:"alive"`
+	Dead   int                `json:"dead" bson:"dead"`
+	Total  int                `json:"total" bson:"total"`
+}
+
+// MachineSnapshot is a per-machine point-in-time snapshot (status + canonical metrics, same keys as Machine.Metrics).
+type MachineSnapshot struct {
+	MachineID primitive.ObjectID     `json:"machine_id" bson:"machine_id"`
+	At        time.Time              `json:"at" bson:"at"`
+	Status    string                 `json:"status" bson:"status"`
+	Metrics   map[string]interface{} `json:"metrics" bson:"metrics"` // cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb
 }

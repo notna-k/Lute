@@ -28,8 +28,17 @@ message HeartbeatPing {
   int64 timestamp = 1;
 }
 
+// MetricValue holds a single metric as an integer, float, or string.
+message MetricValue {
+  oneof kind {
+    int64 i = 1;
+    double f = 2;
+    string s = 3;
+  }
+}
+
 message HeartbeatPong {
   string status = 1;
-  map<string, string> metrics = 2;
+  map<string, MetricValue> metrics = 2;
   int64 timestamp = 3;
 }

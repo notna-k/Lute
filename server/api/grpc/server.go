@@ -20,10 +20,11 @@ func ParseMachineID(hex string) (primitive.ObjectID, error) {
 
 type Server struct {
 	pb.UnimplementedAgentServiceServer
-	config      *config.Config
-	machineRepo *repository.MachineRepository
-	ConnMgr     *ConnectionManager
-	grpcServer  *grpc.Server
+	config                 *config.Config
+	machineRepo            *repository.MachineRepository
+	ConnMgr                *ConnectionManager
+	grpcServer             *grpc.Server
+	OnConnectionRegistered func() // called when a new agent stream is registered (e.g. to trigger heartbeat check)
 }
 
 func NewServer(
@@ -93,9 +94,21 @@ func (s *Server) Connect(stream pb.AgentService_ConnectServer) error {
 		return fmt.Errorf("connect: machine %s is dead; set status to pending to re-enable", machineID)
 	}
 
+	// So the heartbeat checker picks up this machine, ensure it's monitored.
+	if machine.Status == "pending" {
+		if err := s.machineRepo.UpdateStatus(stream.Context(), mid, "registered"); err != nil {
+			log.Printf("Connect: failed to set machine %s to registered: %v", machineID, err)
+		} else {
+			machine.Status = "registered"
+		}
+	}
+
 	log.Printf("Connect: machine %s connected", machineID)
 
 	conn := s.ConnMgr.Register(machineID, stream)
+	if s.OnConnectionRegistered != nil {
+		s.OnConnectionRegistered()
+	}
 	defer func() {
 		s.ConnMgr.Unregister(machineID)
 		log.Printf("Connect: machine %s disconnected", machineID)

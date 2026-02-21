@@ -17,7 +17,8 @@ export interface Machine {
   agent_version?: string;
   last_seen?: string;
   metadata?: Record<string, unknown>;
-  metrics?: Record<string, string>;
+  /** Canonical keys: cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb (numbers). */
+  metrics?: Record<string, string | number>;
   created_at: string;
   updated_at: string;
 }

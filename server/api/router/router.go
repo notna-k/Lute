@@ -18,6 +18,8 @@ func SetupRouter(
 	machineRepo *repository.MachineRepository,
 	userRepo *repository.UserRepository,
 	commandRepo *repository.CommandRepository,
+	uptimeSnapshotRepo *repository.UptimeSnapshotRepository,
+	machineSnapshotRepo *repository.MachineSnapshotRepository,
 	hub *websocket.Hub,
 ) *gin.Engine {
 	// Set Gin mode
@@ -48,12 +50,16 @@ func SetupRouter(
 	// Initialize handlers
 	machineHandler := handlers.NewMachineHandler(machineService)
 	agentHandler := handlers.NewAgentHandler(cfg.AgentBinary.Dir, cfg, machineRepo, commandRepo)
+	dashboardHandler := handlers.NewDashboardHandler(machineService, machineSnapshotRepo)
 
 	// Protected API routes
 	v1 := api.Group("/v1")
 	{
 		// Machine routes (with dedicated router)
 		SetupMachineRoutes(v1, machineHandler, userRepo)
+
+		// Dashboard routes (stats, uptime)
+		SetupDashboardRoutes(v1, dashboardHandler, userRepo)
 
 		// Agent binary distribution routes
 		SetupAgentRoutes(v1, agentHandler, userRepo)
