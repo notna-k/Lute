@@ -50,7 +50,7 @@ func SetupRouter(
 	// Initialize handlers
 	machineHandler := handlers.NewMachineHandler(machineService)
 	agentHandler := handlers.NewAgentHandler(cfg.AgentBinary.Dir, cfg, machineRepo, commandRepo)
-	dashboardHandler := handlers.NewDashboardHandler(machineService, machineSnapshotRepo)
+	dashboardHandler := handlers.NewDashboardHandler(cfg, machineService, machineSnapshotRepo)
 
 	// Protected API routes
 	v1 := api.Group("/v1")

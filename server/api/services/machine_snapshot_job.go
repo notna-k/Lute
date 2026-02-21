@@ -5,8 +5,6 @@ import (
 	"log"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-
 	"github.com/lute/api/repository"
 )
 
@@ -48,27 +46,27 @@ func (j *MachineSnapshotJob) Run(ctx context.Context) {
 }
 
 func (j *MachineSnapshotJob) runOnce(ctx context.Context) {
-	// Snapshot all machines (dashboard filters by current user when reading).
-	machines, err := j.machineRepo.List(ctx, bson.M{}, nil)
+	now := time.Now()
+	// Only snapshot alive machines; gaps in the time-series represent downtime.
+	machines, err := j.machineRepo.ListByStatus(ctx, "alive")
 	if err != nil {
 		log.Printf("machine snapshot: list machines failed: %v", err)
 		return
 	}
-	now := time.Now()
-	log.Printf("machine snapshot: run once at %s, %d machines", now.Format(time.RFC3339), len(machines))
+	log.Printf("machine snapshot: run once at %s, %d alive machines", now.Format(time.RFC3339), len(machines))
 	written := 0
 	for _, m := range machines {
 		metrics := canonicalMetricsFrom(m.Metrics)
-		if err := j.snapshotRepo.Insert(ctx, m.ID, now, m.Status, metrics); err != nil {
+		if err := j.snapshotRepo.Insert(ctx, m.ID, now, metrics); err != nil {
 			log.Printf("machine snapshot: insert for machine %s: %v", m.ID.Hex(), err)
 			continue
 		}
 		written++
 	}
 	if written > 0 {
-		log.Printf("machine snapshot: wrote %d/%d snapshots", written, len(machines))
+		log.Printf("machine snapshot: wrote %d alive snapshots", written)
 	} else if len(machines) == 0 {
-		log.Printf("machine snapshot: no machines in DB")
+		log.Printf("machine snapshot: no alive machines")
 	} else {
 		log.Printf("machine snapshot: wrote 0/%d (all inserts failed)", len(machines))
 	}

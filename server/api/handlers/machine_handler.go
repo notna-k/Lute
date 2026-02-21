@@ -149,6 +149,49 @@ func (h *MachineHandler) UpdateMachine(c *gin.Context) {
 	c.JSON(http.StatusOK, updatedMachine)
 }
 
+// ReEnableMachine handles POST /api/v1/machines/:id/re-enable (only when status is "dead").
+func (h *MachineHandler) ReEnableMachine(c *gin.Context) {
+	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	existing, err := h.machineService.GetByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+		return
+	}
+	if existing.UserID != userIDObj {
+		c.JSON(http.StatusForbidden, gin.H{"error": "machine not found"})
+		return
+	}
+	if existing.Status != "dead" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "machine is not dead; only dead machines can be re-enabled"})
+		return
+	}
+
+	if err := h.machineService.UpdateStatus(c.Request.Context(), id, "pending"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, _ := h.machineService.GetByID(c.Request.Context(), id)
+	c.JSON(http.StatusOK, updated)
+}
+
 // DeleteMachine handles DELETE /api/v1/machines/:id
 func (h *MachineHandler) DeleteMachine(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))

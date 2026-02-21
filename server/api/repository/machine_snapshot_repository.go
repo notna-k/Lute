@@ -25,12 +25,12 @@ func NewMachineSnapshotRepository(db *mongo.Database) *MachineSnapshotRepository
 	}
 }
 
-// Insert inserts one snapshot for a machine. metrics must have same shape as Machine.Metrics (cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb).
-func (r *MachineSnapshotRepository) Insert(ctx context.Context, machineID primitive.ObjectID, at time.Time, status string, metrics map[string]interface{}) error {
+// Insert inserts one snapshot for a machine. Only call for alive machines.
+// metrics must have same shape as Machine.Metrics (cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb).
+func (r *MachineSnapshotRepository) Insert(ctx context.Context, machineID primitive.ObjectID, at time.Time, metrics map[string]interface{}) error {
 	doc := &models.MachineSnapshot{
 		MachineID: machineID,
 		At:        at,
-		Status:    status,
 		Metrics:   metrics,
 	}
 	_, err := r.Collection.InsertOne(ctx, doc)

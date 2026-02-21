@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/lute/api/config"
 	"github.com/lute/api/database"
@@ -60,7 +59,7 @@ func New(
 	)
 	grpcServer.OnConnectionRegistered = func() { heartbeatChecker.TriggerCheck() }
 
-	machineSnapshotJob := services.NewMachineSnapshotJob(machineRepo, machineSnapshotRepo, 100*time.Millisecond)
+	machineSnapshotJob := services.NewMachineSnapshotJob(machineRepo, machineSnapshotRepo, cfg.Metrics.SnapshotInterval)
 
 	return &Server{
 		HTTP:               httpServer,

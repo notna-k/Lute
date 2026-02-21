@@ -90,7 +90,7 @@ func (r *MachineRepository) UpdateStatus(ctx context.Context, id primitive.Objec
 	update := bson.M{
 		"$set": bson.M{
 			"status":     status,
-			"updated_at": bson.M{"$currentDate": true},
+			"updated_at": time.Now(),
 		},
 	}
 	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)

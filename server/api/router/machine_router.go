@@ -22,6 +22,7 @@ func SetupMachineRoutes(r *gin.RouterGroup, machineHandler *handlers.MachineHand
 			machines.GET("", machineHandler.ListUserMachines)
 			machines.GET("/:id", machineHandler.GetMachine)
 			machines.PUT("/:id", machineHandler.UpdateMachine)
+			machines.POST("/:id/re-enable", machineHandler.ReEnableMachine)
 			machines.DELETE("/:id", machineHandler.DeleteMachine)
 		}
 	}
