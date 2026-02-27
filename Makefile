@@ -35,7 +35,7 @@ export DOCKER_BUILDKIT := 1
 
 # Main command: cleanup containers (keep volumes), rebuild, and start
 dev-up-clean:
-	@echo "=== Stopping and removing containers (MongoDB data volume is kept) ==="
+	@echo "=== Stopping and removing containers ==="
 	@cd $(COMPOSE_DIR) && AGENT_VERSION=$(AGENT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose down --remove-orphans || true
 	@echo ""
 	@echo "=== Building all images (cache used; code changes trigger rebuild) ==="
