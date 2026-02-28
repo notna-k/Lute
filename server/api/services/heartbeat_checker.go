@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	pb "github.com/lute/agent/proto/agent"
+	pb "github.com/lute/worker/proto/worker"
 	luteGrpc "github.com/lute/api/grpc"
 	"github.com/lute/api/repository"
 )

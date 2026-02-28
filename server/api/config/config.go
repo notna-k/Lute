@@ -7,14 +7,15 @@ import (
 )
 
 type Config struct {
-	Server      ServerConfig
-	MongoDB     MongoDBConfig
-	GRPC        GRPCConfig
-	Heartbeat   HeartbeatConfig
-	WebSocket   WebSocketConfig
-	Firebase    FirebaseConfig
-	AgentBinary AgentBinaryConfig
-	Metrics     MetricsConfig
+	Server       ServerConfig
+	MongoDB      MongoDBConfig
+	Redis        RedisConfig
+	GRPC         GRPCConfig
+	Heartbeat    HeartbeatConfig
+	WebSocket    WebSocketConfig
+	Firebase     FirebaseConfig
+	WorkerBinary WorkerBinaryConfig
+	Metrics      MetricsConfig
 }
 
 // MetricsConfig controls machine snapshot job and dashboard polling.
@@ -29,8 +30,12 @@ type HeartbeatConfig struct {
 	MaxRetries    int
 }
 
-type AgentBinaryConfig struct {
-	Dir string // directory containing compiled agent binaries
+type RedisConfig struct {
+	URL string
+}
+
+type WorkerBinaryConfig struct {
+	Dir string // directory containing compiled worker binaries
 }
 
 type ServerConfig struct {
@@ -84,6 +89,9 @@ func Load() (*Config, error) {
 			ConnectTimeout: getDurationEnv("MONGODB_CONNECT_TIMEOUT", 10*time.Second),
 			MaxPoolSize:    getUint64Env("MONGODB_MAX_POOL_SIZE", 100),
 		},
+		Redis: RedisConfig{
+			URL: getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		},
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),
 			Host: getEnv("GRPC_HOST", "0.0.0.0"),
@@ -105,8 +113,8 @@ func Load() (*Config, error) {
 			ProjectID:       getEnv("FIREBASE_PROJECT_ID", ""),
 			CredentialsJSON: getEnv("FIREBASE_CREDENTIALS_JSON", ""),
 		},
-		AgentBinary: AgentBinaryConfig{
-			Dir: getEnv("AGENT_BINARY_DIR", "/opt/lute/agent-binaries"),
+		WorkerBinary: WorkerBinaryConfig{
+			Dir: getEnv("WORKER_BINARY_DIR", "/opt/lute/worker-binaries"),
 		},
 		Metrics: MetricsConfig{
 			SnapshotInterval: getDurationEnv("METRICS_SNAPSHOT_INTERVAL", 5*time.Minute),

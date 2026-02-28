@@ -13,8 +13,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/lute/agent/setup/types"
-	"github.com/lute/agent/utils"
+	"github.com/lute/worker/setup/types"
+	"github.com/lute/worker/utils"
 )
 
 // Run executes the interactive setup process.
@@ -24,7 +24,7 @@ func Run(apiURL, version, buildTime, claimCode string) {
 
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════╗")
-	fmt.Println("║       Lute Agent Setup               ║")
+	fmt.Println("║       Lute Worker Setup              ║")
 	fmt.Printf("║       Version: %-21s ║\n", version)
 	fmt.Println("╚══════════════════════════════════════╝")
 	fmt.Println()
@@ -39,8 +39,8 @@ func Run(apiURL, version, buildTime, claimCode string) {
 	// 3. Register with the server
 	setupResp := registerWithServer(apiURL, sysInfo)
 
-	// 4. Auto-start the agent in detached (background) mode
-	startAgent(setupResp, version)
+	// 4. Auto-start the worker in detached (background) mode
+	startWorker(setupResp, version)
 }
 
 // promptServiceName prompts the user for a service name
@@ -102,7 +102,7 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 		log.Fatalf("Failed to serialize request: %v", err)
 	}
 
-	url := strings.TrimRight(apiURL, "/") + "/api/v1/agent/register"
+	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Fatalf("Failed to connect to server: %v", err)
@@ -131,9 +131,9 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 	return &setupResp
 }
 
-// startAgent starts the agent in background mode
-func startAgent(setupResp *types.SetupResponse, version string) {
-	fmt.Println("Starting agent in background...")
+// startWorker starts the worker in background mode
+func startWorker(setupResp *types.SetupResponse, version string) {
+	fmt.Println("Starting worker in background...")
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -142,7 +142,7 @@ func startAgent(setupResp *types.SetupResponse, version string) {
 		return
 	}
 
-	logFile := fmt.Sprintf("/tmp/lute-agent-%s.log", setupResp.MachineID)
+	logFile := fmt.Sprintf("/tmp/lute-worker-%s.log", setupResp.MachineID)
 	lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Printf("Warning: cannot open log file %s: %v", logFile, err)
@@ -151,9 +151,9 @@ func startAgent(setupResp *types.SetupResponse, version string) {
 	}
 	defer lf.Close()
 
-	cmd := createAgentCommand(exePath, setupResp, lf)
+	cmd := createWorkerCommand(exePath, setupResp, lf)
 	if err := cmd.Start(); err != nil {
-		log.Printf("Warning: failed to start agent: %v", err)
+		log.Printf("Warning: failed to start worker: %v", err)
 		displayManualInstructions(setupResp)
 		return
 	}
@@ -161,8 +161,8 @@ func startAgent(setupResp *types.SetupResponse, version string) {
 	displayStartupInfo(cmd.Process.Pid, logFile)
 }
 
-// createAgentCommand creates the command to start the agent
-func createAgentCommand(exePath string, setupResp *types.SetupResponse, logFile *os.File) *exec.Cmd {
+// createWorkerCommand creates the command to start the worker
+func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile *os.File) *exec.Cmd {
 	cmd := exec.Command(exePath,
 		"--server", setupResp.GRPCAddress,
 		"--machine-id", setupResp.MachineID,
@@ -179,13 +179,13 @@ func createAgentCommand(exePath string, setupResp *types.SetupResponse, logFile 
 // displayManualInstructions shows manual start instructions
 func displayManualInstructions(setupResp *types.SetupResponse) {
 	fmt.Println("Could not auto-start. Run manually:")
-	fmt.Printf("  lute-agent --server %s --machine-id %s\n",
+	fmt.Printf("  lute-worker --server %s --machine-id %s\n",
 		setupResp.GRPCAddress, setupResp.MachineID)
 }
 
 // displayStartupInfo displays information about the started agent
 func displayStartupInfo(pid int, logFile string) {
-	fmt.Printf("✓ Agent started (PID %d)\n", pid)
+	fmt.Printf("✓ Worker started (PID %d)\n", pid)
 	fmt.Printf("  Logs: %s\n", logFile)
 	fmt.Println()
 	fmt.Println("Manage:")

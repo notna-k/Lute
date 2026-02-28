@@ -13,18 +13,20 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/lute/agent/metrics"
-	"github.com/lute/agent/setup"
-	"github.com/lute/agent/setup/types"
-	"github.com/lute/agent/utils"
+	"github.com/lute/worker/handler"
+	"github.com/lute/worker/metrics"
+	"github.com/lute/worker/setup"
+	"github.com/lute/worker/setup/types"
+	"github.com/lute/worker/utils"
 
-	pb "github.com/lute/agent/proto/agent"
+	pb "github.com/lute/worker/proto/worker"
 )
 
 var (
@@ -33,19 +35,21 @@ var (
 )
 
 type Flags struct {
-	serverAddr string
-	apiURL     string
-	machineID  string
-	claimCode  string
-	version    bool
-	setupMode  bool
+	serverAddr  string
+	apiURL      string
+	machineID   string
+	claimCode   string
+	queues      string
+	concurrency int
+	version     bool
+	setupMode   bool
 }
 
 func main() {
 	flags := parseFlags()
 
 	if flags.version {
-		fmt.Printf("lute-agent %s (built %s)\n", Version, BuildTime)
+		fmt.Printf("lute-worker %s (built %s)\n", Version, BuildTime)
 		os.Exit(0)
 	}
 
@@ -54,7 +58,7 @@ func main() {
 		return
 	}
 
-	runAgent(flags)
+	runWorker(flags)
 }
 
 func parseFlags() *Flags {
@@ -63,19 +67,20 @@ func parseFlags() *Flags {
 	flag.StringVar(&f.apiURL, "api", "http://localhost:8080", "HTTP API base URL")
 	flag.StringVar(&f.machineID, "machine-id", "", "Machine ID (skip REST registration if provided)")
 	flag.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this machine to your account")
+	flag.StringVar(&f.queues, "queues", "default", "Comma-separated list of queues to process")
+	flag.IntVar(&f.concurrency, "concurrency", 10, "Maximum concurrent jobs")
 	flag.BoolVar(&f.version, "version", false, "Print version and exit")
 	flag.BoolVar(&f.setupMode, "setup", false, "Run interactive setup")
 	flag.Parse()
 	return f
 }
 
-func runAgent(flags *Flags) {
-	log.Printf("Lute Agent %s starting (build: %s)", Version, BuildTime)
+func runWorker(flags *Flags) {
+	log.Printf("Lute Worker %s starting (build: %s)", Version, BuildTime)
 
 	machineID := flags.machineID
 	serverAddr := flags.serverAddr
 
-	// If no machine-id, register via REST and obtain one.
 	if machineID == "" {
 		var grpcAddr string
 		machineID, grpcAddr = registerViaREST(flags.apiURL)
@@ -84,28 +89,31 @@ func runAgent(flags *Flags) {
 		}
 	}
 
-	log.Printf("  Machine ID: %s", machineID)
-	log.Printf("  Server:     %s", serverAddr)
+	queueList := strings.Split(flags.queues, ",")
+	for i := range queueList {
+		queueList[i] = strings.TrimSpace(queueList[i])
+	}
+
+	log.Printf("  Machine ID:   %s", machineID)
+	log.Printf("  Server:       %s", serverAddr)
+	log.Printf("  Queues:       %v", queueList)
+	log.Printf("  Concurrency:  %d", flags.concurrency)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Graceful shutdown on SIGINT/SIGTERM.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-quit
-		log.Println("Shutting down agent...")
+		log.Println("Shutting down worker...")
 		cancel()
 	}()
 
-	// Persistent connection loop with reconnection.
-	connectLoop(ctx, serverAddr, machineID)
-	log.Println("Agent stopped")
+	connectLoop(ctx, serverAddr, machineID, queueList, int32(flags.concurrency))
+	log.Println("Worker stopped")
 }
 
-// registerViaREST calls POST /api/v1/agent/register and returns
-// (machine_id, grpc_address).
 func registerViaREST(apiURL string) (string, string) {
 	hostname := utils.MustHostname()
 	localIP := utils.GetLocalIP()
@@ -129,7 +137,7 @@ func registerViaREST(apiURL string) (string, string) {
 		log.Fatalf("Failed to marshal registration request: %v", err)
 	}
 
-	url := strings.TrimRight(apiURL, "/") + "/api/v1/agent/register"
+	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		log.Fatalf("REST registration failed: %v", err)
@@ -153,9 +161,7 @@ func registerViaREST(apiURL string) (string, string) {
 	return result.MachineID, result.GRPCAddress
 }
 
-// connectLoop keeps the bidirectional stream alive, reconnecting with
-// exponential backoff on failure.
-func connectLoop(ctx context.Context, serverAddr, machineID string) {
+func connectLoop(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32) {
 	backoff := time.Second
 
 	for {
@@ -163,7 +169,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string) {
 			return
 		}
 
-		err := runStream(ctx, serverAddr, machineID)
+		err := runStream(ctx, serverAddr, machineID, queues, concurrency)
 		if ctx.Err() != nil {
 			return
 		}
@@ -182,9 +188,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string) {
 	}
 }
 
-// runStream opens a single Connect stream and processes heartbeat pings
-// until the stream breaks or the context is cancelled.
-func runStream(ctx context.Context, serverAddr, machineID string) error {
+func runStream(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32) error {
 	conn, err := grpc.NewClient(serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -193,20 +197,36 @@ func runStream(ctx context.Context, serverAddr, machineID string) error {
 	}
 	defer conn.Close()
 
-	client := pb.NewAgentServiceClient(conn)
+	client := pb.NewWorkerServiceClient(conn)
 	stream, err := client.Connect(ctx)
 	if err != nil {
 		return fmt.Errorf("open stream: %w", err)
 	}
 
 	// Send initial message with machine_id.
-	if err := stream.Send(&pb.AgentMessage{MachineId: machineID}); err != nil {
+	if err := stream.Send(&pb.WorkerMessage{MachineId: machineID}); err != nil {
 		return fmt.Errorf("send initial: %w", err)
+	}
+
+	// Send worker registration with queues and concurrency.
+	if err := stream.Send(&pb.WorkerMessage{
+		MachineId: machineID,
+		Payload: &pb.WorkerMessage_Register{
+			Register: &pb.WorkerRegistration{
+				WorkerId:    machineID,
+				Queues:      queues,
+				Concurrency: concurrency,
+			},
+		},
+	}); err != nil {
+		return fmt.Errorf("send registration: %w", err)
 	}
 
 	log.Printf("Connected to %s", serverAddr)
 
-	// Reset backoff on successful connect (caller handles backoff).
+	var sendMu sync.Mutex
+	draining := false
+
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -221,17 +241,64 @@ func runStream(ctx context.Context, serverAddr, machineID string) error {
 				Metrics:   metricsToProto(raw),
 				Timestamp: time.Now().Unix(),
 			}
-			if err := stream.Send(&pb.AgentMessage{
+			sendMu.Lock()
+			err := stream.Send(&pb.WorkerMessage{
 				MachineId: machineID,
-				Payload:   &pb.AgentMessage_HeartbeatPong{HeartbeatPong: pong},
-			}); err != nil {
+				Payload:   &pb.WorkerMessage_HeartbeatPong{HeartbeatPong: pong},
+			})
+			sendMu.Unlock()
+			if err != nil {
 				return fmt.Errorf("send pong: %w", err)
 			}
+		}
+
+		if assign := msg.GetAssign(); assign != nil {
+			if draining {
+				sendMu.Lock()
+				_ = stream.Send(&pb.WorkerMessage{
+					MachineId: machineID,
+					Payload: &pb.WorkerMessage_Result{
+						Result: &pb.JobResult{
+							JobId:   assign.JobId,
+							Success: false,
+							Error:   "worker is draining",
+						},
+					},
+				})
+				sendMu.Unlock()
+				continue
+			}
+
+			go func(a *pb.JobAssignment) {
+				start := time.Now()
+				jobErr := handler.Execute(ctx, a.Type, a.Payload)
+				elapsed := time.Since(start).Milliseconds()
+
+				result := &pb.JobResult{
+					JobId:     a.JobId,
+					Success:   jobErr == nil,
+					ElapsedMs: elapsed,
+				}
+				if jobErr != nil {
+					result.Error = jobErr.Error()
+				}
+
+				sendMu.Lock()
+				_ = stream.Send(&pb.WorkerMessage{
+					MachineId: machineID,
+					Payload:   &pb.WorkerMessage_Result{Result: result},
+				})
+				sendMu.Unlock()
+			}(assign)
+		}
+
+		if msg.GetDrain() != nil {
+			log.Println("Drain signal received, finishing in-flight jobs")
+			draining = true
 		}
 	}
 }
 
-// metricsToProto converts map[string]interface{} (int64, float64, string) to proto MetricValue map.
 func metricsToProto(raw map[string]interface{}) map[string]*pb.MetricValue {
 	out := make(map[string]*pb.MetricValue, len(raw))
 	for k, v := range raw {

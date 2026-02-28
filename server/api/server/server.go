@@ -8,6 +8,7 @@ import (
 	"github.com/lute/api/config"
 	"github.com/lute/api/database"
 	"github.com/lute/api/grpc"
+	"github.com/lute/api/queue"
 	"github.com/lute/api/repository"
 	"github.com/lute/api/router"
 	"github.com/lute/api/services"
@@ -20,10 +21,13 @@ type Server struct {
 	Hub                *websocket.Hub
 	HeartbeatChecker   *services.HeartbeatChecker
 	MachineSnapshotJob *services.MachineSnapshotJob
+	QueueScheduler     *queue.Scheduler
 	checkerCtx         context.Context
 	checkerStop        context.CancelFunc
 	snapshotJobCtx     context.Context
 	snapshotJobCancel  context.CancelFunc
+	schedulerCtx       context.Context
+	schedulerCancel    context.CancelFunc
 }
 
 func New(
@@ -34,13 +38,16 @@ func New(
 	commandRepo *repository.CommandRepository,
 	uptimeSnapshotRepo *repository.UptimeSnapshotRepository,
 	machineSnapshotRepo *repository.MachineSnapshotRepository,
+	queueEngine *queue.Engine,
+	queueScheduler *queue.Scheduler,
+	statsAgg *queue.StatsAggregator,
 ) *Server {
 	hub := websocket.NewHub()
 	go hub.Run()
 
-	grpcServer := grpc.NewServer(cfg, machineRepo)
+	grpcServer := grpc.NewServer(cfg, machineRepo, queueEngine, statsAgg, hub)
 
-	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub)
+	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub, queueEngine, statsAgg, grpcServer)
 
 	httpServer := &http.Server{
 		Addr:         cfg.Server.Host + ":" + cfg.Server.Port,
@@ -67,6 +74,7 @@ func New(
 		Hub:                hub,
 		HeartbeatChecker:   heartbeatChecker,
 		MachineSnapshotJob: machineSnapshotJob,
+		QueueScheduler:     queueScheduler,
 	}
 }
 
@@ -76,6 +84,11 @@ func (s *Server) Start() error {
 
 	s.snapshotJobCtx, s.snapshotJobCancel = context.WithCancel(context.Background())
 	go s.MachineSnapshotJob.Run(s.snapshotJobCtx)
+
+	if s.QueueScheduler != nil {
+		s.schedulerCtx, s.schedulerCancel = context.WithCancel(context.Background())
+		go s.QueueScheduler.Run(s.schedulerCtx)
+	}
 
 	go func() {
 		if err := s.GRPC.Start(); err != nil {
@@ -101,6 +114,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	if s.snapshotJobCancel != nil {
 		s.snapshotJobCancel()
+	}
+	if s.schedulerCancel != nil {
+		s.schedulerCancel()
 	}
 
 	s.GRPC.Stop()

@@ -1,4 +1,4 @@
-module github.com/lute/agent
+module github.com/lute/worker
 
 go 1.24.12
 

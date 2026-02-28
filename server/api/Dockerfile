@@ -7,19 +7,19 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy module files for api and agent (api has a local replace)
+# Copy module files for api and worker (api has a local replace)
 COPY server/api/go.mod server/api/go.sum server/api/
-COPY server/agent/go.mod server/agent/go.sum server/agent/
+COPY server/worker/go.mod server/worker/go.sum server/worker/
 
 # Download deps with cache mount so repeated builds skip download
 RUN --mount=type=cache,target=/go/pkg/mod \
     cd server/api && go mod download
 RUN --mount=type=cache,target=/go/pkg/mod \
-    cd server/agent && go mod download
+    cd server/worker && go mod download
 
 # Copy source code
 COPY server/api server/api
-COPY server/agent server/agent
+COPY server/worker server/worker
 
 # Build the API server (use Go build cache for faster recompiles)
 # Output to "api" to avoid clashing with the server/ package directory
@@ -27,45 +27,45 @@ WORKDIR /app/server/api
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o api .
 
-# ---- Build agent binaries for multiple platforms ----
-ARG AGENT_VERSION=dev
+# ---- Build worker binaries for multiple platforms ----
+ARG WORKER_VERSION=dev
 ARG BUILD_TIME=unknown
 
-WORKDIR /app/server/agent
+WORKDIR /app/server/worker
 
 # Linux amd64
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    mkdir -p /app/agent-binaries && \
+    mkdir -p /app/worker-binaries && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-linux-amd64 .
+    -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/worker-binaries/lute-worker-linux-amd64 .
 
 # Linux arm64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
-    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-linux-arm64 .
+    -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/worker-binaries/lute-worker-linux-arm64 .
 
 # Darwin (macOS) amd64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-darwin-amd64 .
+    -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/worker-binaries/lute-worker-darwin-amd64 .
 
 # Darwin (macOS) arm64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build \
-    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-darwin-arm64 .
+    -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/worker-binaries/lute-worker-darwin-arm64 .
 
 # Windows amd64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
-    -ldflags "-s -w -X main.Version=${AGENT_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/agent-binaries/lute-agent-windows-amd64.exe .
+    -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o /app/worker-binaries/lute-worker-windows-amd64.exe .
 
 # Write the version file
-RUN echo "${AGENT_VERSION}" > /app/agent-binaries/VERSION
+RUN echo "${WORKER_VERSION}" > /app/worker-binaries/VERSION
 
 # Runtime stage
 FROM alpine:latest
@@ -77,14 +77,14 @@ WORKDIR /root/
 # Copy server binary
 COPY --from=builder /app/server/api/api .
 
-# Copy agent binaries into the directory the server will serve
-COPY --from=builder /app/agent-binaries /opt/lute/agent-binaries
+# Copy worker binaries into the directory the server will serve
+COPY --from=builder /app/worker-binaries /opt/lute/worker-binaries
 
 # Expose ports
 EXPOSE 8080 50051
 
-# Set default env for agent binary directory
-ENV AGENT_BINARY_DIR=/opt/lute/agent-binaries
+# Set default env for worker binary directory
+ENV WORKER_BINARY_DIR=/opt/lute/worker-binaries
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

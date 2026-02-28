@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package worker;
+
+option go_package = "github.com/lute/worker/proto/worker";
+
+service WorkerService {
+  rpc Connect(stream WorkerMessage) returns (stream ServerMessage);
+}
+
+message WorkerMessage {
+  string machine_id = 1;
+  oneof payload {
+    HeartbeatPong    heartbeat_pong = 2;
+    JobResult        result         = 3;
+    WorkerRegistration register     = 4;
+  }
+}
+
+message ServerMessage {
+  oneof payload {
+    HeartbeatPing heartbeat_ping = 1;
+    JobAssignment assign         = 2;
+    DrainSignal   drain          = 3;
+  }
+}
+
+message HeartbeatPing {
+  int64 timestamp = 1;
+}
+
+message MetricValue {
+  oneof kind {
+    int64  i = 1;
+    double f = 2;
+    string s = 3;
+  }
+}
+
+message HeartbeatPong {
+  string status = 1;
+  map<string, MetricValue> metrics = 2;
+  int64 timestamp = 3;
+}
+
+message WorkerRegistration {
+  string worker_id   = 1;
+  repeated string queues = 2;
+  int32 concurrency  = 3;
+}
+
+message JobAssignment {
+  string job_id      = 1;
+  string queue       = 2;
+  string type        = 3;
+  bytes  payload     = 4;
+  int32  timeout_sec = 5;
+}
+
+message JobResult {
+  string job_id     = 1;
+  bool   success    = 2;
+  string error      = 3;
+  int64  elapsed_ms = 4;
+}
+
+message DrainSignal {}

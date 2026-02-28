@@ -21,8 +21,8 @@ import (
 	"github.com/lute/api/repository"
 )
 
-// AgentBinaryInfo describes one compiled agent binary
-type AgentBinaryInfo struct {
+// WorkerBinaryInfo describes one compiled worker binary
+type WorkerBinaryInfo struct {
 	OS       string `json:"os"`
 	Arch     string `json:"arch"`
 	Version  string `json:"version"`
@@ -31,8 +31,8 @@ type AgentBinaryInfo struct {
 	Size     int64  `json:"size"`
 }
 
-// AgentSetupRequest is sent by the agent during --setup to register a new machine
-type AgentSetupRequest struct {
+// WorkerSetupRequest is sent by the worker during --setup to register a new machine
+type WorkerSetupRequest struct {
 	Name      string            `json:"name" binding:"required"`
 	Hostname  string            `json:"hostname"`
 	OS        string            `json:"os"`
@@ -44,8 +44,8 @@ type AgentSetupRequest struct {
 	ClaimCode string            `json:"claim_code,omitempty"` // optional; links machine to user when valid
 }
 
-// AgentSetupResponse is returned after the agent registers a new machine
-type AgentSetupResponse struct {
+// WorkerSetupResponse is returned after the worker registers a new machine
+type WorkerSetupResponse struct {
 	MachineID   string `json:"machine_id"`
 	GRPCAddress string `json:"grpc_address"`
 	Message     string `json:"message"`
@@ -57,36 +57,36 @@ type claimEntry struct {
 	ExpiresAt time.Time
 }
 
-// AgentHandler serves compiled agent binaries and handles agent registration
-type AgentHandler struct {
-	binaryDir   string                      // directory containing compiled agent binaries
-	mu          sync.RWMutex                // protects the cache
-	cache       map[string]*AgentBinaryInfo // key: "os/arch"
+// WorkerHandler serves compiled worker binaries and handles worker registration
+type WorkerHandler struct {
+	binaryDir   string                       // directory containing compiled worker binaries
+	mu          sync.RWMutex                 // protects the cache
+	cache       map[string]*WorkerBinaryInfo // key: "os/arch"
 	claimMu     sync.RWMutex
-	claimCodes  map[string]*claimEntry      // short-lived codes: code -> userID + expiry
+	claimCodes  map[string]*claimEntry       // short-lived codes: code -> userID + expiry
 	cfg         *config.Config
 	machineRepo *repository.MachineRepository
 	commandRepo *repository.CommandRepository
 }
 
-// NewAgentHandler creates a handler that serves agent binaries from binaryDir.
+// NewWorkerHandler creates a handler that serves worker binaries from binaryDir.
 // binaryDir layout:
 //
 //	<binaryDir>/
-//	  lute-agent-linux-amd64
-//	  lute-agent-linux-arm64
-//	  lute-agent-darwin-amd64
-//	  lute-agent-darwin-arm64
-//	  lute-agent-windows-amd64.exe
-func NewAgentHandler(
+//	  lute-worker-linux-amd64
+//	  lute-worker-linux-arm64
+//	  lute-worker-darwin-amd64
+//	  lute-worker-darwin-arm64
+//	  lute-worker-windows-amd64.exe
+func NewWorkerHandler(
 	binaryDir string,
 	cfg *config.Config,
 	machineRepo *repository.MachineRepository,
 	commandRepo *repository.CommandRepository,
-) *AgentHandler {
-	h := &AgentHandler{
+) *WorkerHandler {
+	h := &WorkerHandler{
 		binaryDir:   binaryDir,
-		cache:       make(map[string]*AgentBinaryInfo),
+		cache:       make(map[string]*WorkerBinaryInfo),
 		claimCodes:  make(map[string]*claimEntry),
 		cfg:         cfg,
 		machineRepo: machineRepo,
@@ -100,7 +100,7 @@ const claimCodeLen = 20
 const claimCodeExpiry = 15 * time.Minute
 const claimCodeChars = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ" // no I,O to avoid confusion
 
-func (h *AgentHandler) createClaimCode(userID string) (code string, expiresAt time.Time) {
+func (h *WorkerHandler) createClaimCode(userID string) (code string, expiresAt time.Time) {
 	b := make([]byte, claimCodeLen)
 	_, _ = rand.Read(b)
 	for i := range b {
@@ -120,7 +120,7 @@ func (h *AgentHandler) createClaimCode(userID string) (code string, expiresAt ti
 	return code, expiresAt
 }
 
-func (h *AgentHandler) consumeClaimCode(code string) (userID string, ok bool) {
+func (h *WorkerHandler) consumeClaimCode(code string) (userID string, ok bool) {
 	if code == "" {
 		return "", false
 	}
@@ -135,23 +135,23 @@ func (h *AgentHandler) consumeClaimCode(code string) (userID string, ok bool) {
 }
 
 // refreshCache scans the binary directory and rebuilds metadata cache
-func (h *AgentHandler) refreshCache() {
+func (h *WorkerHandler) refreshCache() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	entries, err := os.ReadDir(h.binaryDir)
 	if err != nil {
-		log.Printf("Warning: cannot read agent binary dir %s: %v", h.binaryDir, err)
+		log.Printf("Warning: cannot read worker binary dir %s: %v", h.binaryDir, err)
 		return
 	}
 
-	newCache := make(map[string]*AgentBinaryInfo)
+	newCache := make(map[string]*WorkerBinaryInfo)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "lute-agent-") {
+		if !strings.HasPrefix(name, "lute-worker-") {
 			continue
 		}
 
@@ -173,7 +173,7 @@ func (h *AgentHandler) refreshCache() {
 		}
 
 		key := osName + "/" + arch
-		newCache[key] = &AgentBinaryInfo{
+		newCache[key] = &WorkerBinaryInfo{
 			OS:       osName,
 			Arch:     arch,
 			Version:  readVersionFile(h.binaryDir),
@@ -181,19 +181,19 @@ func (h *AgentHandler) refreshCache() {
 			SHA256:   checksum,
 			Size:     info.Size(),
 		}
-		log.Printf("Indexed agent binary: %s (%s/%s, %d bytes)", name, osName, arch, info.Size())
+		log.Printf("Indexed worker binary: %s (%s/%s, %d bytes)", name, osName, arch, info.Size())
 	}
 
 	h.cache = newCache
 }
 
-// ListBinaries returns metadata about all available agent binaries
-// GET /api/v1/agent/binaries
-func (h *AgentHandler) ListBinaries(c *gin.Context) {
+// ListBinaries returns metadata about all available worker binaries
+// GET /api/v1/worker/binaries
+func (h *WorkerHandler) ListBinaries(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	binaries := make([]*AgentBinaryInfo, 0, len(h.cache))
+	binaries := make([]*WorkerBinaryInfo, 0, len(h.cache))
 	for _, b := range h.cache {
 		binaries = append(binaries, b)
 	}
@@ -204,9 +204,9 @@ func (h *AgentHandler) ListBinaries(c *gin.Context) {
 	})
 }
 
-// DownloadBinary serves the agent binary for the requested OS/arch
-// GET /api/v1/agent/download/:os/:arch
-func (h *AgentHandler) DownloadBinary(c *gin.Context) {
+// DownloadBinary serves the worker binary for the requested OS/arch
+// GET /api/v1/worker/download/:os/:arch
+func (h *WorkerHandler) DownloadBinary(c *gin.Context) {
 	osName := c.Param("os")
 	arch := c.Param("arch")
 	key := osName + "/" + arch
@@ -217,7 +217,7 @@ func (h *AgentHandler) DownloadBinary(c *gin.Context) {
 
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error":     fmt.Sprintf("no agent binary for %s/%s", osName, arch),
+			"error":     fmt.Sprintf("no worker binary for %s/%s", osName, arch),
 			"available": h.availableKeys(),
 		})
 		return
@@ -226,14 +226,14 @@ func (h *AgentHandler) DownloadBinary(c *gin.Context) {
 	fullPath := filepath.Join(h.binaryDir, info.Filename)
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", info.Filename))
-	c.Header("X-Agent-Version", info.Version)
-	c.Header("X-Agent-SHA256", info.SHA256)
+	c.Header("X-Worker-Version", info.Version)
+	c.Header("X-Worker-SHA256", info.SHA256)
 	c.File(fullPath)
 }
 
 // DownloadAutoDetect serves the binary based on the requesting machine's info
-// GET /api/v1/agent/download  (auto-detect from query: ?os=linux&arch=amd64)
-func (h *AgentHandler) DownloadAutoDetect(c *gin.Context) {
+// GET /api/v1/worker/download  (auto-detect from query: ?os=linux&arch=amd64)
+func (h *WorkerHandler) DownloadAutoDetect(c *gin.Context) {
 	osName := c.DefaultQuery("os", "linux")
 	arch := c.DefaultQuery("arch", "amd64")
 	key := osName + "/" + arch
@@ -244,7 +244,7 @@ func (h *AgentHandler) DownloadAutoDetect(c *gin.Context) {
 
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error":     fmt.Sprintf("no agent binary for %s/%s", osName, arch),
+			"error":     fmt.Sprintf("no worker binary for %s/%s", osName, arch),
 			"available": h.availableKeys(),
 		})
 		return
@@ -253,22 +253,22 @@ func (h *AgentHandler) DownloadAutoDetect(c *gin.Context) {
 	fullPath := filepath.Join(h.binaryDir, info.Filename)
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", info.Filename))
-	c.Header("X-Agent-Version", info.Version)
-	c.Header("X-Agent-SHA256", info.SHA256)
+	c.Header("X-Worker-Version", info.Version)
+	c.Header("X-Worker-SHA256", info.SHA256)
 	c.File(fullPath)
 }
 
-// GetVersion returns the current agent version
-// GET /api/v1/agent/version
-func (h *AgentHandler) GetVersion(c *gin.Context) {
+// GetVersion returns the current worker version
+// GET /api/v1/worker/version
+func (h *WorkerHandler) GetVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"version": readVersionFile(h.binaryDir),
 	})
 }
 
 // RefreshBinaries re-scans the binary directory (for hot-reload after upload)
-// POST /api/v1/agent/refresh
-func (h *AgentHandler) RefreshBinaries(c *gin.Context) {
+// POST /api/v1/worker/refresh
+func (h *WorkerHandler) RefreshBinaries(c *gin.Context) {
 	h.refreshCache()
 
 	h.mu.RLock()
@@ -281,9 +281,9 @@ func (h *AgentHandler) RefreshBinaries(c *gin.Context) {
 	})
 }
 
-// InstallScript returns a shell script that auto-downloads and installs the agent
-// GET /api/v1/agent/install.sh
-func (h *AgentHandler) InstallScript(c *gin.Context) {
+// InstallScript returns a shell script that auto-downloads and installs the worker
+// GET /api/v1/worker/install.sh
+func (h *WorkerHandler) InstallScript(c *gin.Context) {
 	// Determine the server's base URL from the request
 	scheme := "http"
 	if c.Request.TLS != nil {
@@ -297,8 +297,8 @@ func (h *AgentHandler) InstallScript(c *gin.Context) {
 	script := fmt.Sprintf(`#!/bin/bash
 set -e
 
-# Lute Agent Installer
-# Usage: curl -sSL %s/api/v1/agent/install.sh | bash -s -- --machine-id <ID> --server <GRPC_ADDR>
+# Lute Worker Installer
+# Usage: curl -sSL %s/api/v1/worker/install.sh | bash -s -- --machine-id <ID> --server <GRPC_ADDR>
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -309,13 +309,13 @@ case "$ARCH" in
 esac
 
 INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="lute-agent"
+BINARY_NAME="lute-worker"
 
 echo "==> Detecting platform: ${OS}/${ARCH}"
-echo "==> Downloading agent from %s ..."
+echo "==> Downloading worker from %s ..."
 
 curl -fSL -o "/tmp/${BINARY_NAME}" \
-  "%s/api/v1/agent/download/${OS}/${ARCH}"
+  "%s/api/v1/worker/download/${OS}/${ARCH}"
 
 chmod +x "/tmp/${BINARY_NAME}"
 sudo mv "/tmp/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
@@ -324,17 +324,17 @@ echo "==> Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 ${INSTALL_DIR}/${BINARY_NAME} --version
 
 echo ""
-echo "==> Run the agent:"
+echo "==> Run the worker:"
 echo "    ${BINARY_NAME} --server <GRPC_HOST:PORT> --machine-id <MACHINE_ID>"
 `, baseURL, baseURL, baseURL)
 
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))
 }
 
-// RegisterFromAgent handles POST /api/v1/agent/register
-// Called by the agent during --setup to create a machine + agent record
-func (h *AgentHandler) RegisterFromAgent(c *gin.Context) {
-	var req AgentSetupRequest
+// RegisterFromWorker handles POST /api/v1/worker/register
+// Called by the worker during --setup to create a machine + worker record
+func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
+	var req WorkerSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -400,7 +400,7 @@ func (h *AgentHandler) RegisterFromAgent(c *gin.Context) {
 		log.Printf("Failed to update machine with agent info: %v", err)
 		// Clean up: delete the machine we just created
 		_ = h.machineRepo.Delete(ctx, machine.ID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register agent"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
 		return
 	}
 
@@ -426,19 +426,19 @@ func (h *AgentHandler) RegisterFromAgent(c *gin.Context) {
 
 	grpcAddr := fmt.Sprintf("%s:%s", host, h.cfg.GRPC.Port)
 
-	log.Printf("Agent registered: machine=%s host=%s grpc=%s",
+	log.Printf("Worker registered: machine=%s host=%s grpc=%s",
 		machine.ID.Hex(), req.Hostname, grpcAddr)
 
-	c.JSON(http.StatusCreated, AgentSetupResponse{
+	c.JSON(http.StatusCreated, WorkerSetupResponse{
 		MachineID:   machine.ID.Hex(),
 		GRPCAddress: grpcAddr,
 		Message:     "Machine registered successfully",
 	})
 }
 
-// CreateClaimCode handles POST /api/v1/agent/claim-code (authenticated).
+// CreateClaimCode handles POST /api/v1/worker/claim-code (authenticated).
 // Returns a short-lived code the user can pass to the agent so the new machine is linked to them.
-func (h *AgentHandler) CreateClaimCode(c *gin.Context) {
+func (h *WorkerHandler) CreateClaimCode(c *gin.Context) {
 	uid, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
@@ -454,7 +454,7 @@ func (h *AgentHandler) CreateClaimCode(c *gin.Context) {
 
 // --- helpers ---
 
-func (h *AgentHandler) availableKeys() []string {
+func (h *WorkerHandler) availableKeys() []string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	keys := make([]string, 0, len(h.cache))
@@ -464,11 +464,11 @@ func (h *AgentHandler) availableKeys() []string {
 	return keys
 }
 
-// parseFilename extracts OS and arch from "lute-agent-<os>-<arch>[.exe]"
+// parseFilename extracts OS and arch from "lute-worker-<os>-<arch>[.exe]"
 func parseFilename(name string) (string, string) {
 	name = strings.TrimSuffix(name, ".exe")
 	parts := strings.Split(name, "-")
-	// expect: lute-agent-linux-amd64
+	// expect: lute-worker-linux-amd64
 	if len(parts) < 4 {
 		return "", ""
 	}
@@ -497,10 +497,6 @@ func readVersionFile(dir string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// ===========================================================================
-// Agent management REST endpoints (used by UI to control agents)
-// ===========================================================================
-
 // SendCommandRequest is the JSON body for queueing a command
 type SendCommandRequest struct {
 	Command string            `json:"command" binding:"required"`
@@ -508,9 +504,9 @@ type SendCommandRequest struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-// SendCommand queues a command for an agent to execute
-// POST /api/v1/agent/command/:machineId
-func (h *AgentHandler) SendCommand(c *gin.Context) {
+// SendCommand queues a command for a worker to execute
+// POST /api/v1/worker/command/:machineId
+func (h *WorkerHandler) SendCommand(c *gin.Context) {
 	machineIDStr := c.Param("machineId")
 	machineID, err := primitive.ObjectIDFromHex(machineIDStr)
 	if err != nil {
@@ -534,7 +530,7 @@ func (h *AgentHandler) SendCommand(c *gin.Context) {
 	}
 
 	if machine.Status == "" || machine.Status == "pending" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "machine has no agent connected"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "machine has no worker connected"})
 		return
 	}
 
@@ -555,13 +551,13 @@ func (h *AgentHandler) SendCommand(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"command_id": cmd.ID.Hex(),
 		"status":     "pending",
-		"message":    "Command queued for agent",
+		"message":    "Command queued for worker",
 	})
 }
 
 // ListCommands returns commands for a machine
-// GET /api/v1/agent/commands/:machineId
-func (h *AgentHandler) ListCommands(c *gin.Context) {
+// GET /api/v1/worker/commands/:machineId
+func (h *WorkerHandler) ListCommands(c *gin.Context) {
 	machineIDStr := c.Param("machineId")
 	machineID, err := primitive.ObjectIDFromHex(machineIDStr)
 	if err != nil {
@@ -583,9 +579,9 @@ func (h *AgentHandler) ListCommands(c *gin.Context) {
 	})
 }
 
-// GetAgentStatus returns the status of the agent for a machine
-// GET /api/v1/agent/status/:machineId
-func (h *AgentHandler) GetAgentStatus(c *gin.Context) {
+// GetWorkerStatus returns the status of the worker for a machine
+// GET /api/v1/worker/status/:machineId
+func (h *WorkerHandler) GetWorkerStatus(c *gin.Context) {
 	machineIDStr := c.Param("machineId")
 	machineID, err := primitive.ObjectIDFromHex(machineIDStr)
 	if err != nil {
@@ -618,8 +614,8 @@ func (h *AgentHandler) GetAgentStatus(c *gin.Context) {
 }
 
 // GetCommandResult returns the result of a specific command
-// GET /api/v1/agent/command/:commandId
-func (h *AgentHandler) GetCommandResult(c *gin.Context) {
+// GET /api/v1/worker/command/:commandId
+func (h *WorkerHandler) GetCommandResult(c *gin.Context) {
 	cmdIDStr := c.Param("commandId")
 	cmdID, err := primitive.ObjectIDFromHex(cmdIDStr)
 	if err != nil {
