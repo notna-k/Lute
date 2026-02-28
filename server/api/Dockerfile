@@ -22,10 +22,10 @@ COPY server/api server/api
 COPY server/worker server/worker
 
 # Build the API server (use Go build cache for faster recompiles)
-# Output to "api" to avoid clashing with the server/ package directory
+# Entrypoint is cmd/api after refactor to internal layout
 WORKDIR /app/server/api
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o api .
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o api ./cmd/api
 
 # ---- Build worker binaries for multiple platforms ----
 ARG WORKER_VERSION=dev
