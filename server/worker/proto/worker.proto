@@ -57,6 +57,15 @@ message JobAssignment {
   int32  timeout_sec = 5;
 }
 
+// ContainerJobSpec describes a job that runs inside a Docker container.
+// For type "container", JobAssignment.payload is JSON matching this message.
+message ContainerJobSpec {
+  string source_repository = 1;           // e.g. https://github.com/owner/repo.git
+  string runtime = 2;                     // Docker image name, e.g. python:3.12, node:20
+  map<string, string> request_params = 3; // user inputs -> env vars in container
+  string command = 4;                     // bash script to run inside the container
+}
+
 message JobResult {
   string job_id     = 1;
   bool   success    = 2;

@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/lute/worker/handler"
-	"github.com/lute/worker/metrics"
+	"github.com/lute/worker/heartbeat"
 	"github.com/lute/worker/setup"
 	"github.com/lute/worker/setup/types"
 	"github.com/lute/worker/utils"
@@ -235,17 +235,9 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 
 		if ping := msg.GetHeartbeatPing(); ping != nil {
 			log.Printf("Heartbeat ping received")
-			raw := metrics.Collect()
-			pong := &pb.HeartbeatPong{
-				Status:    "running",
-				Metrics:   metricsToProto(raw),
-				Timestamp: time.Now().Unix(),
-			}
+			pongMsg := heartbeat.PongMessage(machineID)
 			sendMu.Lock()
-			err := stream.Send(&pb.WorkerMessage{
-				MachineId: machineID,
-				Payload:   &pb.WorkerMessage_HeartbeatPong{HeartbeatPong: pong},
-			})
+			err := stream.Send(pongMsg)
 			sendMu.Unlock()
 			if err != nil {
 				return fmt.Errorf("send pong: %w", err)
@@ -271,7 +263,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 
 			go func(a *pb.JobAssignment) {
 				start := time.Now()
-				jobErr := handler.Execute(ctx, a.Type, a.Payload)
+				jobErr := handler.Execute(ctx, a.Type, a.Payload, a.TimeoutSec)
 				elapsed := time.Since(start).Milliseconds()
 
 				result := &pb.JobResult{
@@ -296,28 +288,5 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 			log.Println("Drain signal received, finishing in-flight jobs")
 			draining = true
 		}
-	}
-}
-
-func metricsToProto(raw map[string]interface{}) map[string]*pb.MetricValue {
-	out := make(map[string]*pb.MetricValue, len(raw))
-	for k, v := range raw {
-		out[k] = toMetricValue(v)
-	}
-	return out
-}
-
-func toMetricValue(v interface{}) *pb.MetricValue {
-	switch x := v.(type) {
-	case int64:
-		return &pb.MetricValue{Kind: &pb.MetricValue_I{I: x}}
-	case int:
-		return &pb.MetricValue{Kind: &pb.MetricValue_I{I: int64(x)}}
-	case float64:
-		return &pb.MetricValue{Kind: &pb.MetricValue_F{F: x}}
-	case string:
-		return &pb.MetricValue{Kind: &pb.MetricValue_S{S: x}}
-	default:
-		return &pb.MetricValue{Kind: &pb.MetricValue_S{S: fmt.Sprint(v)}}
 	}
 }
