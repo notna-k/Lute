@@ -12,7 +12,11 @@ import (
 
 // HandlerFunc processes a job payload. Return nil on success, error on failure.
 // timeoutSec is the job's timeout in seconds (0 means use default or no limit).
-type HandlerFunc func(ctx context.Context, payload []byte, timeoutSec int32) error
+type HandlerFunc func(ctx context.Context, jobID string, payload []byte, timeoutSec int32) error
+
+// JobLogsDir is the base directory for persisting job log files.
+// When empty, no log files are written (logs only go to process stdout).
+var JobLogsDir string
 
 var (
 	mu       sync.RWMutex
@@ -28,7 +32,7 @@ func Register(jobType string, fn HandlerFunc) {
 
 // Execute runs the handler registered for the given job type.
 // Returns an error if no handler is registered or the handler fails.
-func Execute(ctx context.Context, jobType string, payload []byte, timeoutSec int32) error {
+func Execute(ctx context.Context, jobID, jobType string, payload []byte, timeoutSec int32) error {
 	mu.RLock()
 	fn, ok := handlers[jobType]
 	mu.RUnlock()
@@ -38,11 +42,11 @@ func Execute(ctx context.Context, jobType string, payload []byte, timeoutSec int
 	}
 
 	log.Printf("Executing job type=%s payload_size=%d timeout_sec=%d", jobType, len(payload), timeoutSec)
-	return fn(ctx, payload, timeoutSec)
+	return fn(ctx, jobID, payload, timeoutSec)
 }
 
 func init() {
-	Register("noop", func(_ context.Context, _ []byte, _ int32) error {
+	Register("noop", func(_ context.Context, _ string, _ []byte, _ int32) error {
 		log.Println("noop job executed")
 		return nil
 	})
@@ -50,11 +54,11 @@ func init() {
 	Register("container", containerHandler)
 }
 
-func containerHandler(ctx context.Context, payload []byte, timeoutSec int32) error {
+func containerHandler(ctx context.Context, jobID string, payload []byte, timeoutSec int32) error {
 	var spec runner.Spec
 	if err := json.Unmarshal(payload, &spec); err != nil {
 		return fmt.Errorf("decode container spec: %w", err)
 	}
-	_, err := runner.Run(ctx, &spec, timeoutSec)
+	_, err := runner.Run(ctx, jobID, JobLogsDir, &spec, timeoutSec)
 	return err
 }

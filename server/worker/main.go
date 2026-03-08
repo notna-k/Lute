@@ -41,6 +41,7 @@ type Flags struct {
 	claimCode   string
 	queues      string
 	concurrency int
+	jobLogsDir  string
 	version     bool
 	setupMode   bool
 }
@@ -69,6 +70,7 @@ func parseFlags() *Flags {
 	flag.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this machine to your account")
 	flag.StringVar(&f.queues, "queues", "default", "Comma-separated list of queues to process")
 	flag.IntVar(&f.concurrency, "concurrency", 10, "Maximum concurrent jobs")
+	flag.StringVar(&f.jobLogsDir, "job-logs-dir", "lute-logs", "Directory for per-job log files (relative to cwd)")
 	flag.BoolVar(&f.version, "version", false, "Print version and exit")
 	flag.BoolVar(&f.setupMode, "setup", false, "Run interactive setup")
 	flag.Parse()
@@ -94,10 +96,21 @@ func runWorker(flags *Flags) {
 		queueList[i] = strings.TrimSpace(queueList[i])
 	}
 
+	handler.JobLogsDir = flags.jobLogsDir
+
+	if flags.jobLogsDir != "" {
+		if err := os.MkdirAll(flags.jobLogsDir, 0755); err != nil {
+			log.Fatalf("Cannot create job logs dir %q: %v", flags.jobLogsDir, err)
+		}
+	}
+
 	log.Printf("  Machine ID:   %s", machineID)
 	log.Printf("  Server:       %s", serverAddr)
 	log.Printf("  Queues:       %v", queueList)
 	log.Printf("  Concurrency:  %d", flags.concurrency)
+	if flags.jobLogsDir != "" {
+		log.Printf("  Job Logs Dir: %s", flags.jobLogsDir)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -110,7 +123,7 @@ func runWorker(flags *Flags) {
 		cancel()
 	}()
 
-	connectLoop(ctx, serverAddr, machineID, queueList, int32(flags.concurrency))
+	connectLoop(ctx, serverAddr, machineID, queueList, int32(flags.concurrency), flags.jobLogsDir)
 	log.Println("Worker stopped")
 }
 
@@ -161,7 +174,7 @@ func registerViaREST(apiURL string) (string, string) {
 	return result.MachineID, result.GRPCAddress
 }
 
-func connectLoop(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32) {
+func connectLoop(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32, jobLogsDir string) {
 	backoff := time.Second
 
 	for {
@@ -169,7 +182,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string, queues []str
 			return
 		}
 
-		err := runStream(ctx, serverAddr, machineID, queues, concurrency)
+		err := runStream(ctx, serverAddr, machineID, queues, concurrency, jobLogsDir)
 		if ctx.Err() != nil {
 			return
 		}
@@ -188,7 +201,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string, queues []str
 	}
 }
 
-func runStream(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32) error {
+func runStream(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32, jobLogsDir string) error {
 	conn, err := grpc.NewClient(serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -263,7 +276,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 
 			go func(a *pb.JobAssignment) {
 				start := time.Now()
-				jobErr := handler.Execute(ctx, a.Type, a.Payload, a.TimeoutSec)
+				jobErr := handler.Execute(ctx, a.JobId, a.Type, a.Payload, a.TimeoutSec)
 				elapsed := time.Since(start).Milliseconds()
 
 				result := &pb.JobResult{
@@ -271,16 +284,26 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 					Success:   jobErr == nil,
 					ElapsedMs: elapsed,
 				}
+				if jobLogsDir != "" {
+					result.LogFile = "logs-" + a.JobId
+					result.ExecutionLogFile = "execution-" + a.JobId
+				}
 				if jobErr != nil {
 					result.Error = jobErr.Error()
+					log.Printf("Job %s failed: %v", a.JobId, jobErr)
+				} else {
+					log.Printf("Job %s completed in %d ms", a.JobId, elapsed)
 				}
 
 				sendMu.Lock()
-				_ = stream.Send(&pb.WorkerMessage{
+				sendErr := stream.Send(&pb.WorkerMessage{
 					MachineId: machineID,
 					Payload:   &pb.WorkerMessage_Result{Result: result},
 				})
 				sendMu.Unlock()
+				if sendErr != nil {
+					log.Printf("Failed to send job result for %s: %v", a.JobId, sendErr)
+				}
 			}(assign)
 		}
 

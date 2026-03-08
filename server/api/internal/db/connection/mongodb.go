@@ -17,11 +17,12 @@ import (
 
 // Collection names used by the app (must match repos NewRepository)
 const (
-	CollectionMachines        = "machines"
-	CollectionUsers           = "users"
-	CollectionCommands        = "commands"
-	CollectionUptimeSnapshots = "uptime_snapshots"
+	CollectionMachines         = "machines"
+	CollectionUsers            = "users"
+	CollectionCommands         = "commands"
+	CollectionUptimeSnapshots  = "uptime_snapshots"
 	CollectionMachineSnapshots = "machine_snapshots"
+	CollectionJobExecutions    = "job_executions"
 )
 
 type MongoDB struct {
@@ -62,7 +63,7 @@ func NewMongoDB(cfg *config.Config) (*MongoDB, error) {
 // EnsureCollections creates the required collections if they don't exist,
 // so the "lute" database and collections appear as soon as the API starts.
 func (m *MongoDB) EnsureCollections(ctx context.Context) error {
-	for _, name := range []string{CollectionMachines, CollectionUsers, CollectionCommands, CollectionUptimeSnapshots, CollectionMachineSnapshots} {
+	for _, name := range []string{CollectionMachines, CollectionUsers, CollectionCommands, CollectionUptimeSnapshots, CollectionMachineSnapshots, CollectionJobExecutions} {
 		if err := m.Database.CreateCollection(ctx, name); err != nil {
 			// Code 48 = namespace already exists
 			var ce mongo.CommandError
@@ -128,6 +129,20 @@ func (m *MongoDB) EnsureCollections(ctx context.Context) error {
 				continue
 			}
 			return fmt.Errorf("create machines index: %w", err)
+		}
+	}
+	// Unique index on job_executions.job_id for fast lookup by job UUID
+	jobExecColl := m.Database.Collection(CollectionJobExecutions)
+	_, err = jobExecColl.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "job_id", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
+	if err != nil {
+		var ce mongo.CommandError
+		if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
+			// index already exists
+		} else {
+			return fmt.Errorf("create job_executions index: %w", err)
 		}
 	}
 	return nil

@@ -7,6 +7,8 @@ import Dashboard from './pages/Dashboard';
 import UserMachines from './pages/UserMachines';
 import PublicMachines from './pages/PublicMachines';
 import MachineMetrics from './pages/MachineMetrics';
+import JobsList from './pages/JobsList';
+import JobDetail from './pages/JobDetail';
 
 function App() {
   return (
@@ -44,6 +46,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <PublicMachines />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs"
+              element={
+                <ProtectedRoute>
+                  <JobsList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs/:id"
+              element={
+                <ProtectedRoute>
+                  <JobDetail />
                 </ProtectedRoute>
               }
             />

@@ -27,6 +27,7 @@ type Dependencies struct {
 	CommandRepo          *repos.CommandRepository
 	UptimeSnapshotRepo   *repos.UptimeSnapshotRepository
 	MachineSnapshotRepo  *repos.MachineSnapshotRepository
+	JobExecutionRepo     *repos.JobExecutionRepository
 }
 
 // Initialize loads configuration and initializes all dependencies
@@ -68,6 +69,7 @@ func Initialize() (*Dependencies, error) {
 		CommandRepo:         reposInit.CommandRepo,
 		UptimeSnapshotRepo:  reposInit.UptimeSnapshotRepo,
 		MachineSnapshotRepo: reposInit.MachineSnapshotRepo,
+		JobExecutionRepo:    reposInit.JobExecutionRepo,
 	}, nil
 }
 
@@ -122,6 +124,7 @@ type Repositories struct {
 	CommandRepo         *repos.CommandRepository
 	UptimeSnapshotRepo  *repos.UptimeSnapshotRepository
 	MachineSnapshotRepo *repos.MachineSnapshotRepository
+	JobExecutionRepo    *repos.JobExecutionRepository
 }
 
 func initializeRepositories(db *connection.MongoDB) *Repositories {
@@ -129,7 +132,8 @@ func initializeRepositories(db *connection.MongoDB) *Repositories {
 		MachineRepo:         repos.NewMachineRepository(db.Database),
 		UserRepo:            repos.NewUserRepository(db.Database),
 		CommandRepo:         repos.NewCommandRepository(db.Database),
-		UptimeSnapshotRepo:   repos.NewUptimeSnapshotRepository(db.Database),
+		UptimeSnapshotRepo:  repos.NewUptimeSnapshotRepository(db.Database),
 		MachineSnapshotRepo: repos.NewMachineSnapshotRepository(db.Database),
+		JobExecutionRepo:    repos.NewJobExecutionRepository(db.Database),
 	}
 }

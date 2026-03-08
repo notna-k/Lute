@@ -27,6 +27,7 @@ func main() {
 		deps.CommandRepo,
 		deps.UptimeSnapshotRepo,
 		deps.MachineSnapshotRepo,
+		deps.JobExecutionRepo,
 		deps.QueueEngine,
 		deps.QueueScheduler,
 		deps.StatsAggregator,

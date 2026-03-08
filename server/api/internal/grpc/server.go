@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"google.golang.org/grpc"
@@ -13,8 +14,9 @@ import (
 
 	pb "github.com/lute/worker/proto/worker"
 	"github.com/lute/api/internal/config"
-	"github.com/lute/api/internal/queue"
+	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/websocket"
 )
 
@@ -26,6 +28,7 @@ type Server struct {
 	pb.UnimplementedWorkerServiceServer
 	config                 *config.Config
 	machineRepo            *repos.MachineRepository
+	jobExecRepo            *repos.JobExecutionRepository
 	queueEngine            *queue.Engine
 	statsAgg               *queue.StatsAggregator
 	hub                    *websocket.Hub
@@ -37,6 +40,7 @@ type Server struct {
 func NewServer(
 	cfg *config.Config,
 	machineRepo *repos.MachineRepository,
+	jobExecRepo *repos.JobExecutionRepository,
 	queueEngine *queue.Engine,
 	statsAgg *queue.StatsAggregator,
 	hub *websocket.Hub,
@@ -44,6 +48,7 @@ func NewServer(
 	return &Server{
 		config:      cfg,
 		machineRepo: machineRepo,
+		jobExecRepo: jobExecRepo,
 		queueEngine: queueEngine,
 		statsAgg:    statsAgg,
 		hub:         hub,
@@ -148,6 +153,35 @@ func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
 			s.broadcastJobEvent("failed", job)
 		}
 	}
+
+	s.persistExecution(ctx, machineID, result)
+}
+
+func (s *Server) persistExecution(ctx context.Context, machineID string, result *pb.JobResult) {
+	if s.jobExecRepo == nil {
+		return
+	}
+
+	job, _ := s.queueEngine.GetJob(ctx, result.JobId)
+
+	exec := &models.JobExecution{
+		JobID:            result.JobId,
+		MachineID:        machineID,
+		Success:          result.Success,
+		Error:            result.Error,
+		ElapsedMs:        result.ElapsedMs,
+		LogFile:          result.LogFile,
+		ExecutionLogFile: result.ExecutionLogFile,
+		FinishedAt:       time.Now(),
+	}
+	if job != nil {
+		exec.Queue = job.Queue
+		exec.Type = job.Type
+	}
+
+	if err := s.jobExecRepo.Upsert(ctx, exec); err != nil {
+		log.Printf("handleJobResult: persist execution %s: %v", result.JobId, err)
+	}
 }
 
 func (s *Server) handleWorkerRegistration(machineID string, reg *pb.WorkerRegistration) {
@@ -158,11 +192,18 @@ func (s *Server) handleWorkerRegistration(machineID string, reg *pb.WorkerRegist
 func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 	worker := s.ConnMgr.FindAvailableWorker(queueName)
 	if worker == nil {
+		connected := s.ConnMgr.ConnectedMachineIDs()
+		log.Printf("DispatchJob queue=%s: no available worker (connected: %v)", queueName, connected)
 		return false
 	}
 
 	job, err := s.queueEngine.Dequeue(ctx, queueName)
-	if err != nil || job == nil {
+	if err != nil {
+		log.Printf("DispatchJob queue=%s: dequeue error: %v", queueName, err)
+		return false
+	}
+	if job == nil {
+		log.Printf("DispatchJob queue=%s: no pending job in queue", queueName)
 		return false
 	}
 
@@ -176,9 +217,11 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 
 	if !worker.AssignJob(assignment) {
 		_ = s.queueEngine.Fail(ctx, job.ID, "worker rejected assignment")
+		log.Printf("DispatchJob: worker %s rejected assignment for job %s", worker.MachineID, job.ID)
 		return false
 	}
 
+	log.Printf("DispatchJob: assigned job %s to worker %s", job.ID, worker.MachineID)
 	s.broadcastJobEvent("started", job)
 	return true
 }

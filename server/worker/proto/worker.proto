@@ -67,10 +67,12 @@ message ContainerJobSpec {
 }
 
 message JobResult {
-  string job_id     = 1;
-  bool   success    = 2;
-  string error      = 3;
-  int64  elapsed_ms = 4;
+  string job_id              = 1;
+  bool   success             = 2;
+  string error               = 3;
+  int64  elapsed_ms          = 4;
+  string log_file            = 5;
+  string execution_log_file  = 6;
 }
 
 message DrainSignal {}

@@ -39,6 +39,7 @@ func New(
 	commandRepo *repos.CommandRepository,
 	uptimeSnapshotRepo *repos.UptimeSnapshotRepository,
 	machineSnapshotRepo *repos.MachineSnapshotRepository,
+	jobExecutionRepo *repos.JobExecutionRepository,
 	queueEngine *queue.Engine,
 	queueScheduler *queue.Scheduler,
 	statsAgg *queue.StatsAggregator,
@@ -46,7 +47,7 @@ func New(
 	hub := websocket.NewHub()
 	go hub.Run()
 
-	grpcServer := grpc.NewServer(cfg, machineRepo, queueEngine, statsAgg, hub)
+	grpcServer := grpc.NewServer(cfg, machineRepo, jobExecutionRepo, queueEngine, statsAgg, hub)
 
 	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub, queueEngine, statsAgg, grpcServer)
 

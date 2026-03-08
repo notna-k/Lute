@@ -563,19 +563,91 @@ func (x *JobAssignment) GetTimeoutSec() int32 {
 	return 0
 }
 
+// ContainerJobSpec describes a job that runs inside a Docker container.
+// For type "container", JobAssignment.payload is JSON matching this message.
+type ContainerJobSpec struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SourceRepository string                 `protobuf:"bytes,1,opt,name=source_repository,json=sourceRepository,proto3" json:"source_repository,omitempty"`                                                                  // e.g. https://github.com/owner/repo.git
+	Runtime          string                 `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`                                                                                                            // Docker image name, e.g. python:3.12, node:20
+	RequestParams    map[string]string      `protobuf:"bytes,3,rep,name=request_params,json=requestParams,proto3" json:"request_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // user inputs -> env vars in container
+	Command          string                 `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`                                                                                                            // bash script to run inside the container
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ContainerJobSpec) Reset() {
+	*x = ContainerJobSpec{}
+	mi := &file_proto_worker_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerJobSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerJobSpec) ProtoMessage() {}
+
+func (x *ContainerJobSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_worker_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerJobSpec.ProtoReflect.Descriptor instead.
+func (*ContainerJobSpec) Descriptor() ([]byte, []int) {
+	return file_proto_worker_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ContainerJobSpec) GetSourceRepository() string {
+	if x != nil {
+		return x.SourceRepository
+	}
+	return ""
+}
+
+func (x *ContainerJobSpec) GetRuntime() string {
+	if x != nil {
+		return x.Runtime
+	}
+	return ""
+}
+
+func (x *ContainerJobSpec) GetRequestParams() map[string]string {
+	if x != nil {
+		return x.RequestParams
+	}
+	return nil
+}
+
+func (x *ContainerJobSpec) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
 type JobResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	ElapsedMs     int64                  `protobuf:"varint,4,opt,name=elapsed_ms,json=elapsedMs,proto3" json:"elapsed_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	JobId            string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	Success          bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	Error            string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	ElapsedMs        int64                  `protobuf:"varint,4,opt,name=elapsed_ms,json=elapsedMs,proto3" json:"elapsed_ms,omitempty"`
+	LogFile          string                 `protobuf:"bytes,5,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	ExecutionLogFile string                 `protobuf:"bytes,6,opt,name=execution_log_file,json=executionLogFile,proto3" json:"execution_log_file,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *JobResult) Reset() {
 	*x = JobResult{}
-	mi := &file_proto_worker_proto_msgTypes[7]
+	mi := &file_proto_worker_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -587,7 +659,7 @@ func (x *JobResult) String() string {
 func (*JobResult) ProtoMessage() {}
 
 func (x *JobResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_worker_proto_msgTypes[7]
+	mi := &file_proto_worker_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -600,7 +672,7 @@ func (x *JobResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobResult.ProtoReflect.Descriptor instead.
 func (*JobResult) Descriptor() ([]byte, []int) {
-	return file_proto_worker_proto_rawDescGZIP(), []int{7}
+	return file_proto_worker_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *JobResult) GetJobId() string {
@@ -631,6 +703,20 @@ func (x *JobResult) GetElapsedMs() int64 {
 	return 0
 }
 
+func (x *JobResult) GetLogFile() string {
+	if x != nil {
+		return x.LogFile
+	}
+	return ""
+}
+
+func (x *JobResult) GetExecutionLogFile() string {
+	if x != nil {
+		return x.ExecutionLogFile
+	}
+	return ""
+}
+
 type DrainSignal struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -639,7 +725,7 @@ type DrainSignal struct {
 
 func (x *DrainSignal) Reset() {
 	*x = DrainSignal{}
-	mi := &file_proto_worker_proto_msgTypes[8]
+	mi := &file_proto_worker_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -651,7 +737,7 @@ func (x *DrainSignal) String() string {
 func (*DrainSignal) ProtoMessage() {}
 
 func (x *DrainSignal) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_worker_proto_msgTypes[8]
+	mi := &file_proto_worker_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -664,7 +750,7 @@ func (x *DrainSignal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DrainSignal.ProtoReflect.Descriptor instead.
 func (*DrainSignal) Descriptor() ([]byte, []int) {
-	return file_proto_worker_proto_rawDescGZIP(), []int{8}
+	return file_proto_worker_proto_rawDescGZIP(), []int{9}
 }
 
 var File_proto_worker_proto protoreflect.FileDescriptor
@@ -708,13 +794,23 @@ const file_proto_worker_proto_rawDesc = "" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
 	"\apayload\x18\x04 \x01(\fR\apayload\x12\x1f\n" +
 	"\vtimeout_sec\x18\x05 \x01(\x05R\n" +
-	"timeoutSec\"q\n" +
+	"timeoutSec\"\x89\x02\n" +
+	"\x10ContainerJobSpec\x12+\n" +
+	"\x11source_repository\x18\x01 \x01(\tR\x10sourceRepository\x12\x18\n" +
+	"\aruntime\x18\x02 \x01(\tR\aruntime\x12R\n" +
+	"\x0erequest_params\x18\x03 \x03(\v2+.worker.ContainerJobSpec.RequestParamsEntryR\rrequestParams\x12\x18\n" +
+	"\acommand\x18\x04 \x01(\tR\acommand\x1a@\n" +
+	"\x12RequestParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xba\x01\n" +
 	"\tJobResult\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x1d\n" +
 	"\n" +
-	"elapsed_ms\x18\x04 \x01(\x03R\telapsedMs\"\r\n" +
+	"elapsed_ms\x18\x04 \x01(\x03R\telapsedMs\x12\x19\n" +
+	"\blog_file\x18\x05 \x01(\tR\alogFile\x12,\n" +
+	"\x12execution_log_file\x18\x06 \x01(\tR\x10executionLogFile\"\r\n" +
 	"\vDrainSignal2L\n" +
 	"\rWorkerService\x12;\n" +
 	"\aConnect\x12\x15.worker.WorkerMessage\x1a\x15.worker.ServerMessage(\x010\x01B%Z#github.com/lute/worker/proto/workerb\x06proto3"
@@ -731,7 +827,7 @@ func file_proto_worker_proto_rawDescGZIP() []byte {
 	return file_proto_worker_proto_rawDescData
 }
 
-var file_proto_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_proto_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_proto_worker_proto_goTypes = []any{
 	(*WorkerMessage)(nil),      // 0: worker.WorkerMessage
 	(*ServerMessage)(nil),      // 1: worker.ServerMessage
@@ -740,26 +836,29 @@ var file_proto_worker_proto_goTypes = []any{
 	(*HeartbeatPong)(nil),      // 4: worker.HeartbeatPong
 	(*WorkerRegistration)(nil), // 5: worker.WorkerRegistration
 	(*JobAssignment)(nil),      // 6: worker.JobAssignment
-	(*JobResult)(nil),          // 7: worker.JobResult
-	(*DrainSignal)(nil),        // 8: worker.DrainSignal
-	nil,                        // 9: worker.HeartbeatPong.MetricsEntry
+	(*ContainerJobSpec)(nil),   // 7: worker.ContainerJobSpec
+	(*JobResult)(nil),          // 8: worker.JobResult
+	(*DrainSignal)(nil),        // 9: worker.DrainSignal
+	nil,                        // 10: worker.HeartbeatPong.MetricsEntry
+	nil,                        // 11: worker.ContainerJobSpec.RequestParamsEntry
 }
 var file_proto_worker_proto_depIdxs = []int32{
-	4, // 0: worker.WorkerMessage.heartbeat_pong:type_name -> worker.HeartbeatPong
-	7, // 1: worker.WorkerMessage.result:type_name -> worker.JobResult
-	5, // 2: worker.WorkerMessage.register:type_name -> worker.WorkerRegistration
-	2, // 3: worker.ServerMessage.heartbeat_ping:type_name -> worker.HeartbeatPing
-	6, // 4: worker.ServerMessage.assign:type_name -> worker.JobAssignment
-	8, // 5: worker.ServerMessage.drain:type_name -> worker.DrainSignal
-	9, // 6: worker.HeartbeatPong.metrics:type_name -> worker.HeartbeatPong.MetricsEntry
-	3, // 7: worker.HeartbeatPong.MetricsEntry.value:type_name -> worker.MetricValue
-	0, // 8: worker.WorkerService.Connect:input_type -> worker.WorkerMessage
-	1, // 9: worker.WorkerService.Connect:output_type -> worker.ServerMessage
-	9, // [9:10] is the sub-list for method output_type
-	8, // [8:9] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	4,  // 0: worker.WorkerMessage.heartbeat_pong:type_name -> worker.HeartbeatPong
+	8,  // 1: worker.WorkerMessage.result:type_name -> worker.JobResult
+	5,  // 2: worker.WorkerMessage.register:type_name -> worker.WorkerRegistration
+	2,  // 3: worker.ServerMessage.heartbeat_ping:type_name -> worker.HeartbeatPing
+	6,  // 4: worker.ServerMessage.assign:type_name -> worker.JobAssignment
+	9,  // 5: worker.ServerMessage.drain:type_name -> worker.DrainSignal
+	10, // 6: worker.HeartbeatPong.metrics:type_name -> worker.HeartbeatPong.MetricsEntry
+	11, // 7: worker.ContainerJobSpec.request_params:type_name -> worker.ContainerJobSpec.RequestParamsEntry
+	3,  // 8: worker.HeartbeatPong.MetricsEntry.value:type_name -> worker.MetricValue
+	0,  // 9: worker.WorkerService.Connect:input_type -> worker.WorkerMessage
+	1,  // 10: worker.WorkerService.Connect:output_type -> worker.ServerMessage
+	10, // [10:11] is the sub-list for method output_type
+	9,  // [9:10] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_proto_worker_proto_init() }
@@ -788,7 +887,7 @@ func file_proto_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_worker_proto_rawDesc), len(file_proto_worker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
