@@ -60,12 +60,6 @@ func (r *CommandRepository) GetPendingByMachineID(ctx context.Context, machineID
 	return commands, nil
 }
 
-// GetPendingByAgentID is deprecated - use GetPendingByMachineID instead
-func (r *CommandRepository) GetPendingByAgentID(ctx context.Context, agentID string) ([]*models.Command, error) {
-	// AgentID is no longer used - return empty list
-	return []*models.Command{}, nil
-}
-
 // GetByMachineID returns all commands for a machine, ordered by creation time (newest first)
 func (r *CommandRepository) GetByMachineID(ctx context.Context, machineID primitive.ObjectID, limit int64) ([]*models.Command, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
