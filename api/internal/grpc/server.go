@@ -134,11 +134,12 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 
 func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
 	ctx := context.Background()
+	var job *queue.Job
 	if result.Success {
 		if err := s.queueEngine.Complete(ctx, result.JobId, result.ElapsedMs); err != nil {
 			log.Printf("handleJobResult: complete %s: %v", result.JobId, err)
 		}
-		job, _ := s.queueEngine.GetJob(ctx, result.JobId)
+		job, _ = s.queueEngine.GetJob(ctx, result.JobId)
 		if job != nil {
 			s.statsAgg.RecordProcessed(ctx, job.Queue, result.ElapsedMs)
 			s.broadcastJobEvent("completed", job)
@@ -147,7 +148,7 @@ func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
 		if err := s.queueEngine.Fail(ctx, result.JobId, result.Error); err != nil {
 			log.Printf("handleJobResult: fail %s: %v", result.JobId, err)
 		}
-		job, _ := s.queueEngine.GetJob(ctx, result.JobId)
+		job, _ = s.queueEngine.GetJob(ctx, result.JobId)
 		if job != nil {
 			s.statsAgg.RecordFailed(ctx, job.Queue)
 			s.broadcastJobEvent("failed", job)
@@ -155,6 +156,11 @@ func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
 	}
 
 	s.persistExecution(ctx, machineID, result)
+
+	// Pull more pending work now that this worker has a free slot.
+	if job != nil {
+		s.DispatchQueue(ctx, job.Queue)
+	}
 }
 
 func (s *Server) persistExecution(ctx context.Context, machineID string, result *pb.JobResult) {
@@ -186,14 +192,23 @@ func (s *Server) persistExecution(ctx context.Context, machineID string, result 
 
 func (s *Server) handleWorkerRegistration(machineID string, reg *pb.WorkerRegistration) {
 	log.Printf("Worker %s registered: queues=%v concurrency=%d", machineID, reg.Queues, reg.Concurrency)
+	ctx := context.Background()
+	for _, q := range reg.Queues {
+		s.DispatchQueue(ctx, q)
+	}
+}
+
+// DispatchQueue assigns pending jobs from the queue to available workers until
+// no worker can take work or the queue is empty.
+func (s *Server) DispatchQueue(ctx context.Context, queueName string) {
+	for s.DispatchJob(ctx, queueName) {
+	}
 }
 
 // DispatchJob attempts to assign a pending job to an available worker.
 func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 	worker := s.ConnMgr.FindAvailableWorker(queueName)
 	if worker == nil {
-		connected := s.ConnMgr.ConnectedMachineIDs()
-		log.Printf("DispatchJob queue=%s: no available worker (connected: %v)", queueName, connected)
 		return false
 	}
 
@@ -203,7 +218,6 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 		return false
 	}
 	if job == nil {
-		log.Printf("DispatchJob queue=%s: no pending job in queue", queueName)
 		return false
 	}
 

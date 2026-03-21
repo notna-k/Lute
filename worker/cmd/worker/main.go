@@ -74,7 +74,7 @@ func parseFlags() *Flags {
 	flag.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this machine to your account")
 	flag.StringVar(&f.queues, "queues", "default", "Comma-separated list of queues to process")
 	flag.IntVar(&f.concurrency, "concurrency", 10, "Maximum concurrent jobs")
-	flag.StringVar(&f.jobLogsDir, "job-logs-dir", "lute-job-logs", "Directory for per-job log files (relative to cwd)")
+	flag.StringVar(&f.jobLogsDir, "job-logs-dir", "lute-job-logs", "Directory for per-job log files (created on startup if missing; relative to cwd)")
 	flag.BoolVar(&f.version, "version", false, "Print version and exit")
 	flag.BoolVar(&f.setupMode, "setup", false, "Run interactive setup")
 	flag.Parse()
@@ -104,7 +104,7 @@ func runWorker(flags *Flags) {
 
 	if flags.jobLogsDir != "" {
 		if err := os.MkdirAll(flags.jobLogsDir, 0755); err != nil {
-			slog.Error("Cannot create job logs dir", "dir", flags.jobLogsDir, "err", err)
+			slog.Error("Cannot create job logs directory", "dir", flags.jobLogsDir, "err", err)
 			os.Exit(1)
 		}
 	}

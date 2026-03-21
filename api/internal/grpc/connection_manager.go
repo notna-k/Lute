@@ -53,8 +53,9 @@ func newMachineConnection(machineID string, stream pb.WorkerService_ConnectServe
 		Concurrency: 1,
 		stream:      stream,
 		pingCh:      make(chan pingRequest, 1),
-		jobCh:       make(chan *pb.JobAssignment, 16),
-		drainCh:     make(chan struct{}, 1),
+		// Large enough that a reserved slot (see AssignJob) can always be queued before Run sends it.
+		jobCh:   make(chan *pb.JobAssignment, 1024),
+		drainCh: make(chan struct{}, 1),
 	}
 }
 
@@ -74,20 +75,25 @@ func (mc *MachineConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, err
 	}
 }
 
-// AssignJob sends a job assignment to the worker. Non-blocking; the job is
-// queued in a channel and sent by the Run loop.
+// AssignJob reserves worker capacity and queues the assignment for the Run loop
+// to send on the stream. Non-blocking on jobCh; returns false if draining, at
+// capacity, or the outbound queue is full.
 func (mc *MachineConnection) AssignJob(assignment *pb.JobAssignment) bool {
 	mc.mu.Lock()
-	if mc.draining {
+	if mc.draining || mc.ActiveJobs >= mc.Concurrency {
 		mc.mu.Unlock()
 		return false
 	}
+	mc.ActiveJobs++
 	mc.mu.Unlock()
 
 	select {
 	case mc.jobCh <- assignment:
 		return true
 	default:
+		mc.mu.Lock()
+		mc.ActiveJobs--
+		mc.mu.Unlock()
 		return false
 	}
 }
@@ -182,9 +188,6 @@ func (mc *MachineConnection) Run(onJobResult JobResultCallback, onRegistration W
 			pendingPing = &req
 
 		case assignment := <-mc.jobCh:
-			mc.mu.Lock()
-			mc.ActiveJobs++
-			mc.mu.Unlock()
 			err := mc.stream.Send(&pb.ServerMessage{
 				Payload: &pb.ServerMessage_Assign{
 					Assign: assignment,
@@ -255,21 +258,37 @@ func (cm *ConnectionManager) ConnectedMachineIDs() []string {
 }
 
 // FindAvailableWorker returns a connected worker that handles the given queue
-// and has capacity for another job. Returns nil if none available.
+// and has capacity for another job. When several match, picks the one with the
+// fewest active jobs (including assignments not yet sent on the stream).
 func (cm *ConnectionManager) FindAvailableWorker(queueName string) *MachineConnection {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
+
+	var best *MachineConnection
+	var bestLoad int32
 	for _, mc := range cm.conns {
-		if !mc.IsAvailable() {
-			continue
-		}
+		mc.mu.Lock()
+		draining := mc.draining
+		active := mc.ActiveJobs
+		limit := mc.Concurrency
+		var match bool
 		for _, q := range mc.Queues {
 			if q == queueName {
-				return mc
+				match = true
+				break
 			}
 		}
+		mc.mu.Unlock()
+
+		if draining || !match || active >= limit {
+			continue
+		}
+		if best == nil || active < bestLoad {
+			best = mc
+			bestLoad = active
+		}
 	}
-	return nil
+	return best
 }
 
 // ActiveWorkers returns info about all connected workers.

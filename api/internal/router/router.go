@@ -55,7 +55,7 @@ func SetupRouter(
 
 	jobHandler := jobs.NewJobHandler(queueEngine, statsAgg, grpcServer)
 	queueHandler := jobs.NewQueueHandler(queueEngine, statsAgg)
-	dlqHandler := jobs.NewDLQHandler(queueEngine)
+	dlqHandler := jobs.NewDLQHandler(queueEngine, grpcServer)
 	workersInfoHandler := jobs.NewWorkersInfoHandler(grpcServer.ConnMgr)
 
 	v1 := api.Group("/v1")

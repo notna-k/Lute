@@ -9,8 +9,9 @@ import (
 // Scheduler polls the delayed and cron ZSETs, promoting jobs whose
 // run_at/next_run timestamp has passed back into their queue.
 type Scheduler struct {
-	engine   *Engine
-	interval time.Duration
+	engine        *Engine
+	interval      time.Duration
+	onJobsPromoted func(ctx context.Context, queueNames []string)
 }
 
 func NewScheduler(engine *Engine, interval time.Duration) *Scheduler {
@@ -18,6 +19,12 @@ func NewScheduler(engine *Engine, interval time.Duration) *Scheduler {
 		interval = time.Second
 	}
 	return &Scheduler{engine: engine, interval: interval}
+}
+
+// SetOnJobsPromoted registers a callback invoked after delayed jobs are moved
+// back to their queues (e.g. to assign them to workers). Optional.
+func (s *Scheduler) SetOnJobsPromoted(fn func(ctx context.Context, queueNames []string)) {
+	s.onJobsPromoted = fn
 }
 
 // Run blocks until ctx is cancelled.
@@ -33,11 +40,14 @@ func (s *Scheduler) Run(ctx context.Context) {
 			log.Println("Queue scheduler stopped")
 			return
 		case <-ticker.C:
-			promoted, err := s.engine.PromoteDelayed(ctx)
+			promoted, queues, err := s.engine.PromoteDelayed(ctx)
 			if err != nil {
 				log.Printf("Scheduler: promote delayed: %v", err)
 			} else if promoted > 0 {
 				log.Printf("Scheduler: promoted %d delayed jobs", promoted)
+				if s.onJobsPromoted != nil && len(queues) > 0 {
+					s.onJobsPromoted(ctx, queues)
+				}
 			}
 		}
 	}

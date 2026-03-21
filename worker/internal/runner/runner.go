@@ -24,8 +24,9 @@ const workspaceMount = "/workspace"
 const commandScriptName = "_user_command.sh"
 
 // Run clones the repo, writes the command script, runs a Docker container, and cleans up.
-// Job events are JSON-logged via slog to job-{jobID}.log under logDir when logDir is set;
-// if logDir is empty, those records are discarded. source=system (runner) and source=container (stdout only).
+// System events are JSON-logged to job-{jobID}.log under logDir when logDir is set and also mirrored
+// to the default slog logger (console). Container stdout lines go to the job file only (source=container).
+// When logDir is empty, job file writes are discarded but system lines still appear on the default logger.
 // Returns elapsed milliseconds and an error on failure.
 func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32) (elapsedMs int64, err error) {
 	start := time.Now()
@@ -54,20 +55,14 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 		return 0, fmt.Errorf("create temp dir: %w", err)
 	}
 	defer os.RemoveAll(dir)
-	if jobLogger != nil {
-		jobLogger.Info("temp dir", slog.String("source", LogSourceSystem), slog.String("path", dir))
-	} else {
-		slog.Info("temp dir", slog.String("source", LogSourceSystem), slog.String("path", dir))
-	}
+	logSystem(jobLogger, slog.LevelInfo, "temp dir", slog.String("path", dir))
+
 
 	if err := cloneRepo(ctx, dir, spec.SourceRepository); err != nil {
 		return 0, fmt.Errorf("clone: %w", err)
 	}
-	if jobLogger != nil {
-		jobLogger.Info("clone ok", slog.String("source", LogSourceSystem))
-	} else {
-		slog.Info("clone ok", slog.String("source", LogSourceSystem))
-	}
+	logSystem(jobLogger, slog.LevelInfo, "clone ok")
+
 
 	scriptPath := filepath.Join(dir, commandScriptName)
 	if err := os.WriteFile(scriptPath, []byte(spec.Command), 0700); err != nil {
@@ -95,6 +90,6 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 		return 0, fmt.Errorf("container exited with code %d", exitCode)
 	}
 
-	jobLogger.Info("job finished successfully", slog.String("source", LogSourceSystem))
+	logSystem(jobLogger, slog.LevelInfo, "job finished successfully")
 	return time.Since(start).Milliseconds(), nil
 }

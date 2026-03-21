@@ -65,7 +65,7 @@ func (h *JobHandler) Enqueue(c *gin.Context) {
 	h.stats.RecordEnqueued(ctx, req.Queue)
 
 	if h.grpcSrv != nil {
-		h.grpcSrv.DispatchJob(ctx, req.Queue)
+		h.grpcSrv.DispatchQueue(ctx, req.Queue)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -105,6 +105,9 @@ func (h *JobHandler) RetryJob(c *gin.Context) {
 	}
 
 	h.stats.RecordEnqueued(ctx, job.Queue)
+	if h.grpcSrv != nil {
+		h.grpcSrv.DispatchQueue(ctx, job.Queue)
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job re-enqueued", "job_id": job.ID})
 }
 
@@ -222,11 +225,12 @@ func (h *QueueHandler) GetAllStats(c *gin.Context) {
 }
 
 type DLQHandler struct {
-	engine *queue.Engine
+	engine  *queue.Engine
+	grpcSrv *grpc.Server
 }
 
-func NewDLQHandler(engine *queue.Engine) *DLQHandler {
-	return &DLQHandler{engine: engine}
+func NewDLQHandler(engine *queue.Engine, grpcSrv *grpc.Server) *DLQHandler {
+	return &DLQHandler{engine: engine, grpcSrv: grpcSrv}
 }
 
 func (h *DLQHandler) ListDLQ(c *gin.Context) {
@@ -254,10 +258,14 @@ func (h *DLQHandler) ListDLQ(c *gin.Context) {
 
 func (h *DLQHandler) RetryAll(c *gin.Context) {
 	queueName := c.Param("queue")
-	count, err := h.engine.DLQRetryAll(c.Request.Context(), queueName)
+	ctx := c.Request.Context()
+	count, err := h.engine.DLQRetryAll(ctx, queueName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if h.grpcSrv != nil && count > 0 {
+		h.grpcSrv.DispatchQueue(ctx, queueName)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "DLQ retried", "count": count})
 }

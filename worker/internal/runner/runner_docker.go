@@ -29,7 +29,7 @@ func runContainer(ctx context.Context, cli *client.Client, dir string, spec *Spe
 	var logWG sync.WaitGroup
 	logWG.Go(func() {
 		if err := streamContainerLogs(ctx, cli, containerID, jobLogger); err != nil && ctx.Err() == nil {
-			jobLogger.Info("container log stream ended with error", slog.String("source", LogSourceSystem), slog.Any("err", err))
+			logSystem(jobLogger, slog.LevelInfo, "container log stream ended with error", slog.Any("err", err))
 		}
 	})
 
@@ -43,7 +43,7 @@ func runContainer(ctx context.Context, cli *client.Client, dir string, spec *Spe
 }
 
 func pullImage(ctx context.Context, cli *client.Client, imageName string, jobLogger *slog.Logger) error {
-	jobLogger.Info("pulling image", slog.String("source", LogSourceSystem), slog.String("image", imageName))
+	logSystem(jobLogger, slog.LevelInfo, "pulling image", slog.String("image", imageName))
 
 	resp, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
@@ -52,7 +52,7 @@ func pullImage(ctx context.Context, cli *client.Client, imageName string, jobLog
 	defer resp.Close()
 	_, _ = io.Copy(io.Discard, resp)
 
-	jobLogger.Info("image pull ok", slog.String("source", LogSourceSystem), slog.String("image", imageName))
+	logSystem(jobLogger, slog.LevelInfo, "image pull ok", slog.String("image", imageName))
 	return nil
 }
 
@@ -71,12 +71,12 @@ func createAndStartContainer(ctx context.Context, cli *client.Client, dir string
 	}
 	containerID := createResp.ID
 
-	jobLogger.Info("container created", slog.String("source", LogSourceSystem), slog.String("container_id", containerID[:12]))
+	logSystem(jobLogger, slog.LevelInfo, "container created", slog.String("container_id", containerID[:12]))
 
 	if err := cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return "", fmt.Errorf("container start: %w", err)
 	}
-	jobLogger.Info("container started, waiting for exit", slog.String("source", LogSourceSystem))
+	logSystem(jobLogger, slog.LevelInfo, "container started, waiting for exit")
 	return containerID, nil
 }
 

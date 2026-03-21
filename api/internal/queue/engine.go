@@ -310,18 +310,19 @@ func (e *Engine) saveJob(ctx context.Context, job *Job) error {
 }
 
 // PromoteDelayed moves delayed jobs whose run_at has passed back to their queues.
-// Returns the number of jobs promoted.
-func (e *Engine) PromoteDelayed(ctx context.Context) (int, error) {
+// Returns the number of jobs promoted and the distinct queue names that received work.
+func (e *Engine) PromoteDelayed(ctx context.Context) (int, []string, error) {
 	now := float64(time.Now().Unix())
 	jobIDs, err := e.rdb.ZRangeByScore(ctx, delayedKey(), &redis.ZRangeBy{
 		Min: "-inf",
 		Max: fmt.Sprintf("%f", now),
 	}).Result()
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	count := 0
+	queues := make(map[string]struct{})
 	for _, jobID := range jobIDs {
 		removed, err := e.rdb.ZRem(ctx, delayedKey(), jobID).Result()
 		if err != nil || removed == 0 {
@@ -334,7 +335,12 @@ func (e *Engine) PromoteDelayed(ctx context.Context) (int, error) {
 		if err := e.rdb.ZAdd(ctx, queueKey(job.Queue), redis.Z{Score: 0, Member: job.ID}).Err(); err != nil {
 			continue
 		}
+		queues[job.Queue] = struct{}{}
 		count++
 	}
-	return count, nil
+	out := make([]string, 0, len(queues))
+	for q := range queues {
+		out = append(out, q)
+	}
+	return count, out, nil
 }

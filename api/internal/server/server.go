@@ -68,6 +68,14 @@ func New(
 	)
 	grpcServer.OnConnectionRegistered = func() { heartbeatChecker.TriggerCheck() }
 
+	if queueScheduler != nil {
+		queueScheduler.SetOnJobsPromoted(func(ctx context.Context, queueNames []string) {
+			for _, q := range queueNames {
+				grpcServer.DispatchQueue(ctx, q)
+			}
+		})
+	}
+
 	machineSnapshotJob := machines.NewMachineSnapshotJob(machineRepo, machineSnapshotRepo, cfg.Metrics.SnapshotInterval)
 
 	return &Server{
