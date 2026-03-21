@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/lute/worker/runner"
+	"github.com/lute/worker/internal/runner"
 )
 
 // HandlerFunc processes a job payload. Return nil on success, error on failure.

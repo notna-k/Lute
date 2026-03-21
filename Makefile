@@ -80,7 +80,7 @@ dev-restart: dev-down dev-up
 worker-build:
 	@echo "Building worker $(WORKER_VERSION) for current platform..."
 	@mkdir -p $(WORKER_OUT)
-	cd $(WORKER_SRC) && CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker .
+	cd $(WORKER_SRC) && CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker ./cmd/worker
 	@echo "$(WORKER_VERSION)" > $(WORKER_OUT)/VERSION
 	@echo "Built $(WORKER_OUT)/lute-worker"
 
@@ -90,19 +90,19 @@ worker-build-all:
 	@mkdir -p $(WORKER_OUT)
 
 	@echo "  -> linux/amd64"
-	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-amd64 .
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-amd64 ./cmd/worker
 
 	@echo "  -> linux/arm64"
-	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-arm64 .
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-arm64 ./cmd/worker
 
 	@echo "  -> darwin/amd64"
-	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-amd64 .
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-amd64 ./cmd/worker
 
 	@echo "  -> darwin/arm64"
-	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-arm64 .
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-arm64 ./cmd/worker
 
 	@echo "  -> windows/amd64"
-	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-windows-amd64.exe .
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-windows-amd64.exe ./cmd/worker
 
 	@echo "$(WORKER_VERSION)" > $(WORKER_OUT)/VERSION
 	@echo "All worker binaries built in $(WORKER_OUT)/"

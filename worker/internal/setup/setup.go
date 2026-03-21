@@ -13,8 +13,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/lute/worker/setup/types"
-	"github.com/lute/worker/utils"
+	"github.com/lute/worker/internal/setup/types"
+	"github.com/lute/worker/internal/utils"
 )
 
 // Run executes the interactive setup process.

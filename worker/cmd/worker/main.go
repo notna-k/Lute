@@ -20,11 +20,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/lute/worker/handler"
-	"github.com/lute/worker/heartbeat"
-	"github.com/lute/worker/setup"
-	"github.com/lute/worker/setup/types"
-	"github.com/lute/worker/utils"
+	"github.com/lute/worker/internal/handler"
+	"github.com/lute/worker/internal/heartbeat"
+	"github.com/lute/worker/internal/setup"
+	"github.com/lute/worker/internal/setup/types"
+	"github.com/lute/worker/internal/utils"
 
 	pb "github.com/lute/proto"
 )

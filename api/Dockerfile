@@ -40,31 +40,31 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p /app/worker-binaries && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/worker-binaries/lute-worker-linux-amd64 .
+    -o /app/worker-binaries/lute-worker-linux-amd64 ./cmd/worker
 
 # Linux arm64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
     -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/worker-binaries/lute-worker-linux-arm64 .
+    -o /app/worker-binaries/lute-worker-linux-arm64 ./cmd/worker
 
 # Darwin (macOS) amd64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
     -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/worker-binaries/lute-worker-darwin-amd64 .
+    -o /app/worker-binaries/lute-worker-darwin-amd64 ./cmd/worker
 
 # Darwin (macOS) arm64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build \
     -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/worker-binaries/lute-worker-darwin-arm64 .
+    -o /app/worker-binaries/lute-worker-darwin-arm64 ./cmd/worker
 
 # Windows amd64
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
     -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o /app/worker-binaries/lute-worker-windows-amd64.exe .
+    -o /app/worker-binaries/lute-worker-windows-amd64.exe ./cmd/worker
 
 # Write the version file
 RUN echo "${WORKER_VERSION}" > /app/worker-binaries/VERSION

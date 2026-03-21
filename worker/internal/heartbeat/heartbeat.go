@@ -6,7 +6,7 @@ import (
 
 	pb "github.com/lute/proto"
 
-	"github.com/lute/worker/metrics"
+	"github.com/lute/worker/internal/metrics"
 )
 
 // PongMessage builds a WorkerMessage containing a HeartbeatPong with current
