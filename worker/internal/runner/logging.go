@@ -25,7 +25,7 @@ func openJobLog(logDir, jobID string) (jobLogger *slog.Logger, close func(), err
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, nil, err
 	}
-	f, err := os.Create(filepath.Join(logDir, "job-"+jobID+".log"))
+	f, err := os.Create(filepath.Join(logDir, jobID+".log"))
 	if err != nil {
 		return nil, nil, err
 	}
