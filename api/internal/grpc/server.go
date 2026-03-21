@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	pb "github.com/lute/worker/proto/worker"
+	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"

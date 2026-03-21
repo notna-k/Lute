@@ -1,13 +1,14 @@
 # syntax=docker/dockerfile:1
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy module files for api and worker (api has a local replace)
+# Copy module files (api/worker replace github.com/lute/proto => ../shared/proto)
+COPY shared/proto/go.mod shared/proto/go.sum shared/proto/
 COPY api/go.mod api/go.sum api/
 COPY worker/go.mod worker/go.sum worker/
 
@@ -18,6 +19,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     cd worker && go mod download
 
 # Copy source code
+COPY shared/proto shared/proto
 COPY api api
 COPY worker worker
 

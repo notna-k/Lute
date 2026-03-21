@@ -26,7 +26,7 @@ import (
 	"github.com/lute/worker/setup/types"
 	"github.com/lute/worker/utils"
 
-	pb "github.com/lute/worker/proto/worker"
+	pb "github.com/lute/proto"
 )
 
 var (

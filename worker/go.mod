@@ -1,12 +1,14 @@
 module github.com/lute/worker
 
-go 1.24.12
+go 1.26.0
 
 require (
 	github.com/docker/docker v28.0.0+incompatible
+	github.com/lute/proto v0.0.0
 	google.golang.org/grpc v1.79.1
-	google.golang.org/protobuf v1.36.11
 )
+
+replace github.com/lute/proto => ../shared/proto
 
 require (
 	github.com/Microsoft/go-winio v0.4.21 // indirect
@@ -36,5 +38,6 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )

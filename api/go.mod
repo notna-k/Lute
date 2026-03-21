@@ -1,6 +1,6 @@
 module github.com/lute/api
 
-go 1.24.12
+go 1.26.0
 
 require (
 	firebase.google.com/go/v4 v4.14.0
@@ -89,8 +89,8 @@ require (
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/lute/worker v0.0.0
+	github.com/lute/proto v0.0.0
 	github.com/redis/go-redis/v9 v9.18.0
 )
 
-replace github.com/lute/worker => ./../worker
+replace github.com/lute/proto => ../shared/proto

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package worker;
 
-option go_package = "github.com/lute/worker/proto/worker";
+option go_package = "github.com/lute/proto;worker";
 
 service WorkerService {
   rpc Connect(stream WorkerMessage) returns (stream ServerMessage);

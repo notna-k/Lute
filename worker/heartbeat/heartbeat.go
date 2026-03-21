@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	pb "github.com/lute/worker/proto/worker"
+	pb "github.com/lute/proto"
 
 	"github.com/lute/worker/metrics"
 )

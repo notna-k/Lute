@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/lute/worker/proto/worker"
+	pb "github.com/lute/proto"
 )
 
 var (
