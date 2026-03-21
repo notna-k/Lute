@@ -44,7 +44,7 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
     setClaimError(null);
     setClaimLoading(true);
     apiClient
-      .post<ClaimCodeResponse>('/api/v1/agent/claim-code')
+      .post<ClaimCodeResponse>('/api/v1/worker/claim-code')
       .then((res) => {
         setClaimCode(res.code);
         setClaimError(null);
@@ -56,8 +56,8 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
       .finally(() => setClaimLoading(false));
   }, [open]);
 
-  const installCommand = `curl -sSL ${API_URL}/api/v1/agent/install.sh | bash`;
-  const setupCommand = `lute-agent --setup --api ${API_URL}`;
+  const installCommand = `curl -sSL ${API_URL}/api/v1/worker/install.sh | bash`;
+  const setupCommand = `lute-worker --setup --api ${API_URL}`;
   const fullCommand =
     claimCode != null
       ? `${installCommand} && ${setupCommand} --claim-code ${claimCode}`

@@ -22,12 +22,28 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: lute-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lute-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ../..
-      dockerfile: server/api/Dockerfile
+      dockerfile: api/Dockerfile
       args:
-        - AGENT_VERSION=${AGENT_VERSION:-0.1.0}
+        - WORKER_VERSION=${WORKER_VERSION:-0.1.0}
         - BUILD_TIME=${BUILD_TIME:-unknown}
     container_name: lute-api
     restart: unless-stopped
@@ -52,14 +68,18 @@ services:
       # Firebase
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON}
-      # Agent binaries
-      AGENT_BINARY_DIR: /opt/lute/agent-binaries
+      # Worker binaries
+      WORKER_BINARY_DIR: /opt/lute/worker-binaries
       # Metrics snapshot job: how often we write snapshots to DB (e.g. 5s). Use 5s for chart resolution.
       METRICS_SNAPSHOT_INTERVAL: ${METRICS_SNAPSHOT_INTERVAL:-5s}
-      # How often we ping agents for status + metrics. Should be <= METRICS_SNAPSHOT_INTERVAL so each snapshot has fresh metrics.
+      # How often we ping workers for status + metrics. Should be <= METRICS_SNAPSHOT_INTERVAL so each snapshot has fresh metrics.
       HEARTBEAT_CHECK_INTERVAL: ${HEARTBEAT_CHECK_INTERVAL:-5s}
+      # Redis
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     depends_on:
       mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - lute-network
@@ -98,3 +118,4 @@ networks:
 volumes:
   mongodb_data:
   mongodb_config:
+  redis_data:
