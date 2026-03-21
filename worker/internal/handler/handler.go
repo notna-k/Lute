@@ -14,8 +14,8 @@ import (
 // timeoutSec is the job's timeout in seconds (0 means use default or no limit).
 type HandlerFunc func(ctx context.Context, jobID string, payload []byte, timeoutSec int32) error
 
-// JobLogsDir is the base directory for persisting job log files.
-// When empty, no job log file is written (runner still logs to process stderr via slog).
+// JobLogsDir is the base directory for persisting job log files (job-{id}.log).
+// When empty, runner job logs are discarded (JSON slog to io.Discard).
 var JobLogsDir string
 
 var (
