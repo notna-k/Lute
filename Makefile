@@ -7,8 +7,8 @@ COMPOSE_DIR := infrastructure/dev
 # Worker build settings
 WORKER_VERSION ?= 0.1.0
 BUILD_TIME     := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
-WORKER_SRC     := server/worker
-WORKER_OUT     := server/worker-binaries
+WORKER_SRC     := worker
+WORKER_OUT     := worker/bin
 LDFLAGS        := -X main.Version=$(WORKER_VERSION) -X main.BuildTime=$(BUILD_TIME)
 
 # Default target
@@ -80,7 +80,7 @@ dev-restart: dev-down dev-up
 worker-build:
 	@echo "Building worker $(WORKER_VERSION) for current platform..."
 	@mkdir -p $(WORKER_OUT)
-	cd server && CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker ./worker
+	cd $(WORKER_SRC) && CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker .
 	@echo "$(WORKER_VERSION)" > $(WORKER_OUT)/VERSION
 	@echo "Built $(WORKER_OUT)/lute-worker"
 
@@ -90,19 +90,19 @@ worker-build-all:
 	@mkdir -p $(WORKER_OUT)
 
 	@echo "  -> linux/amd64"
-	cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-amd64 ./worker
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-amd64 .
 
 	@echo "  -> linux/arm64"
-	cd server && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-arm64 ./worker
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-linux-arm64 .
 
 	@echo "  -> darwin/amd64"
-	cd server && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-amd64 ./worker
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-amd64 .
 
 	@echo "  -> darwin/arm64"
-	cd server && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-arm64 ./worker
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-darwin-arm64 .
 
 	@echo "  -> windows/amd64"
-	cd server && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-windows-amd64.exe ./worker
+	cd $(WORKER_SRC) && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o ../$(WORKER_OUT)/lute-worker-windows-amd64.exe .
 
 	@echo "$(WORKER_VERSION)" > $(WORKER_OUT)/VERSION
 	@echo "All worker binaries built in $(WORKER_OUT)/"

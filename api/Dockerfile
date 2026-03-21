@@ -8,22 +8,22 @@ WORKDIR /app
 RUN apk add --no-cache git make
 
 # Copy module files for api and worker (api has a local replace)
-COPY server/api/go.mod server/api/go.sum server/api/
-COPY server/worker/go.mod server/worker/go.sum server/worker/
+COPY api/go.mod api/go.sum api/
+COPY worker/go.mod worker/go.sum worker/
 
 # Download deps with cache mount so repeated builds skip download
 RUN --mount=type=cache,target=/go/pkg/mod \
-    cd server/api && go mod download
+    cd api && go mod download
 RUN --mount=type=cache,target=/go/pkg/mod \
-    cd server/worker && go mod download
+    cd worker && go mod download
 
 # Copy source code
-COPY server/api server/api
-COPY server/worker server/worker
+COPY api api
+COPY worker worker
 
 # Build the API server (use Go build cache for faster recompiles)
 # Entrypoint is cmd/api after refactor to internal layout
-WORKDIR /app/server/api
+WORKDIR /app/api
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o api ./cmd/api
 
@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 ARG WORKER_VERSION=dev
 ARG BUILD_TIME=unknown
 
-WORKDIR /app/server/worker
+WORKDIR /app/worker
 
 # Linux amd64
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -75,7 +75,7 @@ RUN apk --no-cache add ca-certificates wget
 WORKDIR /root/
 
 # Copy server binary
-COPY --from=builder /app/server/api/api .
+COPY --from=builder /app/api/api .
 
 # Copy worker binaries into the directory the server will serve
 COPY --from=builder /app/worker-binaries /opt/lute/worker-binaries
