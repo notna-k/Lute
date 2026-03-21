@@ -36,11 +36,12 @@ const Layout = ({ children }: LayoutProps) => {
     if (location.pathname === '/dashboard') return 0;
     if (location.pathname === '/machines' || /^\/machines\/[^/]+$/.test(location.pathname)) return 1;
     if (location.pathname === '/public-machines') return 2;
+    if (location.pathname === '/jobs' || location.pathname.startsWith('/jobs/')) return 3;
     return false;
   };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    const paths = ['/dashboard', '/machines', '/public-machines'];
+    const paths = ['/dashboard', '/machines', '/public-machines', '/jobs'];
     navigate(paths[newValue]);
   };
 
@@ -73,6 +74,7 @@ const Layout = ({ children }: LayoutProps) => {
               <Tab label="Dashboard" />
               <Tab label="My Machines" />
               <Tab label="Public Machines" />
+              <Tab label="Jobs" />
             </Tabs>
           )}
           {user && (

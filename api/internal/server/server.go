@@ -1,0 +1,140 @@
+package server
+
+import (
+	"context"
+	"log"
+	"net/http"
+
+	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/grpc"
+	"github.com/lute/api/internal/machines"
+	"github.com/lute/api/internal/queue"
+	"github.com/lute/api/internal/router"
+	"github.com/lute/api/internal/worker"
+	"github.com/lute/api/internal/websocket"
+)
+
+type Server struct {
+	HTTP               *http.Server
+	GRPC               *grpc.Server
+	Hub                *websocket.Hub
+	HeartbeatChecker   *worker.HeartbeatChecker
+	MachineSnapshotJob *machines.MachineSnapshotJob
+	QueueScheduler     *queue.Scheduler
+	checkerCtx         context.Context
+	checkerStop        context.CancelFunc
+	snapshotJobCtx     context.Context
+	snapshotJobCancel  context.CancelFunc
+	schedulerCtx       context.Context
+	schedulerCancel    context.CancelFunc
+}
+
+func New(
+	cfg *config.Config,
+	db *connection.MongoDB,
+	machineRepo *repos.MachineRepository,
+	userRepo *repos.UserRepository,
+	commandRepo *repos.CommandRepository,
+	uptimeSnapshotRepo *repos.UptimeSnapshotRepository,
+	machineSnapshotRepo *repos.MachineSnapshotRepository,
+	jobExecutionRepo *repos.JobExecutionRepository,
+	queueEngine *queue.Engine,
+	queueScheduler *queue.Scheduler,
+	statsAgg *queue.StatsAggregator,
+) *Server {
+	hub := websocket.NewHub()
+	go hub.Run()
+
+	grpcServer := grpc.NewServer(cfg, machineRepo, jobExecutionRepo, queueEngine, statsAgg, hub)
+
+	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub, queueEngine, statsAgg, grpcServer)
+
+	httpServer := &http.Server{
+		Addr:         cfg.Server.Host + ":" + cfg.Server.Port,
+		Handler:      r,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+
+	heartbeatChecker := worker.NewHeartbeatChecker(
+		machineRepo,
+		grpcServer.ConnMgr,
+		cfg.Heartbeat.CheckInterval,
+		cfg.Heartbeat.PingTimeout,
+		cfg.Heartbeat.MaxRetries,
+	)
+	grpcServer.OnConnectionRegistered = func() { heartbeatChecker.TriggerCheck() }
+
+	if queueScheduler != nil {
+		queueScheduler.SetOnJobsPromoted(func(ctx context.Context, queueNames []string) {
+			for _, q := range queueNames {
+				grpcServer.DispatchQueue(ctx, q)
+			}
+		})
+	}
+
+	machineSnapshotJob := machines.NewMachineSnapshotJob(machineRepo, machineSnapshotRepo, cfg.Metrics.SnapshotInterval)
+
+	return &Server{
+		HTTP:               httpServer,
+		GRPC:               grpcServer,
+		Hub:                hub,
+		HeartbeatChecker:   heartbeatChecker,
+		MachineSnapshotJob: machineSnapshotJob,
+		QueueScheduler:     queueScheduler,
+	}
+}
+
+func (s *Server) Start() error {
+	s.checkerCtx, s.checkerStop = context.WithCancel(context.Background())
+	go s.HeartbeatChecker.Start(s.checkerCtx)
+
+	s.snapshotJobCtx, s.snapshotJobCancel = context.WithCancel(context.Background())
+	go s.MachineSnapshotJob.Run(s.snapshotJobCtx)
+
+	if s.QueueScheduler != nil {
+		s.schedulerCtx, s.schedulerCancel = context.WithCancel(context.Background())
+		go s.QueueScheduler.Run(s.schedulerCtx)
+	}
+
+	go func() {
+		if err := s.GRPC.Start(); err != nil {
+			log.Fatalf("Failed to start gRPC server: %v", err)
+		}
+	}()
+
+	go func() {
+		log.Printf("HTTP server starting on %s", s.HTTP.Addr)
+		if err := s.HTTP.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start HTTP server: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	log.Println("Shutting down server...")
+
+	if s.checkerStop != nil {
+		s.checkerStop()
+	}
+	if s.snapshotJobCancel != nil {
+		s.snapshotJobCancel()
+	}
+	if s.schedulerCancel != nil {
+		s.schedulerCancel()
+	}
+
+	s.GRPC.Stop()
+
+	if err := s.HTTP.Shutdown(ctx); err != nil {
+		return err
+	}
+
+	log.Println("Server exited")
+	return nil
+}

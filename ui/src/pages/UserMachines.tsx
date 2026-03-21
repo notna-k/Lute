@@ -11,17 +11,25 @@ import {
   Stack,
   CircularProgress,
   Alert,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Link } from 'react-router-dom';
-import { useUserMachines, useReEnableMachine } from '../hooks/useMachines';
+import { useUserMachines, useReEnableMachine, useDeleteMachine } from '../hooks/useMachines';
 import { Machine } from '../types';
 import AddMachineDialog from '../components/AddMachineDialog';
 
 const UserMachines = () => {
   const { data: machines, isLoading, error, refetch } = useUserMachines();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
   const reEnableMutation = useReEnableMachine();
+  const deleteMutation = useDeleteMachine();
 
   const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
     switch (status) {
@@ -42,6 +50,24 @@ const UserMachines = () => {
 
   const handleReEnable = (machineId: string) => {
     reEnableMutation.mutate(machineId, { onSuccess: () => refetch() });
+  };
+
+  const handleDeleteClick = (machine: Machine) => {
+    setDeleteTarget(machine);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        refetch();
+      },
+    });
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteTarget(null);
   };
 
   if (isLoading) {
@@ -153,6 +179,15 @@ const UserMachines = () => {
                     >
                       Manage
                     </Button>
+                    <IconButton
+                      aria-label={`Delete ${machine.name}`}
+                      color="error"
+                      size="small"
+                      onClick={() => handleDeleteClick(machine)}
+                      disabled={deleteMutation.isPending && deleteMutation.variables === machine.id}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </Stack>
                 </Box>
               </ListItem>
@@ -179,6 +214,40 @@ const UserMachines = () => {
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
       />
+
+      <Dialog
+        open={!!deleteTarget}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-machine-title"
+        aria-describedby="delete-machine-description"
+      >
+        <DialogTitle id="delete-machine-title">
+          Delete machine?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-machine-description">
+            {deleteTarget && (
+              <>
+                Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+                This will remove the machine and its history. This action cannot be undone.
+              </>
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} autoFocus>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
+            variant="contained"
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
