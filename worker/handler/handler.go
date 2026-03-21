@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/lute/worker/runner"
@@ -15,7 +15,7 @@ import (
 type HandlerFunc func(ctx context.Context, jobID string, payload []byte, timeoutSec int32) error
 
 // JobLogsDir is the base directory for persisting job log files.
-// When empty, no log files are written (logs only go to process stdout).
+// When empty, no job log file is written (runner still logs to process stderr via slog).
 var JobLogsDir string
 
 var (
@@ -41,13 +41,13 @@ func Execute(ctx context.Context, jobID, jobType string, payload []byte, timeout
 		return fmt.Errorf("no handler registered for job type %q", jobType)
 	}
 
-	log.Printf("Executing job type=%s payload_size=%d timeout_sec=%d", jobType, len(payload), timeoutSec)
+	slog.Info("Executing job", "type", jobType, "payload_size", len(payload), "timeout_sec", timeoutSec)
 	return fn(ctx, jobID, payload, timeoutSec)
 }
 
 func init() {
 	Register("noop", func(_ context.Context, _ string, _ []byte, _ int32) error {
-		log.Println("noop job executed")
+		slog.Info("noop job executed")
 		return nil
 	})
 

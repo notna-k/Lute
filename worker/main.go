@@ -7,7 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -47,6 +47,10 @@ type Flags struct {
 }
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	flags := parseFlags()
 
 	if flags.version {
@@ -78,7 +82,7 @@ func parseFlags() *Flags {
 }
 
 func runWorker(flags *Flags) {
-	log.Printf("Lute Worker %s starting (build: %s)", Version, BuildTime)
+	slog.Info("Lute Worker starting", "version", Version, "build", BuildTime)
 
 	machineID := flags.machineID
 	serverAddr := flags.serverAddr
@@ -100,17 +104,12 @@ func runWorker(flags *Flags) {
 
 	if flags.jobLogsDir != "" {
 		if err := os.MkdirAll(flags.jobLogsDir, 0755); err != nil {
-			log.Fatalf("Cannot create job logs dir %q: %v", flags.jobLogsDir, err)
+			slog.Error("Cannot create job logs dir", "dir", flags.jobLogsDir, "err", err)
+			os.Exit(1)
 		}
 	}
 
-	log.Printf("  Machine ID:   %s", machineID)
-	log.Printf("  Server:       %s", serverAddr)
-	log.Printf("  Queues:       %v", queueList)
-	log.Printf("  Concurrency:  %d", flags.concurrency)
-	if flags.jobLogsDir != "" {
-		log.Printf("  Job Logs Dir: %s", flags.jobLogsDir)
-	}
+	slog.Info("worker config", "machine_id", machineID, "server", serverAddr, "queues", queueList, "concurrency", flags.concurrency, "job_logs_dir", flags.jobLogsDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -119,12 +118,12 @@ func runWorker(flags *Flags) {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-quit
-		log.Println("Shutting down worker...")
+		slog.Info("Shutting down worker...")
 		cancel()
 	}()
 
 	connectLoop(ctx, serverAddr, machineID, queueList, int32(flags.concurrency), flags.jobLogsDir)
-	log.Println("Worker stopped")
+	slog.Info("Worker stopped")
 }
 
 func registerViaREST(apiURL string) (string, string) {
@@ -147,30 +146,35 @@ func registerViaREST(apiURL string) (string, string) {
 
 	data, err := json.Marshal(body)
 	if err != nil {
-		log.Fatalf("Failed to marshal registration request: %v", err)
+		slog.Error("Failed to marshal registration request", "err", err)
+		os.Exit(1)
 	}
 
 	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
-		log.Fatalf("REST registration failed: %v", err)
+		slog.Error("REST registration failed", "err", err)
+		os.Exit(1)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("Failed to read registration response: %v", err)
+		slog.Error("Failed to read registration response", "err", err)
+		os.Exit(1)
 	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		log.Fatalf("Registration error %d: %s", resp.StatusCode, string(respBody))
+		slog.Error("Registration error", "status", resp.StatusCode, "body", string(respBody))
+		os.Exit(1)
 	}
 
 	var result types.SetupResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		log.Fatalf("Failed to parse registration response: %v", err)
+		slog.Error("Failed to parse registration response", "err", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Registered: machine_id=%s grpc=%s", result.MachineID, result.GRPCAddress)
+	slog.Info("Registered", "machine_id", result.MachineID, "grpc", result.GRPCAddress)
 	return result.MachineID, result.GRPCAddress
 }
 
@@ -187,7 +191,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string, queues []str
 			return
 		}
 
-		log.Printf("Stream disconnected: %v — reconnecting in %s", err, backoff)
+		slog.Warn("Stream disconnected, reconnecting", "err", err, "backoff", backoff)
 		select {
 		case <-ctx.Done():
 			return
@@ -235,7 +239,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 		return fmt.Errorf("send registration: %w", err)
 	}
 
-	log.Printf("Connected to %s", serverAddr)
+	slog.Info("Connected", "server", serverAddr)
 
 	var sendMu sync.Mutex
 	draining := false
@@ -247,7 +251,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 		}
 
 		if ping := msg.GetHeartbeatPing(); ping != nil {
-			log.Printf("Heartbeat ping received")
+			slog.Debug("Heartbeat ping received")
 			pongMsg := heartbeat.PongMessage(machineID)
 			sendMu.Lock()
 			err := stream.Send(pongMsg)
@@ -285,14 +289,13 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 					ElapsedMs: elapsed,
 				}
 				if jobLogsDir != "" {
-					result.LogFile = "logs-" + a.JobId
-					result.ExecutionLogFile = "execution-" + a.JobId
+					result.LogFile = "job-" + a.JobId + ".log"
 				}
 				if jobErr != nil {
 					result.Error = jobErr.Error()
-					log.Printf("Job %s failed: %v", a.JobId, jobErr)
+					slog.Warn("Job failed", "job_id", a.JobId, "err", jobErr)
 				} else {
-					log.Printf("Job %s completed in %d ms", a.JobId, elapsed)
+					slog.Info("Job completed", "job_id", a.JobId, "elapsed_ms", elapsed)
 				}
 
 				sendMu.Lock()
@@ -302,13 +305,13 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 				})
 				sendMu.Unlock()
 				if sendErr != nil {
-					log.Printf("Failed to send job result for %s: %v", a.JobId, sendErr)
+					slog.Error("Failed to send job result", "job_id", a.JobId, "err", sendErr)
 				}
 			}(assign)
 		}
 
 		if msg.GetDrain() != nil {
-			log.Println("Drain signal received, finishing in-flight jobs")
+			slog.Info("Drain signal received, finishing in-flight jobs")
 			draining = true
 		}
 	}

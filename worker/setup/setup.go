@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -48,11 +48,13 @@ func promptServiceName(reader *bufio.Reader) string {
 	fmt.Print("Enter service name: ")
 	serviceName, err := reader.ReadString('\n')
 	if err != nil {
-		log.Fatalf("Failed to read input: %v", err)
+		slog.Error("Failed to read input", "err", err)
+		os.Exit(1)
 	}
 	serviceName = strings.TrimSpace(serviceName)
 	if serviceName == "" {
-		log.Fatal("Service name cannot be empty")
+		slog.Error("Service name cannot be empty")
+		os.Exit(1)
 	}
 	return serviceName
 }
@@ -99,28 +101,33 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 
 	body, err := json.Marshal(sysInfo)
 	if err != nil {
-		log.Fatalf("Failed to serialize request: %v", err)
+		slog.Error("Failed to serialize request", "err", err)
+		os.Exit(1)
 	}
 
 	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Fatalf("Failed to connect to server: %v", err)
+		slog.Error("Failed to connect to server", "err", err)
+		os.Exit(1)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("Failed to read response: %v", err)
+		slog.Error("Failed to read response", "err", err)
+		os.Exit(1)
 	}
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		log.Fatalf("Server returned error %d: %s", resp.StatusCode, string(respBody))
+		slog.Error("Server returned error", "status", resp.StatusCode, "body", string(respBody))
+		os.Exit(1)
 	}
 
 	var setupResp types.SetupResponse
 	if err := json.Unmarshal(respBody, &setupResp); err != nil {
-		log.Fatalf("Failed to parse response: %v", err)
+		slog.Error("Failed to parse response", "err", err)
+		os.Exit(1)
 	}
 
 	fmt.Println()
@@ -137,7 +144,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 
 	exePath, err := os.Executable()
 	if err != nil {
-		log.Printf("Warning: cannot find own binary path: %v", err)
+		slog.Warn("cannot find own binary path", "err", err)
 		displayManualInstructions(setupResp)
 		return
 	}
@@ -145,7 +152,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 	logFile := fmt.Sprintf("/tmp/lute-worker-%s.log", setupResp.MachineID)
 	lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		log.Printf("Warning: cannot open log file %s: %v", logFile, err)
+		slog.Warn("cannot open log file", "path", logFile, "err", err)
 		displayManualInstructions(setupResp)
 		return
 	}
@@ -153,7 +160,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 
 	cmd := createWorkerCommand(exePath, setupResp, lf)
 	if err := cmd.Start(); err != nil {
-		log.Printf("Warning: failed to start worker: %v", err)
+		slog.Warn("failed to start worker", "err", err)
 		displayManualInstructions(setupResp)
 		return
 	}
