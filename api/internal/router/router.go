@@ -30,6 +30,7 @@ func SetupRouter(
 	queueEngine *queue.Engine,
 	statsAgg *queue.StatsAggregator,
 	grpcServer *luteGrpc.Server,
+	jobExecutionRepo *repos.JobExecutionRepository,
 ) *gin.Engine {
 	gin.SetMode(cfg.Server.Mode)
 
@@ -53,7 +54,8 @@ func SetupRouter(
 	workerHandler := worker.NewWorkerHandler(cfg.WorkerBinary.Dir, cfg, machineRepo, commandRepo)
 	dashboardHandler := dashboard.NewDashboardHandler(cfg, machineService, machineSnapshotRepo)
 
-	jobHandler := jobs.NewJobHandler(queueEngine, statsAgg, grpcServer)
+	jobHandler := jobs.NewJobHandler(queueEngine, statsAgg, grpcServer, jobExecutionRepo)
+	executionsHandler := jobs.NewExecutionsHandler(jobExecutionRepo)
 	queueHandler := jobs.NewQueueHandler(queueEngine, statsAgg)
 	dlqHandler := jobs.NewDLQHandler(queueEngine, grpcServer)
 	workersInfoHandler := jobs.NewWorkersInfoHandler(grpcServer.ConnMgr)
@@ -63,7 +65,7 @@ func SetupRouter(
 		machines.SetupRoutes(v1, machineHandler, userRepo)
 		dashboard.SetupRoutes(v1, dashboardHandler, userRepo)
 		worker.SetupRoutes(v1, workerHandler, userRepo)
-		jobs.SetupRoutes(v1, jobHandler, queueHandler, dlqHandler, workersInfoHandler)
+		jobs.SetupRoutes(v1, jobHandler, queueHandler, dlqHandler, workersInfoHandler, executionsHandler)
 	}
 
 	return r

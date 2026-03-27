@@ -11,8 +11,13 @@ func SetupRoutes(
 	queueHandler *QueueHandler,
 	dlqHandler *DLQHandler,
 	workersHandler *WorkersInfoHandler,
+	executionsHandler *ExecutionsHandler,
 ) {
+	r.GET("/executions", executionsHandler.ListExecutions)
+	r.GET("/executions/filter-options", executionsHandler.ExecutionFilterOptions)
+
 	r.POST("/jobs", jobHandler.Enqueue)
+	r.GET("/jobs/:id/logs", jobHandler.GetJobLogs)
 	r.GET("/jobs/:id", jobHandler.GetJob)
 	r.POST("/jobs/:id/retry", jobHandler.RetryJob)
 	r.DELETE("/jobs/:id", jobHandler.CancelJob)

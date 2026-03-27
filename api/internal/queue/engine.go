@@ -183,6 +183,16 @@ func (e *Engine) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	return &job, nil
 }
 
+// SetWorkerID records which machine is executing a running job.
+func (e *Engine) SetWorkerID(ctx context.Context, jobID, workerID string) error {
+	job, err := e.GetJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	job.WorkerID = workerID
+	return e.saveJob(ctx, job)
+}
+
 // DeleteJob removes a job from Redis.
 func (e *Engine) DeleteJob(ctx context.Context, jobID string) error {
 	job, err := e.GetJob(ctx, jobID)

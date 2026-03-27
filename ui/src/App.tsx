@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard';
 import UserMachines from './pages/UserMachines';
 import PublicMachines from './pages/PublicMachines';
 import MachineMetrics from './pages/MachineMetrics';
-import JobsList from './pages/JobsList';
+import ExecutionsHistory from './pages/ExecutionsHistory';
 import JobDetail from './pages/JobDetail';
 
 function App() {
@@ -53,7 +53,7 @@ function App() {
               path="/jobs"
               element={
                 <ProtectedRoute>
-                  <JobsList />
+                  <ExecutionsHistory />
                 </ProtectedRoute>
               }
             />

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
     Box,
     Typography,
@@ -18,7 +18,10 @@ import {
     Cancel as CancelIcon,
 } from '@mui/icons-material';
 import { Link, useParams } from 'react-router-dom';
+import { JobLogConsole } from '../components/JobLogConsole';
 import { jobService, Job } from '../services/jobService';
+
+const JOB_LOG_PAGE = 200;
 
 const STATUS_COLORS: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
     done: 'success',
@@ -54,6 +57,15 @@ export default function JobDetail() {
     const [retrying, setRetrying] = useState(false);
     const [cancelling, setCancelling] = useState(false);
 
+    const logBoxRef = useRef<HTMLDivElement>(null);
+    const loadingOlderRef = useRef(false);
+    const [logLines, setLogLines] = useState<string[]>([]);
+    const [logNextCursor, setLogNextCursor] = useState<string | null>(null);
+    const [logHasMore, setLogHasMore] = useState(false);
+    const [logsLoading, setLogsLoading] = useState(false);
+    const [logsError, setLogsError] = useState<string | null>(null);
+    const [loadingOlder, setLoadingOlder] = useState(false);
+
     const fetchJob = useCallback(async () => {
         if (!id) return;
         setLoading(true);
@@ -71,6 +83,82 @@ export default function JobDetail() {
     useEffect(() => {
         fetchJob();
     }, [fetchJob]);
+
+    const loadLogsTail = useCallback(
+        async (cursor?: string) => {
+            if (!id) return;
+            const prepend = Boolean(cursor);
+            if (prepend) {
+                if (loadingOlderRef.current) return;
+                loadingOlderRef.current = true;
+                setLoadingOlder(true);
+            } else {
+                setLogsLoading(true);
+            }
+            setLogsError(null);
+            try {
+                const r = await jobService.getJobLogs(id, {
+                    direction: 'tail',
+                    limit: JOB_LOG_PAGE,
+                    cursor,
+                });
+                const el = logBoxRef.current;
+                const prevScrollHeight = prepend && el ? el.scrollHeight : 0;
+                const prevScrollTop = prepend && el ? el.scrollTop : 0;
+
+                const chunk = Array.isArray(r.lines) ? r.lines : [];
+                if (prepend) {
+                    setLogLines((prev) => [...chunk, ...prev]);
+                } else {
+                    setLogLines(chunk);
+                }
+                setLogNextCursor(r.next_cursor ?? null);
+                setLogHasMore(r.has_more);
+                if (r.error) {
+                    setLogsError(r.error);
+                }
+
+                requestAnimationFrame(() => {
+                    const box = logBoxRef.current;
+                    if (!box) return;
+                    if (prepend) {
+                        box.scrollTop = box.scrollHeight - prevScrollHeight + prevScrollTop;
+                    } else {
+                        box.scrollTop = box.scrollHeight;
+                    }
+                });
+            } catch (e) {
+                setLogsError(e instanceof Error ? e.message : 'Failed to load logs');
+                if (!prepend) {
+                    setLogLines([]);
+                    setLogHasMore(false);
+                    setLogNextCursor(null);
+                }
+            } finally {
+                setLogsLoading(false);
+                setLoadingOlder(false);
+                loadingOlderRef.current = false;
+            }
+        },
+        [id]
+    );
+
+    useEffect(() => {
+        if (!id) return;
+        setLogLines([]);
+        setLogNextCursor(null);
+        setLogHasMore(false);
+        setLogsError(null);
+        void loadLogsTail();
+    }, [id, loadLogsTail]);
+
+    const onLogScroll = () => {
+        const el = logBoxRef.current;
+        if (!el || logsLoading || loadingOlderRef.current || !logHasMore || !logNextCursor) return;
+        if (el.scrollTop < 64) {
+            void loadLogsTail(logNextCursor);
+        }
+    };
 
     const handleRetry = async () => {
         if (!id) return;
@@ -147,8 +235,16 @@ export default function JobDetail() {
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
-                    <Tooltip title="Refresh">
-                        <Button variant="outlined" size="small" onClick={fetchJob} startIcon={<RefreshIcon />}>
+                    <Tooltip title="Refresh job and logs">
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={async () => {
+                                await fetchJob();
+                                void loadLogsTail();
+                            }}
+                            startIcon={<RefreshIcon />}
+                        >
                             Refresh
                         </Button>
                     </Tooltip>
@@ -260,50 +356,26 @@ export default function JobDetail() {
                 </Paper>
             )}
 
-            {/* Logs */}
+            {/* Logs (tail-first; scroll up to load older) */}
             <Paper sx={{ p: 3 }}>
                 <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                     Logs
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
-                {job.error ? (
-                    <Box
-                        component="pre"
-                        sx={{
-                            m: 0,
-                            p: 2,
-                            bgcolor: 'grey.900',
-                            color: 'error.light',
-                            borderRadius: 1,
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                            overflowX: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-all',
-                        }}
-                    >
-                        {job.error}
-                    </Box>
-                ) : (
-                    <Box
-                        component="pre"
-                        sx={{
-                            m: 0,
-                            p: 2,
-                            bgcolor: 'grey.900',
-                            color: 'grey.400',
-                            borderRadius: 1,
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                        }}
-                    >
-                        {job.status === 'done'
-                            ? '(job completed successfully — execution stdout/stderr are not yet captured)'
-                            : job.status === 'running'
-                                ? '(job is running — live logs are not yet supported)'
-                                : '(no logs available)'}
-                    </Box>
+                {logsError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        {logsError}
+                    </Alert>
                 )}
+                <JobLogConsole
+                    lines={logLines}
+                    logBoxRef={logBoxRef}
+                    onScroll={onLogScroll}
+                    hideScrollArea={logLines.length === 0 && logsLoading}
+                    logsLoading={logsLoading}
+                    loadingOlder={loadingOlder}
+                    logHasMore={logHasMore}
+                />
             </Paper>
         </Box>
     );

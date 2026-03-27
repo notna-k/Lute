@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/lute/worker/internal/handler"
 	"github.com/lute/worker/internal/heartbeat"
+	"github.com/lute/worker/internal/joblog"
 	"github.com/lute/worker/internal/setup"
 	"github.com/lute/worker/internal/setup/types"
 	"github.com/lute/worker/internal/utils"
@@ -261,6 +263,22 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 			}
 		}
 
+		if logReq := msg.GetJobLogRequest(); logReq != nil {
+			req := logReq
+			go func() {
+				resp := buildJobLogResponse(jobLogsDir, req)
+				sendMu.Lock()
+				sendErr := stream.Send(&pb.WorkerMessage{
+					MachineId: machineID,
+					Payload:   &pb.WorkerMessage_JobLogResponse{JobLogResponse: resp},
+				})
+				sendMu.Unlock()
+				if sendErr != nil {
+					slog.Error("Failed to send job log response", "request_id", req.RequestId, "err", sendErr)
+				}
+			}()
+		}
+
 		if assign := msg.GetAssign(); assign != nil {
 			if draining {
 				sendMu.Lock()
@@ -315,4 +333,33 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 			draining = true
 		}
 	}
+}
+
+func buildJobLogResponse(jobLogsDir string, req *pb.JobLogRequest) *pb.JobLogResponse {
+	resp := &pb.JobLogResponse{
+		RequestId: req.RequestId,
+	}
+	if jobLogsDir == "" {
+		resp.Error = "job logs directory not configured on worker"
+		return resp
+	}
+	if req.JobId == "" {
+		resp.Error = "job_id is required"
+		return resp
+	}
+	path := filepath.Join(jobLogsDir, "job-"+req.JobId+".log")
+	limit := int(req.Limit)
+	var r joblog.Result
+	switch req.GetDirection() {
+	case pb.LogReadDirection_LOG_READ_HEAD:
+		r = joblog.ReadHead(path, limit, req.AnchorOffset)
+	default:
+		r = joblog.ReadTail(path, limit, req.AnchorOffset)
+	}
+	resp.Lines = r.Lines
+	resp.NextAnchor = r.NextAnchor
+	resp.FileSize = r.FileSize
+	resp.HasMore = r.HasMore
+	resp.Error = r.Err
+	return resp
 }

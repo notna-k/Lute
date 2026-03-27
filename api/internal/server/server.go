@@ -49,7 +49,7 @@ func New(
 
 	grpcServer := grpc.NewServer(cfg, machineRepo, jobExecutionRepo, queueEngine, statsAgg, hub)
 
-	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub, queueEngine, statsAgg, grpcServer)
+	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub, queueEngine, statsAgg, grpcServer, jobExecutionRepo)
 
 	httpServer := &http.Server{
 		Addr:         cfg.Server.Host + ":" + cfg.Server.Port,

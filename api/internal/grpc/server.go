@@ -235,9 +235,22 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 		return false
 	}
 
+	if err := s.queueEngine.SetWorkerID(ctx, job.ID, worker.MachineID); err != nil {
+		log.Printf("DispatchJob: set worker id for job %s: %v", job.ID, err)
+	}
+
 	log.Printf("DispatchJob: assigned job %s to worker %s", job.ID, worker.MachineID)
 	s.broadcastJobEvent("started", job)
 	return true
+}
+
+// RequestJobLog asks a connected worker to read a chunk of a job log file.
+func (s *Server) RequestJobLog(ctx context.Context, machineID string, req *pb.JobLogRequest) (*pb.JobLogResponse, error) {
+	conn := s.ConnMgr.Get(machineID)
+	if conn == nil {
+		return nil, ErrNoConnection
+	}
+	return conn.RequestJobLog(ctx, req)
 }
 
 func (s *Server) broadcastJobEvent(eventType string, job *queue.Job) {

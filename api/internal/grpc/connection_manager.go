@@ -1,11 +1,13 @@
 package grpc
 
 import (
+	"context"
 	"errors"
 	"log"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	pb "github.com/lute/proto"
 )
 
@@ -13,6 +15,11 @@ var (
 	ErrNoConnection = errors.New("no active connection for machine")
 	ErrPingTimeout  = errors.New("heartbeat ping timed out")
 )
+
+type jobLogResult struct {
+	Resp *pb.JobLogResponse
+	Err  error
+}
 
 type pingRequest struct {
 	resultCh chan<- pingResult
@@ -42,6 +49,10 @@ type MachineConnection struct {
 	pingCh  chan pingRequest
 	jobCh   chan *pb.JobAssignment
 	drainCh chan struct{}
+	logReqCh chan *pb.JobLogRequest
+
+	logMu      sync.Mutex
+	logWaiters map[string]chan jobLogResult
 
 	mu       sync.Mutex
 	draining bool
@@ -54,8 +65,10 @@ func newMachineConnection(machineID string, stream pb.WorkerService_ConnectServe
 		stream:      stream,
 		pingCh:      make(chan pingRequest, 1),
 		// Large enough that a reserved slot (see AssignJob) can always be queued before Run sends it.
-		jobCh:   make(chan *pb.JobAssignment, 1024),
-		drainCh: make(chan struct{}, 1),
+		jobCh:    make(chan *pb.JobAssignment, 1024),
+		drainCh:  make(chan struct{}, 1),
+		logReqCh: make(chan *pb.JobLogRequest, 32),
+		logWaiters: make(map[string]chan jobLogResult),
 	}
 }
 
@@ -116,6 +129,69 @@ func (mc *MachineConnection) IsAvailable() bool {
 	return !mc.draining && mc.ActiveJobs < mc.Concurrency
 }
 
+// RequestJobLog sends a JobLogRequest on the stream and waits for JobLogResponse.
+// If req.RequestId is empty, a UUID is assigned. ctx controls total wait time.
+func (mc *MachineConnection) RequestJobLog(ctx context.Context, req *pb.JobLogRequest) (*pb.JobLogResponse, error) {
+	if req.RequestId == "" {
+		req.RequestId = uuid.New().String()
+	}
+	resultCh := make(chan jobLogResult, 1)
+
+	mc.logMu.Lock()
+	mc.logWaiters[req.RequestId] = resultCh
+	mc.logMu.Unlock()
+
+	defer func() {
+		mc.logMu.Lock()
+		if mc.logWaiters[req.RequestId] == resultCh {
+			delete(mc.logWaiters, req.RequestId)
+		}
+		mc.logMu.Unlock()
+	}()
+
+	select {
+	case mc.logReqCh <- req:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	select {
+	case res := <-resultCh:
+		return res.Resp, res.Err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (mc *MachineConnection) finishLogWaiter(requestID string, res jobLogResult) {
+	mc.logMu.Lock()
+	ch, ok := mc.logWaiters[requestID]
+	if ok {
+		delete(mc.logWaiters, requestID)
+	}
+	mc.logMu.Unlock()
+	if !ok {
+		return
+	}
+	select {
+	case ch <- res:
+	default:
+	}
+}
+
+func (mc *MachineConnection) failAllLogWaiters(err error) {
+	mc.logMu.Lock()
+	waiters := mc.logWaiters
+	mc.logWaiters = make(map[string]chan jobLogResult)
+	mc.logMu.Unlock()
+	for _, ch := range waiters {
+		select {
+		case ch <- jobLogResult{Err: err}:
+		default:
+		}
+	}
+}
+
 // Run processes outgoing (pings, job assignments, drain signals) and incoming
 // messages (pongs, job results, registration) on the bidirectional stream.
 // It blocks until the stream closes.
@@ -139,12 +215,14 @@ func (mc *MachineConnection) Run(onJobResult JobResultCallback, onRegistration W
 	for {
 		select {
 		case <-mc.stream.Context().Done():
+			mc.failAllLogWaiters(mc.stream.Context().Err())
 			return
 
 		case err := <-recvErrCh:
 			if pendingPing != nil {
 				pendingPing.resultCh <- pingResult{Err: err}
 			}
+			mc.failAllLogWaiters(err)
 			log.Printf("Connection %s recv error: %v", mc.MachineID, err)
 			return
 
@@ -152,6 +230,9 @@ func (mc *MachineConnection) Run(onJobResult JobResultCallback, onRegistration W
 			if pong := msg.GetHeartbeatPong(); pong != nil && pendingPing != nil {
 				pendingPing.resultCh <- pingResult{Pong: pong}
 				pendingPing = nil
+			}
+			if lr := msg.GetJobLogResponse(); lr != nil {
+				mc.finishLogWaiter(lr.RequestId, jobLogResult{Resp: lr})
 			}
 			if result := msg.GetResult(); result != nil {
 				mc.mu.Lock()
@@ -207,6 +288,18 @@ func (mc *MachineConnection) Run(onJobResult JobResultCallback, onRegistration W
 					Drain: &pb.DrainSignal{},
 				},
 			})
+
+		case logReq := <-mc.logReqCh:
+			err := mc.stream.Send(&pb.ServerMessage{
+				Payload: &pb.ServerMessage_JobLogRequest{
+					JobLogRequest: logReq,
+				},
+			})
+			if err != nil {
+				mc.finishLogWaiter(logReq.RequestId, jobLogResult{Err: err})
+				log.Printf("Connection %s send job log request error: %v", mc.MachineID, err)
+				return
+			}
 		}
 	}
 }

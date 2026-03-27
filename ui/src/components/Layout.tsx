@@ -74,7 +74,7 @@ const Layout = ({ children }: LayoutProps) => {
               <Tab label="Dashboard" />
               <Tab label="My Machines" />
               <Tab label="Public Machines" />
-              <Tab label="Jobs" />
+              <Tab label="Executions" />
             </Tabs>
           )}
           {user && (
