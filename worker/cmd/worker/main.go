@@ -39,7 +39,7 @@ var (
 type Flags struct {
 	serverAddr  string
 	apiURL      string
-	machineID   string
+	workerID    string
 	claimCode   string
 	queues      string
 	concurrency int
@@ -72,8 +72,8 @@ func parseFlags() *Flags {
 	f := &Flags{}
 	flag.StringVar(&f.serverAddr, "server", "localhost:50051", "gRPC server address")
 	flag.StringVar(&f.apiURL, "api", "http://localhost:8080", "HTTP API base URL")
-	flag.StringVar(&f.machineID, "machine-id", "", "Machine ID (skip REST registration if provided)")
-	flag.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this machine to your account")
+	flag.StringVar(&f.workerID, "worker-id", "", "Worker ID (skip REST registration if provided)")
+	flag.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this worker to your account")
 	flag.StringVar(&f.queues, "queues", "default", "Comma-separated list of queues to process")
 	flag.IntVar(&f.concurrency, "concurrency", 10, "Maximum concurrent jobs")
 	flag.StringVar(&f.jobLogsDir, "job-logs-dir", "lute-job-logs", "Directory for per-job log files (created on startup if missing; relative to cwd)")
@@ -86,12 +86,12 @@ func parseFlags() *Flags {
 func runWorker(flags *Flags) {
 	slog.Info("Lute Worker starting", "version", Version, "build", BuildTime)
 
-	machineID := flags.machineID
+	workerID := flags.workerID
 	serverAddr := flags.serverAddr
 
-	if machineID == "" {
+	if workerID == "" {
 		var grpcAddr string
-		machineID, grpcAddr = registerViaREST(flags.apiURL)
+		workerID, grpcAddr = registerViaREST(flags.apiURL)
 		if grpcAddr != "" {
 			serverAddr = grpcAddr
 		}
@@ -111,7 +111,7 @@ func runWorker(flags *Flags) {
 		}
 	}
 
-	slog.Info("worker config", "machine_id", machineID, "server", serverAddr, "queues", queueList, "concurrency", flags.concurrency, "job_logs_dir", flags.jobLogsDir)
+	slog.Info("worker config", "worker_id", workerID, "server", serverAddr, "queues", queueList, "concurrency", flags.concurrency, "job_logs_dir", flags.jobLogsDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -124,7 +124,7 @@ func runWorker(flags *Flags) {
 		cancel()
 	}()
 
-	connectLoop(ctx, serverAddr, machineID, queueList, int32(flags.concurrency), flags.jobLogsDir)
+	connectLoop(ctx, serverAddr, workerID, queueList, int32(flags.concurrency), flags.jobLogsDir)
 	slog.Info("Worker stopped")
 }
 
@@ -152,7 +152,7 @@ func registerViaREST(apiURL string) (string, string) {
 		os.Exit(1)
 	}
 
-	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
+	url := strings.TrimRight(apiURL, "/") + "/api/v1/workers/bootstrap/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		slog.Error("REST registration failed", "err", err)
@@ -176,11 +176,11 @@ func registerViaREST(apiURL string) (string, string) {
 		os.Exit(1)
 	}
 
-	slog.Info("Registered", "machine_id", result.MachineID, "grpc", result.GRPCAddress)
-	return result.MachineID, result.GRPCAddress
+	slog.Info("Registered", "worker_id", result.WorkerID, "grpc", result.GRPCAddress)
+	return result.WorkerID, result.GRPCAddress
 }
 
-func connectLoop(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32, jobLogsDir string) {
+func connectLoop(ctx context.Context, serverAddr, workerID string, queues []string, concurrency int32, jobLogsDir string) {
 	backoff := time.Second
 
 	for {
@@ -188,7 +188,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string, queues []str
 			return
 		}
 
-		err := runStream(ctx, serverAddr, machineID, queues, concurrency, jobLogsDir)
+		err := runStream(ctx, serverAddr, workerID, queues, concurrency, jobLogsDir)
 		if ctx.Err() != nil {
 			return
 		}
@@ -207,7 +207,7 @@ func connectLoop(ctx context.Context, serverAddr, machineID string, queues []str
 	}
 }
 
-func runStream(ctx context.Context, serverAddr, machineID string, queues []string, concurrency int32, jobLogsDir string) error {
+func runStream(ctx context.Context, serverAddr, workerID string, queues []string, concurrency int32, jobLogsDir string) error {
 	conn, err := grpc.NewClient(serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -222,17 +222,16 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 		return fmt.Errorf("open stream: %w", err)
 	}
 
-	// Send initial message with machine_id.
-	if err := stream.Send(&pb.WorkerMessage{MachineId: machineID}); err != nil {
+	// Send initial message with worker_id.
+	if err := stream.Send(&pb.WorkerMessage{WorkerId: workerID}); err != nil {
 		return fmt.Errorf("send initial: %w", err)
 	}
 
 	// Send worker registration with queues and concurrency.
 	if err := stream.Send(&pb.WorkerMessage{
-		MachineId: machineID,
+		WorkerId: workerID,
 		Payload: &pb.WorkerMessage_Register{
 			Register: &pb.WorkerRegistration{
-				WorkerId:    machineID,
 				Queues:      queues,
 				Concurrency: concurrency,
 			},
@@ -254,7 +253,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 
 		if ping := msg.GetHeartbeatPing(); ping != nil {
 			slog.Debug("Heartbeat ping received")
-			pongMsg := heartbeat.PongMessage(machineID)
+			pongMsg := heartbeat.PongMessage(workerID)
 			sendMu.Lock()
 			err := stream.Send(pongMsg)
 			sendMu.Unlock()
@@ -269,7 +268,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 				resp := buildJobLogResponse(jobLogsDir, req)
 				sendMu.Lock()
 				sendErr := stream.Send(&pb.WorkerMessage{
-					MachineId: machineID,
+					WorkerId:  workerID,
 					Payload:   &pb.WorkerMessage_JobLogResponse{JobLogResponse: resp},
 				})
 				sendMu.Unlock()
@@ -283,7 +282,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 			if draining {
 				sendMu.Lock()
 				_ = stream.Send(&pb.WorkerMessage{
-					MachineId: machineID,
+					WorkerId: workerID,
 					Payload: &pb.WorkerMessage_Result{
 						Result: &pb.JobResult{
 							JobId:   assign.JobId,
@@ -318,7 +317,7 @@ func runStream(ctx context.Context, serverAddr, machineID string, queues []strin
 
 				sendMu.Lock()
 				sendErr := stream.Send(&pb.WorkerMessage{
-					MachineId: machineID,
+					WorkerId:  workerID,
 					Payload:   &pb.WorkerMessage_Result{Result: result},
 				})
 				sendMu.Unlock()

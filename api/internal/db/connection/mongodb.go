@@ -17,11 +17,11 @@ import (
 
 // Collection names used by the app (must match repos NewRepository)
 const (
-	CollectionMachines         = "machines"
+	CollectionWorkers          = "workers"
 	CollectionUsers            = "users"
 	CollectionCommands         = "commands"
 	CollectionUptimeSnapshots  = "uptime_snapshots"
-	CollectionMachineSnapshots = "machine_snapshots"
+	CollectionWorkerSnapshots  = "worker_snapshots"
 	CollectionJobExecutions    = "job_executions"
 )
 
@@ -63,7 +63,7 @@ func NewMongoDB(cfg *config.Config) (*MongoDB, error) {
 // EnsureCollections creates the required collections if they don't exist,
 // so the "lute" database and collections appear as soon as the API starts.
 func (m *MongoDB) EnsureCollections(ctx context.Context) error {
-	for _, name := range []string{CollectionMachines, CollectionUsers, CollectionCommands, CollectionUptimeSnapshots, CollectionMachineSnapshots, CollectionJobExecutions} {
+	for _, name := range []string{CollectionWorkers, CollectionUsers, CollectionCommands, CollectionUptimeSnapshots, CollectionWorkerSnapshots, CollectionJobExecutions} {
 		if err := m.Database.CreateCollection(ctx, name); err != nil {
 			// Code 48 = namespace already exists
 			var ce mongo.CommandError
@@ -90,9 +90,9 @@ func (m *MongoDB) EnsureCollections(ctx context.Context) error {
 		return fmt.Errorf("create uptime_snapshots TTL index: %w", err)
 	}
 	log.Printf("MongoDB: created TTL index on %s.at", CollectionUptimeSnapshots)
-	// TTL index on machine_snapshots.at: expire after 30 days
-	machineSnapColl := m.Database.Collection(CollectionMachineSnapshots)
-	_, err = machineSnapColl.Indexes().CreateOne(ctx, mongo.IndexModel{
+	// TTL index on worker_snapshots.at: expire after 30 days
+	workerSnapColl := m.Database.Collection(CollectionWorkerSnapshots)
+	_, err = workerSnapColl.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.M{"at": 1},
 		Options: options.Index().SetExpireAfterSeconds(ttlSeconds),
 	})
@@ -101,34 +101,34 @@ func (m *MongoDB) EnsureCollections(ctx context.Context) error {
 		if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
 			return nil
 		}
-		return fmt.Errorf("create machine_snapshots TTL index: %w", err)
+		return fmt.Errorf("create worker_snapshots TTL index: %w", err)
 	}
-	log.Printf("MongoDB: created TTL index on %s.at", CollectionMachineSnapshots)
-	// Compound index for GetByMachineIDs (machine_id + at) to avoid whole collection scan
-	_, err = machineSnapColl.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "machine_id", Value: 1}, {Key: "at", Value: 1}},
+	log.Printf("MongoDB: created TTL index on %s.at", CollectionWorkerSnapshots)
+	// Compound index for GetByWorkerIDs (worker_id + at)
+	_, err = workerSnapColl.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "worker_id", Value: 1}, {Key: "at", Value: 1}},
 	})
 	if err != nil {
 		var ce mongo.CommandError
 		if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
 			// index already exists
 		} else {
-			return fmt.Errorf("create machine_snapshots compound index: %w", err)
+			return fmt.Errorf("create worker_snapshots compound index: %w", err)
 		}
 	}
-	// Indexes on machines for List/GetByUserID (user_id) and GetPublic (is_public)
-	machinesColl := m.Database.Collection(CollectionMachines)
+	// Indexes on workers for List/GetByUserID (user_id) and GetPublic (is_public)
+	workersColl := m.Database.Collection(CollectionWorkers)
 	for _, idx := range []mongo.IndexModel{
 		{Keys: bson.D{{Key: "user_id", Value: 1}}},
 		{Keys: bson.D{{Key: "is_public", Value: 1}}},
 	} {
-		_, err = machinesColl.Indexes().CreateOne(ctx, idx)
+		_, err = workersColl.Indexes().CreateOne(ctx, idx)
 		if err != nil {
 			var ce mongo.CommandError
 			if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
 				continue
 			}
-			return fmt.Errorf("create machines index: %w", err)
+			return fmt.Errorf("create workers index: %w", err)
 		}
 	}
 	// Unique index on job_executions.job_id for fast lookup by job UUID

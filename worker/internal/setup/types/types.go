@@ -1,6 +1,6 @@
 package types
 
-// SetupRequest is sent to the server to register a new machine
+// SetupRequest is sent to the server to register a new worker
 type SetupRequest struct {
 	Name      string            `json:"name"`
 	Hostname  string            `json:"hostname"`
@@ -10,12 +10,12 @@ type SetupRequest struct {
 	IP        string            `json:"ip"`
 	Version   string            `json:"version"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
-	ClaimCode string            `json:"claim_code,omitempty"` // optional; links machine to user
+	ClaimCode string            `json:"claim_code,omitempty"` // optional; links worker to user
 }
 
 // SetupResponse is returned by the server after registration
 type SetupResponse struct {
-	MachineID   string `json:"machine_id"`
+	WorkerID    string `json:"worker_id"`
 	GRPCAddress string `json:"grpc_address"`
 	Message     string `json:"message"`
 }

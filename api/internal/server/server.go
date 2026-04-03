@@ -9,7 +9,6 @@ import (
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
-	"github.com/lute/api/internal/machines"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/router"
 	"github.com/lute/api/internal/worker"
@@ -21,7 +20,7 @@ type Server struct {
 	GRPC               *grpc.Server
 	Hub                *websocket.Hub
 	HeartbeatChecker   *worker.HeartbeatChecker
-	MachineSnapshotJob *machines.MachineSnapshotJob
+	WorkerSnapshotJob  *worker.WorkerSnapshotJob
 	QueueScheduler     *queue.Scheduler
 	checkerCtx         context.Context
 	checkerStop        context.CancelFunc
@@ -34,11 +33,11 @@ type Server struct {
 func New(
 	cfg *config.Config,
 	db *connection.MongoDB,
-	machineRepo *repos.MachineRepository,
+	workerRepo *repos.WorkerRepository,
 	userRepo *repos.UserRepository,
 	commandRepo *repos.CommandRepository,
 	uptimeSnapshotRepo *repos.UptimeSnapshotRepository,
-	machineSnapshotRepo *repos.MachineSnapshotRepository,
+	workerSnapshotRepo *repos.WorkerSnapshotRepository,
 	jobExecutionRepo *repos.JobExecutionRepository,
 	queueEngine *queue.Engine,
 	queueScheduler *queue.Scheduler,
@@ -47,9 +46,9 @@ func New(
 	hub := websocket.NewHub()
 	go hub.Run()
 
-	grpcServer := grpc.NewServer(cfg, machineRepo, jobExecutionRepo, queueEngine, statsAgg, hub)
+	grpcServer := grpc.NewServer(cfg, workerRepo, jobExecutionRepo, queueEngine, statsAgg, hub)
 
-	r := router.SetupRouter(cfg, db, machineRepo, userRepo, commandRepo, uptimeSnapshotRepo, machineSnapshotRepo, hub, queueEngine, statsAgg, grpcServer, jobExecutionRepo)
+	r := router.SetupRouter(cfg, db, workerRepo, userRepo, commandRepo, uptimeSnapshotRepo, workerSnapshotRepo, hub, queueEngine, statsAgg, grpcServer, jobExecutionRepo)
 
 	httpServer := &http.Server{
 		Addr:         cfg.Server.Host + ":" + cfg.Server.Port,
@@ -60,7 +59,7 @@ func New(
 	}
 
 	heartbeatChecker := worker.NewHeartbeatChecker(
-		machineRepo,
+		workerRepo,
 		grpcServer.ConnMgr,
 		cfg.Heartbeat.CheckInterval,
 		cfg.Heartbeat.PingTimeout,
@@ -76,15 +75,15 @@ func New(
 		})
 	}
 
-	machineSnapshotJob := machines.NewMachineSnapshotJob(machineRepo, machineSnapshotRepo, cfg.Metrics.SnapshotInterval)
+	workerSnapshotJob := worker.NewWorkerSnapshotJob(workerRepo, workerSnapshotRepo, cfg.Metrics.SnapshotInterval)
 
 	return &Server{
-		HTTP:               httpServer,
-		GRPC:               grpcServer,
-		Hub:                hub,
-		HeartbeatChecker:   heartbeatChecker,
-		MachineSnapshotJob: machineSnapshotJob,
-		QueueScheduler:     queueScheduler,
+		HTTP:              httpServer,
+		GRPC:              grpcServer,
+		Hub:               hub,
+		HeartbeatChecker:  heartbeatChecker,
+		WorkerSnapshotJob:   workerSnapshotJob,
+		QueueScheduler:    queueScheduler,
 	}
 }
 
@@ -93,7 +92,7 @@ func (s *Server) Start() error {
 	go s.HeartbeatChecker.Start(s.checkerCtx)
 
 	s.snapshotJobCtx, s.snapshotJobCancel = context.WithCancel(context.Background())
-	go s.MachineSnapshotJob.Run(s.snapshotJobCtx)
+	go s.WorkerSnapshotJob.Run(s.snapshotJobCtx)
 
 	if s.QueueScheduler != nil {
 		s.schedulerCtx, s.schedulerCancel = context.WithCancel(context.Background())

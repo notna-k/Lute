@@ -3,11 +3,11 @@ package models
 import "time"
 
 // JobExecution records the outcome of a job run, including references to
-// log files stored on the worker machine that executed it.
+// log files stored on the worker that executed it.
 type JobExecution struct {
 	BaseModel        `bson:",inline"`
 	JobID            string    `json:"job_id" bson:"job_id"`
-	MachineID        string    `json:"machine_id" bson:"machine_id"`
+	WorkerID         string    `json:"worker_id" bson:"worker_id"`
 	Queue            string    `json:"queue" bson:"queue"`
 	Type             string    `json:"type" bson:"type"`
 	Success          bool      `json:"success" bson:"success"`

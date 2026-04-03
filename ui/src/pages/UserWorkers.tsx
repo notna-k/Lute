@@ -20,16 +20,16 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Link } from 'react-router-dom';
-import { useUserMachines, useReEnableMachine, useDeleteMachine } from '../hooks/useMachines';
-import { Machine } from '../types';
-import AddMachineDialog from '../components/AddMachineDialog';
+import { useUserWorkers, useReEnableWorker, useDeleteWorker } from '../hooks/useWorkers';
+import { Worker } from '../types';
+import AddWorkerDialog from '../components/AddWorkerDialog';
 
-const UserMachines = () => {
-  const { data: machines, isLoading, error, refetch } = useUserMachines();
+const UserWorkers = () => {
+  const { data: workers, isLoading, error, refetch } = useUserWorkers();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
-  const reEnableMutation = useReEnableMachine();
-  const deleteMutation = useDeleteMachine();
+  const [deleteTarget, setDeleteTarget] = useState<Worker | null>(null);
+  const reEnableMutation = useReEnableWorker();
+  const deleteMutation = useDeleteWorker();
 
   const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
     switch (status) {
@@ -48,12 +48,12 @@ const UserMachines = () => {
     }
   };
 
-  const handleReEnable = (machineId: string) => {
-    reEnableMutation.mutate(machineId, { onSuccess: () => refetch() });
+  const handleReEnable = (workerId: string) => {
+    reEnableMutation.mutate(workerId, { onSuccess: () => refetch() });
   };
 
-  const handleDeleteClick = (machine: Machine) => {
-    setDeleteTarget(machine);
+  const handleDeleteClick = (w: Worker) => {
+    setDeleteTarget(w);
   };
 
   const handleDeleteConfirm = () => {
@@ -82,7 +82,7 @@ const UserMachines = () => {
     return (
       <Box>
         <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load machines: {error instanceof Error ? error.message : 'Unknown error'}
+          Failed to load workers: {error instanceof Error ? error.message : 'Unknown error'}
         </Alert>
         <Button onClick={() => refetch()} variant="outlined">
           Retry
@@ -96,10 +96,10 @@ const UserMachines = () => {
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-            My Machines
+            My Workers
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Manage your virtual machines
+            Manage your registered workers and agents
           </Typography>
         </Box>
         <Button
@@ -107,18 +107,18 @@ const UserMachines = () => {
           startIcon={<AddIcon />}
           onClick={() => setAddDialogOpen(true)}
         >
-          Add Machine
+          Add Worker
         </Button>
       </Box>
 
-      {machines && machines.length > 0 ? (
+      {workers && workers.length > 0 ? (
         <Paper>
           <List>
-            {machines.map((machine: Machine, index: number) => (
+            {workers.map((w: Worker, index: number) => (
               <ListItem
-                key={machine.id}
+                key={w.id}
                 sx={{
-                  borderBottom: index < machines.length - 1 ? 1 : 0,
+                  borderBottom: index < workers.length - 1 ? 1 : 0,
                   borderColor: 'divider',
                   '&:hover': {
                     bgcolor: 'action.hover',
@@ -135,44 +135,44 @@ const UserMachines = () => {
                         height: 40,
                       }}
                     >
-                      {machine.name.charAt(0).toUpperCase()}
+                      {w.name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="medium">
-                        {machine.name}
+                        {w.name}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {machine.description || 'No description'}
+                        {w.description || 'No description'}
                       </Typography>
                     </Box>
                   </Box>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Chip
-                      label={machine.status}
-                      color={getStatusColor(machine.status)}
+                      label={w.status}
+                      color={getStatusColor(w.status)}
                       size="small"
                     />
-                    {machine.is_public && (
+                    {w.is_public && (
                       <Chip
                         label="Public"
                         size="small"
                         color="secondary"
                       />
                     )}
-                    {machine.status === 'dead' && (
+                    {w.status === 'dead' && (
                       <Button
                         variant="outlined"
                         color="primary"
                         size="small"
-                        disabled={reEnableMutation.isPending && reEnableMutation.variables === machine.id}
-                        onClick={() => handleReEnable(machine.id)}
+                        disabled={reEnableMutation.isPending && reEnableMutation.variables === w.id}
+                        onClick={() => handleReEnable(w.id)}
                       >
-                        {reEnableMutation.isPending && reEnableMutation.variables === machine.id ? 'Re-enabling…' : 'Re-enable'}
+                        {reEnableMutation.isPending && reEnableMutation.variables === w.id ? 'Re-enabling…' : 'Re-enable'}
                       </Button>
                     )}
                     <Button
                       component={Link}
-                      to={`/machines/${machine.id}`}
+                      to={`/workers/${w.id}`}
                       variant="text"
                       color="primary"
                       size="small"
@@ -180,11 +180,11 @@ const UserMachines = () => {
                       Manage
                     </Button>
                     <IconButton
-                      aria-label={`Delete ${machine.name}`}
+                      aria-label={`Delete ${w.name}`}
                       color="error"
                       size="small"
-                      onClick={() => handleDeleteClick(machine)}
-                      disabled={deleteMutation.isPending && deleteMutation.variables === machine.id}
+                      onClick={() => handleDeleteClick(w)}
+                      disabled={deleteMutation.isPending && deleteMutation.variables === w.id}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -197,7 +197,7 @@ const UserMachines = () => {
       ) : (
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography variant="body1" color="text.secondary" gutterBottom>
-            No machines found
+            No workers found
           </Typography>
           <Button
             variant="contained"
@@ -205,12 +205,12 @@ const UserMachines = () => {
             sx={{ mt: 2 }}
             onClick={() => setAddDialogOpen(true)}
           >
-            Add your first machine
+            Add your first worker
           </Button>
         </Box>
       )}
 
-      <AddMachineDialog
+      <AddWorkerDialog
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
       />
@@ -218,18 +218,18 @@ const UserMachines = () => {
       <Dialog
         open={!!deleteTarget}
         onClose={handleDeleteCancel}
-        aria-labelledby="delete-machine-title"
-        aria-describedby="delete-machine-description"
+        aria-labelledby="delete-worker-title"
+        aria-describedby="delete-worker-description"
       >
-        <DialogTitle id="delete-machine-title">
-          Delete machine?
+        <DialogTitle id="delete-worker-title">
+          Delete worker?
         </DialogTitle>
         <DialogContent>
-          <DialogContentText id="delete-machine-description">
+          <DialogContentText id="delete-worker-description">
             {deleteTarget && (
               <>
                 Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
-                This will remove the machine and its history. This action cannot be undone.
+                This will remove the worker and its history. This action cannot be undone.
               </>
             )}
           </DialogContentText>
@@ -252,4 +252,4 @@ const UserMachines = () => {
   );
 };
 
-export default UserMachines;
+export default UserWorkers;

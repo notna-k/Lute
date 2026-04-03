@@ -20,14 +20,14 @@ import (
 	"github.com/lute/api/internal/websocket"
 )
 
-func ParseMachineID(hex string) (primitive.ObjectID, error) {
+func ParseWorkerID(hex string) (primitive.ObjectID, error) {
 	return primitive.ObjectIDFromHex(hex)
 }
 
 type Server struct {
 	pb.UnimplementedWorkerServiceServer
 	config                 *config.Config
-	machineRepo            *repos.MachineRepository
+	workerRepo             *repos.WorkerRepository
 	jobExecRepo            *repos.JobExecutionRepository
 	queueEngine            *queue.Engine
 	statsAgg               *queue.StatsAggregator
@@ -39,15 +39,15 @@ type Server struct {
 
 func NewServer(
 	cfg *config.Config,
-	machineRepo *repos.MachineRepository,
+	workerRepo *repos.WorkerRepository,
 	jobExecRepo *repos.JobExecutionRepository,
 	queueEngine *queue.Engine,
 	statsAgg *queue.StatsAggregator,
 	hub *websocket.Hub,
 ) *Server {
 	return &Server{
-		config:      cfg,
-		machineRepo: machineRepo,
+		config:     cfg,
+		workerRepo: workerRepo,
 		jobExecRepo: jobExecRepo,
 		queueEngine: queueEngine,
 		statsAgg:    statsAgg,
@@ -82,57 +82,55 @@ func (s *Server) Stop() {
 }
 
 // Connect handles the bidirectional stream opened by a worker.
-// The first message must carry the machine_id. After registration in the
-// ConnectionManager, Run() takes over: it handles heartbeat pings, job
-// assignments, and incoming results/pongs.
+// The first message must carry worker_id.
 func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	first, err := stream.Recv()
 	if err != nil {
 		return fmt.Errorf("connect: failed to receive initial message: %w", err)
 	}
 
-	machineID := first.GetMachineId()
-	if machineID == "" {
-		return fmt.Errorf("connect: machine_id is required in the first message")
+	workerID := first.GetWorkerId()
+	if workerID == "" {
+		return fmt.Errorf("connect: worker_id is required in the first message")
 	}
 
-	mid, err := ParseMachineID(machineID)
+	wid, err := ParseWorkerID(workerID)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
 
-	machine, err := s.machineRepo.GetByID(stream.Context(), mid)
+	w, err := s.workerRepo.GetByID(stream.Context(), wid)
 	if err != nil {
-		return fmt.Errorf("connect: machine %s not found: %w", machineID, err)
+		return fmt.Errorf("connect: worker %s not found: %w", workerID, err)
 	}
-	if machine.Status == "dead" {
-		return fmt.Errorf("connect: machine %s is dead; set status to pending to re-enable", machineID)
+	if w.Status == "dead" {
+		return fmt.Errorf("connect: worker %s is dead; set status to pending to re-enable", workerID)
 	}
 
-	if machine.Status == "pending" {
-		if err := s.machineRepo.UpdateStatus(stream.Context(), mid, "registered"); err != nil {
-			log.Printf("Connect: failed to set machine %s to registered: %v", machineID, err)
+	if w.Status == "pending" {
+		if err := s.workerRepo.UpdateStatus(stream.Context(), wid, "registered"); err != nil {
+			log.Printf("Connect: failed to set worker %s to registered: %v", workerID, err)
 		} else {
-			machine.Status = "registered"
+			w.Status = "registered"
 		}
 	}
 
-	log.Printf("Connect: worker %s connected", machineID)
+	log.Printf("Connect: worker %s connected", workerID)
 
-	conn := s.ConnMgr.Register(machineID, stream)
+	conn := s.ConnMgr.Register(workerID, stream)
 	if s.OnConnectionRegistered != nil {
 		s.OnConnectionRegistered()
 	}
 	defer func() {
-		s.ConnMgr.Unregister(machineID)
-		log.Printf("Connect: worker %s disconnected", machineID)
+		s.ConnMgr.Unregister(workerID)
+		log.Printf("Connect: worker %s disconnected", workerID)
 	}()
 
 	conn.Run(s.handleJobResult, s.handleWorkerRegistration)
 	return nil
 }
 
-func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
+func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 	ctx := context.Background()
 	var job *queue.Job
 	if result.Success {
@@ -155,7 +153,7 @@ func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
 		}
 	}
 
-	s.persistExecution(ctx, machineID, result)
+	s.persistExecution(ctx, workerID, result)
 
 	// Pull more pending work now that this worker has a free slot.
 	if job != nil {
@@ -163,7 +161,7 @@ func (s *Server) handleJobResult(machineID string, result *pb.JobResult) {
 	}
 }
 
-func (s *Server) persistExecution(ctx context.Context, machineID string, result *pb.JobResult) {
+func (s *Server) persistExecution(ctx context.Context, workerID string, result *pb.JobResult) {
 	if s.jobExecRepo == nil {
 		return
 	}
@@ -172,7 +170,7 @@ func (s *Server) persistExecution(ctx context.Context, machineID string, result 
 
 	exec := &models.JobExecution{
 		JobID:            result.JobId,
-		MachineID:        machineID,
+		WorkerID:         workerID,
 		Success:          result.Success,
 		Error:            result.Error,
 		ElapsedMs:        result.ElapsedMs,
@@ -190,8 +188,8 @@ func (s *Server) persistExecution(ctx context.Context, machineID string, result 
 	}
 }
 
-func (s *Server) handleWorkerRegistration(machineID string, reg *pb.WorkerRegistration) {
-	log.Printf("Worker %s registered: queues=%v concurrency=%d", machineID, reg.Queues, reg.Concurrency)
+func (s *Server) handleWorkerRegistration(workerID string, reg *pb.WorkerRegistration) {
+	log.Printf("Worker %s registered: queues=%v concurrency=%d", workerID, reg.Queues, reg.Concurrency)
 	ctx := context.Background()
 	for _, q := range reg.Queues {
 		s.DispatchQueue(ctx, q)
@@ -231,22 +229,22 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 
 	if !worker.AssignJob(assignment) {
 		_ = s.queueEngine.Fail(ctx, job.ID, "worker rejected assignment")
-		log.Printf("DispatchJob: worker %s rejected assignment for job %s", worker.MachineID, job.ID)
+		log.Printf("DispatchJob: worker %s rejected assignment for job %s", worker.WorkerID, job.ID)
 		return false
 	}
 
-	if err := s.queueEngine.SetWorkerID(ctx, job.ID, worker.MachineID); err != nil {
+	if err := s.queueEngine.SetWorkerID(ctx, job.ID, worker.WorkerID); err != nil {
 		log.Printf("DispatchJob: set worker id for job %s: %v", job.ID, err)
 	}
 
-	log.Printf("DispatchJob: assigned job %s to worker %s", job.ID, worker.MachineID)
+	log.Printf("DispatchJob: assigned job %s to worker %s", job.ID, worker.WorkerID)
 	s.broadcastJobEvent("started", job)
 	return true
 }
 
 // RequestJobLog asks a connected worker to read a chunk of a job log file.
-func (s *Server) RequestJobLog(ctx context.Context, machineID string, req *pb.JobLogRequest) (*pb.JobLogResponse, error) {
-	conn := s.ConnMgr.Get(machineID)
+func (s *Server) RequestJobLog(ctx context.Context, workerID string, req *pb.JobLogRequest) (*pb.JobLogResponse, error) {
+	conn := s.ConnMgr.Get(workerID)
 	if conn == nil {
 		return nil, ErrNoConnection
 	}

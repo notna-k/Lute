@@ -11,17 +11,21 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { usePublicMachines } from '../hooks/useMachines';
+import { usePublicWorkers } from '../hooks/useWorkers';
 
-const PublicMachines = () => {
-  const { data: machines, isLoading, error, refetch } = usePublicMachines();
+const PublicWorkers = () => {
+  const { data: workers, isLoading, error, refetch } = usePublicWorkers();
 
   const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
     switch (status) {
+      case 'alive':
       case 'running':
         return 'success';
+      case 'dead':
       case 'stopped':
         return 'error';
+      case 'pending':
+      case 'registered':
       case 'paused':
         return 'warning';
       default:
@@ -41,7 +45,7 @@ const PublicMachines = () => {
     return (
       <Box>
         <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load public machines: {error instanceof Error ? error.message : 'Unknown error'}
+          Failed to load public workers: {error instanceof Error ? error.message : 'Unknown error'}
         </Alert>
         <Button onClick={() => refetch()} variant="outlined">
           Retry
@@ -54,21 +58,21 @@ const PublicMachines = () => {
     <Box>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-          Public Machines
+          Public Workers
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Browse shared virtual machines from the community
+          Browse shared workers from the community
         </Typography>
       </Box>
 
-      {machines && machines.length > 0 ? (
+      {workers && workers.length > 0 ? (
         <Paper>
           <List>
-            {machines.map((machine, index) => (
+            {workers.map((w, index) => (
               <ListItem
-                key={machine.id}
+                key={w.id}
                 sx={{
-                  borderBottom: index < machines.length - 1 ? 1 : 0,
+                  borderBottom: index < workers.length - 1 ? 1 : 0,
                   borderColor: 'divider',
                   '&:hover': {
                     bgcolor: 'action.hover',
@@ -85,12 +89,12 @@ const PublicMachines = () => {
                         height: 40,
                       }}
                     >
-                      {machine.name.charAt(0).toUpperCase()}
+                      {w.name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="subtitle1" fontWeight="medium">
-                          {machine.name}
+                          {w.name}
                         </Typography>
                         <Chip
                           label="Public"
@@ -100,14 +104,14 @@ const PublicMachines = () => {
                         />
                       </Box>
                       <Typography variant="body2" color="text.secondary">
-                        {machine.description || 'No description'}
+                        {w.description || 'No description'}
                       </Typography>
                     </Box>
                   </Box>
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Chip
-                      label={machine.status}
-                      color={getStatusColor(machine.status)}
+                      label={w.status}
+                      color={getStatusColor(w.status)}
                       size="small"
                     />
                     <Button
@@ -126,7 +130,7 @@ const PublicMachines = () => {
       ) : (
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography variant="body1" color="text.secondary">
-            No public machines available
+            No public workers available
           </Typography>
         </Box>
       )}
@@ -134,4 +138,4 @@ const PublicMachines = () => {
   );
 };
 
-export default PublicMachines;
+export default PublicWorkers;

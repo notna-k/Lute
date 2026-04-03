@@ -6,8 +6,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Machine represents a virtual machine with embedded agent data
-type Machine struct {
+// Worker is a registered compute node that runs the Lute agent and executes jobs.
+type Worker struct {
 	BaseModel      `bson:",inline"`
 	UserID         primitive.ObjectID     `json:"user_id" bson:"user_id"`
 	Name           string                 `json:"name" bson:"name"`

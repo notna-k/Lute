@@ -8,8 +8,8 @@ const metricsUpdateIntervalMs = (() => {
     return Number.isFinite(sec) && sec > 0 ? sec * 1000 : 60 * 1000;
 })();
 
-export const useDashboardUptime = (period: DashboardUptimePeriod = '7d', machineId?: string) => {
-    const enabled = machineId === undefined || machineId.length > 0;
+export const useDashboardUptime = (period: DashboardUptimePeriod = '7d', workerId?: string) => {
+    const enabled = workerId === undefined || workerId.length > 0;
 
     const [data, setData] = useState<DashboardUptimeResponse | undefined>(undefined);
     const [isLoading, setIsLoading] = useState(true);
@@ -19,7 +19,7 @@ export const useDashboardUptime = (period: DashboardUptimePeriod = '7d', machine
     const fetchUptime = useCallback(() => {
         if (!enabled) return;
         return dashboardService
-            .getUptime(period, machineId)
+            .getUptime(period, workerId)
             .then((res) => {
                 setData(res);
                 setIsError(false);
@@ -30,7 +30,7 @@ export const useDashboardUptime = (period: DashboardUptimePeriod = '7d', machine
                 setError(err instanceof Error ? err : new Error(String(err)));
             })
             .finally(() => setIsLoading(false));
-    }, [period, machineId, enabled]);
+    }, [period, workerId, enabled]);
 
     useEffect(() => {
         if (!enabled) {

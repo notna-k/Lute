@@ -297,7 +297,11 @@ export default function ExecutionsHistory() {
                                         </TableCell>
                                         <TableCell>
                                             <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                                                {ex.machine_id.length > 10 ? `${ex.machine_id.slice(0, 8)}…` : ex.machine_id}
+                                                {ex.worker_id
+                                                    ? ex.worker_id.length > 10
+                                                        ? `${ex.worker_id.slice(0, 8)}…`
+                                                        : ex.worker_id
+                                                    : '—'}
                                             </Typography>
                                         </TableCell>
                                         <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>

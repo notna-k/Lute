@@ -1,4 +1,4 @@
-package machines
+package worker
 
 import (
 	"net/http"
@@ -9,221 +9,177 @@ import (
 	"github.com/lute/api/internal/db/models"
 )
 
-type MachineHandler struct {
-	machineService *MachineService
-}
-
-func NewMachineHandler(machineService *MachineService) *MachineHandler {
-	return &MachineHandler{
-		machineService: machineService,
-	}
-}
-
-// CreateMachine handles POST /api/v1/machines
-func (h *MachineHandler) CreateMachine(c *gin.Context) {
-	var machine models.Machine
-	if err := c.ShouldBindJSON(&machine); err != nil {
+func (h *WorkerHandler) CreateWorker(c *gin.Context) {
+	var w models.Worker
+	if err := c.ShouldBindJSON(&w); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// Get user ID from context (set by auth middleware)
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-
 	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
-
-	createdMachine, err := h.machineService.Create(c.Request.Context(), userIDObj, &machine)
+	created, err := h.workerService.Create(c.Request.Context(), userIDObj, &w)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusCreated, createdMachine)
+	c.JSON(http.StatusCreated, created)
 }
 
-// GetMachine handles GET /api/v1/machines/:id
-func (h *MachineHandler) GetMachine(c *gin.Context) {
+func (h *WorkerHandler) GetWorker(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
 	}
-
-	machine, err := h.machineService.GetByID(c.Request.Context(), id)
+	w, err := h.workerService.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if err.Error() == "machine not found" {
+		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, machine)
+	c.JSON(http.StatusOK, w)
 }
 
-// ListUserMachines handles GET /api/v1/machines
-func (h *MachineHandler) ListUserMachines(c *gin.Context) {
+func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-
 	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
-
-	machines, err := h.machineService.GetByUserID(c.Request.Context(), userIDObj)
+	list, err := h.workerService.GetByUserID(c.Request.Context(), userIDObj)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, machines)
+	c.JSON(http.StatusOK, list)
 }
 
-// ListPublicMachines handles GET /api/v1/machines/public
-func (h *MachineHandler) ListPublicMachines(c *gin.Context) {
-	machines, err := h.machineService.GetPublic(c.Request.Context())
+func (h *WorkerHandler) ListPublicWorkers(c *gin.Context) {
+	list, err := h.workerService.GetPublic(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, machines)
+	c.JSON(http.StatusOK, list)
 }
 
-// UpdateMachine handles PUT /api/v1/machines/:id
-func (h *MachineHandler) UpdateMachine(c *gin.Context) {
+func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
 	}
-
-	// Get user ID from context
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-
 	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
-
-	var machine models.Machine
-	if err := c.ShouldBindJSON(&machine); err != nil {
+	var w models.Worker
+	if err := c.ShouldBindJSON(&w); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	updatedMachine, err := h.machineService.Update(c.Request.Context(), id, userIDObj, &machine)
+	updated, err := h.workerService.Update(c.Request.Context(), id, userIDObj, &w)
 	if err != nil {
-		if err.Error() == "machine not found" {
+		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "unauthorized: machine does not belong to user" {
+		if err.Error() == "unauthorized: worker does not belong to user" {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, updatedMachine)
-}
-
-// ReEnableMachine handles POST /api/v1/machines/:id/re-enable (only when status is "dead").
-func (h *MachineHandler) ReEnableMachine(c *gin.Context) {
-	id, err := primitive.ObjectIDFromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
-		return
-	}
-
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return
-	}
-
-	existing, err := h.machineService.GetByID(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
-		return
-	}
-	if existing.UserID != userIDObj {
-		c.JSON(http.StatusForbidden, gin.H{"error": "machine not found"})
-		return
-	}
-	if existing.Status != "dead" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "machine is not dead; only dead machines can be re-enabled"})
-		return
-	}
-
-	if err := h.machineService.UpdateStatus(c.Request.Context(), id, "pending"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	updated, _ := h.machineService.GetByID(c.Request.Context(), id)
 	c.JSON(http.StatusOK, updated)
 }
 
-// DeleteMachine handles DELETE /api/v1/machines/:id
-func (h *MachineHandler) DeleteMachine(c *gin.Context) {
+func (h *WorkerHandler) ReEnableWorker(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
 	}
-
-	// Get user ID from context
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-
 	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
+	existing, err := h.workerService.GetByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
+		return
+	}
+	if existing.UserID != userIDObj {
+		c.JSON(http.StatusForbidden, gin.H{"error": "worker not found"})
+		return
+	}
+	if existing.Status != "dead" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "worker is not dead; only dead workers can be re-enabled"})
+		return
+	}
+	if err := h.workerService.UpdateStatus(c.Request.Context(), id, "pending"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	updated, _ := h.workerService.GetByID(c.Request.Context(), id)
+	c.JSON(http.StatusOK, updated)
+}
 
-	if err := h.machineService.Delete(c.Request.Context(), id, userIDObj); err != nil {
-		if err.Error() == "machine not found" {
+func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
+	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
+		return
+	}
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+	if err := h.workerService.Delete(c.Request.Context(), id, userIDObj); err != nil {
+		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "unauthorized: machine does not belong to user" {
+		if err.Error() == "unauthorized: worker does not belong to user" {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Machine deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Worker deleted successfully"})
 }

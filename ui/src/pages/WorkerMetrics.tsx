@@ -22,20 +22,20 @@ import {
   Area,
   AreaChart,
 } from 'recharts';
-import { useMachine, useReEnableMachine } from '../hooks/useMachines';
+import { useWorker, useReEnableWorker } from '../hooks/useWorkers';
 import { useDashboardUptime } from '../hooks/useDashboard';
 import type { DashboardUptimePeriod } from '../services/dashboardService';
 import type { ChartPoint } from '../services/dashboardService';
 
 const chartHeight = 240;
 
-const MachineMetrics = () => {
+const WorkerMetrics = () => {
   const theme = useTheme();
   const { id } = useParams<{ id: string }>();
   const [period, setPeriod] = useState<DashboardUptimePeriod>('7d');
-  const { data: machine, isLoading: machineLoading, isError: machineError, refetch: refetchMachine } = useMachine(id ?? '');
+  const { data: worker, isLoading: workerLoading, isError: workerError, refetch: refetchWorker } = useWorker(id ?? '');
   const { data: chartData, isLoading: uptimeLoading } = useDashboardUptime(period, id ?? undefined);
-  const reEnableMutation = useReEnableMachine();
+  const reEnableMutation = useReEnableWorker();
 
   const points: ChartPoint[] = chartData?.points ?? [];
   const domain: [number, number] = chartData
@@ -57,13 +57,13 @@ const MachineMetrics = () => {
   if (!id) {
     return (
       <Box>
-        <Typography color="error">Missing machine ID</Typography>
-        <Link component={RouterLink} to="/machines">Back to My Machines</Link>
+        <Typography color="error">Missing worker ID</Typography>
+        <Link component={RouterLink} to="/workers">Back to My Workers</Link>
       </Box>
     );
   }
 
-  if (machineLoading) {
+  if (workerLoading) {
     return (
       <Box>
         <Skeleton variant="text" width={200} height={40} />
@@ -72,12 +72,12 @@ const MachineMetrics = () => {
     );
   }
 
-  if (machineError || !machine) {
+  if (workerError || !worker) {
     return (
       <Box>
-        <Typography color="error">Machine not found</Typography>
-        <Link component={RouterLink} to="/machines" sx={{ mt: 1, display: 'inline-block' }}>
-          Back to My Machines
+        <Typography color="error">Worker not found</Typography>
+        <Link component={RouterLink} to="/workers" sx={{ mt: 1, display: 'inline-block' }}>
+          Back to My Workers
         </Link>
       </Box>
     );
@@ -90,7 +90,7 @@ const MachineMetrics = () => {
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Link
           component={RouterLink}
-          to="/machines"
+          to="/workers"
           sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
         >
           <ArrowBackIcon sx={{ mr: 0.5 }} /> Back
@@ -98,24 +98,24 @@ const MachineMetrics = () => {
       </Box>
       <Box sx={{ mb: 2 }}>
         <Typography variant="h4" component="h1" fontWeight="bold">
-          {machine.name}
+          {worker.name}
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Uptime, CPU, memory and disk usage
         </Typography>
       </Box>
-      {machine.status === 'dead' && id && (
+      {worker.status === 'dead' && id && (
         <Alert severity="warning" sx={{ mb: 2 }} action={
           <Button
             color="inherit"
             size="small"
             disabled={reEnableMutation.isPending}
-            onClick={() => reEnableMutation.mutate(id, { onSuccess: () => refetchMachine() })}
+            onClick={() => reEnableMutation.mutate(id, { onSuccess: () => refetchWorker() })}
           >
             {reEnableMutation.isPending ? 'Re-enabling…' : 'Re-enable'}
           </Button>
         }>
-          This machine is marked dead. Re-enable to allow the agent to connect again.
+          This worker is marked dead. Re-enable to allow the agent to connect again.
         </Alert>
       )}
       <Box sx={{ mb: 2 }}>
@@ -140,7 +140,6 @@ const MachineMetrics = () => {
 
       {!empty && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {/* CPU load */}
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" fontWeight="medium" gutterBottom>CPU load</Typography>
             {uptimeLoading ? (
@@ -161,7 +160,6 @@ const MachineMetrics = () => {
             )}
           </Paper>
 
-          {/* Memory */}
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" fontWeight="medium" gutterBottom>Memory (MB)</Typography>
             {uptimeLoading ? (
@@ -182,7 +180,6 @@ const MachineMetrics = () => {
             )}
           </Paper>
 
-          {/* Disk used (GB), Y max = machine disk size */}
           <Paper sx={{ p: 2 }}>
             <Typography variant="subtitle1" fontWeight="medium" gutterBottom>Disk used (GB)</Typography>
             {uptimeLoading ? (
@@ -208,4 +205,4 @@ const MachineMetrics = () => {
   );
 };
 
-export default MachineMetrics;
+export default WorkerMetrics;

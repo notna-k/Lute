@@ -5,8 +5,8 @@ export interface User {
   photoURL: string | null;
 }
 
-// Machine interface matching backend API response
-export interface Machine {
+// Worker row from API (registered agent / compute node).
+export interface Worker {
   id: string;
   user_id: string;
   name: string;

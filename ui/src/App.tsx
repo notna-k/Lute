@@ -4,9 +4,9 @@ import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import UserMachines from './pages/UserMachines';
-import PublicMachines from './pages/PublicMachines';
-import MachineMetrics from './pages/MachineMetrics';
+import UserWorkers from './pages/UserWorkers';
+import PublicWorkers from './pages/PublicWorkers';
+import WorkerMetrics from './pages/WorkerMetrics';
 import ExecutionsHistory from './pages/ExecutionsHistory';
 import JobDetail from './pages/JobDetail';
 
@@ -26,26 +26,26 @@ function App() {
               }
             />
             <Route
-              path="/machines/:id"
+              path="/workers/:id"
               element={
                 <ProtectedRoute>
-                  <MachineMetrics />
+                  <WorkerMetrics />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/machines"
+              path="/workers"
               element={
                 <ProtectedRoute>
-                  <UserMachines />
+                  <UserWorkers />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/public-machines"
+              path="/public-workers"
               element={
                 <ProtectedRoute>
-                  <PublicMachines />
+                  <PublicWorkers />
                 </ProtectedRoute>
               }
             />
@@ -74,4 +74,3 @@ function App() {
 }
 
 export default App;
-

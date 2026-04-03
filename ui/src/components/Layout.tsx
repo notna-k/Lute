@@ -34,14 +34,14 @@ const Layout = ({ children }: LayoutProps) => {
 
   const getTabValue = (): number | false => {
     if (location.pathname === '/dashboard') return 0;
-    if (location.pathname === '/machines' || /^\/machines\/[^/]+$/.test(location.pathname)) return 1;
-    if (location.pathname === '/public-machines') return 2;
+    if (location.pathname === '/workers' || /^\/workers\/[^/]+$/.test(location.pathname)) return 1;
+    if (location.pathname === '/public-workers') return 2;
     if (location.pathname === '/jobs' || location.pathname.startsWith('/jobs/')) return 3;
     return false;
   };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    const paths = ['/dashboard', '/machines', '/public-machines', '/jobs'];
+    const paths = ['/dashboard', '/workers', '/public-workers', '/jobs'];
     navigate(paths[newValue]);
   };
 
@@ -72,8 +72,8 @@ const Layout = ({ children }: LayoutProps) => {
               textColor="inherit"
             >
               <Tab label="Dashboard" />
-              <Tab label="My Machines" />
-              <Tab label="Public Machines" />
+              <Tab label="My Workers" />
+              <Tab label="Public Workers" />
               <Tab label="Executions" />
             </Tabs>
           )}

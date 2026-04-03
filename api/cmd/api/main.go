@@ -22,11 +22,11 @@ func main() {
 	srv := server.New(
 		deps.Config,
 		deps.Database,
-		deps.MachineRepo,
+		deps.WorkerRepo,
 		deps.UserRepo,
 		deps.CommandRepo,
 		deps.UptimeSnapshotRepo,
-		deps.MachineSnapshotRepo,
+		deps.WorkerSnapshotRepo,
 		deps.JobExecutionRepo,
 		deps.QueueEngine,
 		deps.QueueScheduler,

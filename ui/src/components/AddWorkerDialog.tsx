@@ -20,7 +20,7 @@ import {
 } from '@mui/icons-material';
 import { apiClient } from '../services/api';
 
-interface AddMachineDialogProps {
+interface AddWorkerDialogProps {
   open: boolean;
   onClose: () => void;
 }
@@ -32,7 +32,7 @@ interface ClaimCodeResponse {
   expires_at: string;
 }
 
-const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
+const AddWorkerDialog = ({ open, onClose }: AddWorkerDialogProps) => {
   const [copied, setCopied] = useState(false);
   const [claimCode, setClaimCode] = useState<string | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
     setClaimError(null);
     setClaimLoading(true);
     apiClient
-      .post<ClaimCodeResponse>('/api/v1/worker/claim-code')
+      .post<ClaimCodeResponse>('/api/v1/workers/claim-code')
       .then((res) => {
         setClaimCode(res.code);
         setClaimError(null);
@@ -56,7 +56,7 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
       .finally(() => setClaimLoading(false));
   }, [open]);
 
-  const installCommand = `curl -sSL ${API_URL}/api/v1/worker/install.sh | bash`;
+  const installCommand = `curl -sSL ${API_URL}/api/v1/workers/bootstrap/install.sh | bash`;
   const setupCommand = `lute-worker --setup --api ${API_URL}`;
   const fullCommand =
     claimCode != null
@@ -93,16 +93,15 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <TerminalIcon color="primary" />
           <Typography variant="h6" fontWeight="bold">
-            Add New Machine
+            Add New Worker
           </Typography>
         </Box>
       </DialogTitle>
 
       <DialogContent>
         <Alert severity="info" sx={{ mb: 2 }}>
-          Run the command below on the target VM. It will install the agent and
-          register the machine to your account. The machine will appear in your
-          list automatically.
+          Run the command below on the target host. It will install the agent and
+          register the worker to your account. It will appear in your list automatically.
         </Alert>
 
         {claimLoading && (
@@ -116,7 +115,7 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
 
         {claimError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {claimError}. A claim code is required to add a machine. Make sure
+            {claimError}. A claim code is required to add a worker. Make sure
             you are logged in and try again.
           </Alert>
         )}
@@ -124,7 +123,7 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
         {claimCode && (
           <>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Your claim code expires in 15 minutes. Run the command on the VM
+              Your claim code expires in 15 minutes. Run the command on the host
               before it expires.
             </Typography>
 
@@ -196,4 +195,4 @@ const AddMachineDialog = ({ open, onClose }: AddMachineDialogProps) => {
   );
 };
 
-export default AddMachineDialog;
+export default AddWorkerDialog;

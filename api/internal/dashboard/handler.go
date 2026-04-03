@@ -10,22 +10,22 @@ import (
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
-	"github.com/lute/api/internal/machines"
+	wsvc "github.com/lute/api/internal/worker"
 )
 
 // DashboardHandler handles dashboard stats and uptime API.
 type DashboardHandler struct {
-	cfg            *config.Config
-	machineService *machines.MachineService
-	snapshotRepo   *repos.MachineSnapshotRepository
+	cfg           *config.Config
+	workerService *wsvc.WorkerService
+	snapshotRepo  *repos.WorkerSnapshotRepository
 }
 
 // NewDashboardHandler creates a new DashboardHandler.
-func NewDashboardHandler(cfg *config.Config, machineService *machines.MachineService, snapshotRepo *repos.MachineSnapshotRepository) *DashboardHandler {
+func NewDashboardHandler(cfg *config.Config, workerService *wsvc.WorkerService, snapshotRepo *repos.WorkerSnapshotRepository) *DashboardHandler {
 	return &DashboardHandler{
-		cfg:            cfg,
-		machineService: machineService,
-		snapshotRepo:   snapshotRepo,
+		cfg:           cfg,
+		workerService: workerService,
+		snapshotRepo:  snapshotRepo,
 	}
 }
 
@@ -53,29 +53,29 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	machinesList, err := h.machineService.GetByUserID(ctx, userIDObj)
+	workersList, err := h.workerService.GetByUserID(ctx, userIDObj)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	var alive, dead int
-	for _, m := range machinesList {
-		switch m.Status {
+	for _, w := range workersList {
+		switch w.Status {
 		case "alive":
 			alive++
 		case "dead":
 			dead++
 		}
 	}
-	total := len(machinesList)
+	total := len(workersList)
 
-	publicMachines, err := h.machineService.GetPublic(ctx)
+	publicWorkers, err := h.workerService.GetPublic(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	publicCount := len(publicMachines)
+	publicCount := len(publicWorkers)
 
 	c.JSON(http.StatusOK, gin.H{
 		"total":  total,
@@ -128,7 +128,7 @@ func bucketDuration(period string, snapshotInterval time.Duration) time.Duration
 	return bucket
 }
 
-func buildChartPerMachine(snapshots []*models.MachineSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
+func buildChartPerWorker(snapshots []*models.WorkerSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
 	bucketMs := bucketDur.Milliseconds()
 	periodStartMs := periodStart.UnixMilli()
 	periodEndMs := periodEnd.UnixMilli()
@@ -170,7 +170,7 @@ func buildChartPerMachine(snapshots []*models.MachineSnapshot, periodStart, peri
 	return points, diskMax
 }
 
-func buildChartAggregated(snapshots []*models.MachineSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
+func buildChartAggregated(snapshots []*models.WorkerSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
 	bucketMs := bucketDur.Milliseconds()
 	periodStartMs := periodStart.UnixMilli()
 	periodEndMs := periodEnd.UnixMilli()
@@ -219,7 +219,7 @@ func buildChartAggregated(snapshots []*models.MachineSnapshot, periodStart, peri
 
 func ptrFloat(f float64) *float64 { return &f }
 
-// GetUptime handles GET /api/v1/dashboard/uptime?period=7d (optional: machine_id=hex) (authenticated).
+// GetUptime handles GET /api/v1/dashboard/uptime?period=7d (optional: worker_id=hex) (authenticated).
 func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -254,28 +254,28 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	periodEnd := time.UnixMilli((now.UnixMilli() / bucketMs) * bucketMs)
 
 	ctx := c.Request.Context()
-	machineIDHex := c.Query("machine_id")
-	if machineIDHex != "" {
-		machineID, err := primitive.ObjectIDFromHex(machineIDHex)
+	workerIDHex := c.Query("worker_id")
+	if workerIDHex != "" {
+		workerOID, err := primitive.ObjectIDFromHex(workerIDHex)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid machine ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 			return
 		}
-		machine, err := h.machineService.GetByID(ctx, machineID)
+		w, err := h.workerService.GetByID(ctx, workerOID)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
 			return
 		}
-		if machine.UserID != userIDObj {
-			c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+		if w.UserID != userIDObj {
+			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
 			return
 		}
-		snapshots, err := h.snapshotRepo.GetByMachineID(ctx, machineID, periodStart)
+		snapshots, err := h.snapshotRepo.GetByWorkerID(ctx, workerOID, periodStart)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		points, diskMax := buildChartPerMachine(snapshots, periodStart, periodEnd, bucketDur)
+		points, diskMax := buildChartPerWorker(snapshots, periodStart, periodEnd, bucketDur)
 		resp := ChartResponse{
 			Points:        points,
 			PeriodStartMs: periodStart.UnixMilli(),
@@ -287,12 +287,12 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 		return
 	}
 
-	machinesList, err := h.machineService.GetByUserID(ctx, userIDObj)
+	workersList, err := h.workerService.GetByUserID(ctx, userIDObj)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if len(machinesList) == 0 {
+	if len(workersList) == 0 {
 		c.Header("Cache-Control", "no-store")
 		c.JSON(http.StatusOK, ChartResponse{
 			Points:        nil,
@@ -302,11 +302,11 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 		})
 		return
 	}
-	machineIDs := make([]primitive.ObjectID, 0, len(machinesList))
-	for _, m := range machinesList {
-		machineIDs = append(machineIDs, m.ID)
+	workerOIDs := make([]primitive.ObjectID, 0, len(workersList))
+	for _, w := range workersList {
+		workerOIDs = append(workerOIDs, w.ID)
 	}
-	snapshots, err := h.snapshotRepo.GetByMachineIDs(ctx, machineIDs, periodStart)
+	snapshots, err := h.snapshotRepo.GetByWorkerIDs(ctx, workerOIDs, periodStart)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

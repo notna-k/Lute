@@ -9,7 +9,7 @@ service WorkerService {
 }
 
 message WorkerMessage {
-  string machine_id = 1;
+  string worker_id = 1;
   oneof payload {
     HeartbeatPong    heartbeat_pong = 2;
     JobResult        result         = 3;
@@ -72,9 +72,8 @@ message HeartbeatPong {
 }
 
 message WorkerRegistration {
-  string worker_id   = 1;
-  repeated string queues = 2;
-  int32 concurrency  = 3;
+  repeated string queues = 1;
+  int32 concurrency = 2;
 }
 
 message JobAssignment {

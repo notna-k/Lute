@@ -5,7 +5,7 @@ export interface JobExecution {
     created_at: string;
     updated_at: string;
     job_id: string;
-    machine_id: string;
+    worker_id: string;
     queue: string;
     type: string;
     success: boolean;

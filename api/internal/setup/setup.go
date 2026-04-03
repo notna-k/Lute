@@ -22,11 +22,11 @@ type Dependencies struct {
 	QueueEngine          *queue.Engine
 	QueueScheduler       *queue.Scheduler
 	StatsAggregator      *queue.StatsAggregator
-	MachineRepo          *repos.MachineRepository
+	WorkerRepo           *repos.WorkerRepository
 	UserRepo             *repos.UserRepository
 	CommandRepo          *repos.CommandRepository
 	UptimeSnapshotRepo   *repos.UptimeSnapshotRepository
-	MachineSnapshotRepo  *repos.MachineSnapshotRepository
+	WorkerSnapshotRepo   *repos.WorkerSnapshotRepository
 	JobExecutionRepo     *repos.JobExecutionRepository
 }
 
@@ -64,12 +64,12 @@ func Initialize() (*Dependencies, error) {
 		QueueEngine:         queueEngine,
 		QueueScheduler:      queueScheduler,
 		StatsAggregator:     statsAgg,
-		MachineRepo:         reposInit.MachineRepo,
-		UserRepo:            reposInit.UserRepo,
-		CommandRepo:         reposInit.CommandRepo,
-		UptimeSnapshotRepo:  reposInit.UptimeSnapshotRepo,
-		MachineSnapshotRepo: reposInit.MachineSnapshotRepo,
-		JobExecutionRepo:    reposInit.JobExecutionRepo,
+		WorkerRepo:           reposInit.WorkerRepo,
+		UserRepo:             reposInit.UserRepo,
+		CommandRepo:          reposInit.CommandRepo,
+		UptimeSnapshotRepo:   reposInit.UptimeSnapshotRepo,
+		WorkerSnapshotRepo:   reposInit.WorkerSnapshotRepo,
+		JobExecutionRepo:     reposInit.JobExecutionRepo,
 	}, nil
 }
 
@@ -119,21 +119,21 @@ func initializeDatabase(cfg *config.Config) (*connection.MongoDB, error) {
 
 // Repositories holds all repository instances
 type Repositories struct {
-	MachineRepo         *repos.MachineRepository
-	UserRepo            *repos.UserRepository
-	CommandRepo         *repos.CommandRepository
-	UptimeSnapshotRepo  *repos.UptimeSnapshotRepository
-	MachineSnapshotRepo *repos.MachineSnapshotRepository
-	JobExecutionRepo    *repos.JobExecutionRepository
+	WorkerRepo           *repos.WorkerRepository
+	UserRepo             *repos.UserRepository
+	CommandRepo          *repos.CommandRepository
+	UptimeSnapshotRepo   *repos.UptimeSnapshotRepository
+	WorkerSnapshotRepo   *repos.WorkerSnapshotRepository
+	JobExecutionRepo     *repos.JobExecutionRepository
 }
 
 func initializeRepositories(db *connection.MongoDB) *Repositories {
 	return &Repositories{
-		MachineRepo:         repos.NewMachineRepository(db.Database),
-		UserRepo:            repos.NewUserRepository(db.Database),
-		CommandRepo:         repos.NewCommandRepository(db.Database),
-		UptimeSnapshotRepo:  repos.NewUptimeSnapshotRepository(db.Database),
-		MachineSnapshotRepo: repos.NewMachineSnapshotRepository(db.Database),
-		JobExecutionRepo:    repos.NewJobExecutionRepository(db.Database),
+		WorkerRepo:           repos.NewWorkerRepository(db.Database),
+		UserRepo:             repos.NewUserRepository(db.Database),
+		CommandRepo:          repos.NewCommandRepository(db.Database),
+		UptimeSnapshotRepo:   repos.NewUptimeSnapshotRepository(db.Database),
+		WorkerSnapshotRepo:   repos.NewWorkerSnapshotRepository(db.Database),
+		JobExecutionRepo:     repos.NewJobExecutionRepository(db.Database),
 	}
 }

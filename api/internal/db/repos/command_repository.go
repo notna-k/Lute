@@ -41,12 +41,12 @@ func (r *CommandRepository) GetByID(ctx context.Context, id primitive.ObjectID) 
 	return &cmd, nil
 }
 
-// GetPendingByMachineID returns all pending commands for a machine, ordered by creation time
-func (r *CommandRepository) GetPendingByMachineID(ctx context.Context, machineID primitive.ObjectID) ([]*models.Command, error) {
+// GetPendingByWorkerID returns all pending commands for a worker, ordered by creation time
+func (r *CommandRepository) GetPendingByWorkerID(ctx context.Context, workerID primitive.ObjectID) ([]*models.Command, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
 	cursor, err := r.Collection.Find(ctx, bson.M{
-		"machine_id": machineID,
-		"status":     "pending",
+		"worker_id": workerID,
+		"status":    "pending",
 	}, opts)
 	if err != nil {
 		return nil, err
@@ -60,13 +60,13 @@ func (r *CommandRepository) GetPendingByMachineID(ctx context.Context, machineID
 	return commands, nil
 }
 
-// GetByMachineID returns all commands for a machine, ordered by creation time (newest first)
-func (r *CommandRepository) GetByMachineID(ctx context.Context, machineID primitive.ObjectID, limit int64) ([]*models.Command, error) {
+// GetByWorkerID returns all commands for a worker, ordered by creation time (newest first)
+func (r *CommandRepository) GetByWorkerID(ctx context.Context, workerID primitive.ObjectID, limit int64) ([]*models.Command, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
 	if limit > 0 {
 		opts.SetLimit(limit)
 	}
-	cursor, err := r.Collection.Find(ctx, bson.M{"machine_id": machineID}, opts)
+	cursor, err := r.Collection.Find(ctx, bson.M{"worker_id": workerID}, opts)
 	if err != nil {
 		return nil, err
 	}

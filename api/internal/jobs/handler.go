@@ -144,7 +144,7 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 		return
 	}
 
-	machineID, err := h.resolveLogMachine(ctx, job)
+	workerID, err := h.resolveLogWorker(ctx, job)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -199,7 +199,7 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 		AnchorOffset: anchor,
 	}
 
-	resp, err := h.grpcSrv.RequestJobLog(rpcCtx, machineID, pbReq)
+	resp, err := h.grpcSrv.RequestJobLog(rpcCtx, workerID, pbReq)
 	if err != nil {
 		if errors.Is(err, grpc.ErrNoConnection) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "worker not connected"})
@@ -228,7 +228,7 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-func (h *JobHandler) resolveLogMachine(ctx context.Context, job *queue.Job) (string, error) {
+func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (string, error) {
 	if job.Status == "running" && job.WorkerID != "" {
 		return job.WorkerID, nil
 	}
@@ -244,10 +244,10 @@ func (h *JobHandler) resolveLogMachine(ctx context.Context, job *queue.Job) (str
 		}
 		return "", err
 	}
-	if exec.MachineID == "" {
-		return "", errors.New("execution record has no machine id")
+	if exec.WorkerID == "" {
+		return "", errors.New("execution record has no worker id")
 	}
-	return exec.MachineID, nil
+	return exec.WorkerID, nil
 }
 
 type QueueHandler struct {
@@ -400,18 +400,3 @@ func (h *DLQHandler) RetryAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "DLQ retried", "count": count})
 }
 
-type WorkersInfoHandler struct {
-	connMgr *grpc.ConnectionManager
-}
-
-func NewWorkersInfoHandler(connMgr *grpc.ConnectionManager) *WorkersInfoHandler {
-	return &WorkersInfoHandler{connMgr: connMgr}
-}
-
-func (h *WorkersInfoHandler) ListWorkers(c *gin.Context) {
-	workers := h.connMgr.ActiveWorkers()
-	c.JSON(http.StatusOK, gin.H{
-		"workers": workers,
-		"count":   len(workers),
-	})
-}

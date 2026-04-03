@@ -18,7 +18,7 @@ import (
 )
 
 // Run executes the interactive setup process.
-// claimCode is optional; when set, the new machine is linked to that user.
+// claimCode is optional; when set, the new worker is linked to that user.
 func Run(apiURL, version, buildTime, claimCode string) {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -105,7 +105,7 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 		os.Exit(1)
 	}
 
-	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
+	url := strings.TrimRight(apiURL, "/") + "/api/v1/workers/bootstrap/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		slog.Error("Failed to connect to server", "err", err)
@@ -131,8 +131,8 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 	}
 
 	fmt.Println()
-	fmt.Println("✓ Machine registered successfully!")
-	fmt.Printf("  Machine ID: %s\n", setupResp.MachineID)
+	fmt.Println("✓ Worker registered successfully!")
+	fmt.Printf("  Worker ID: %s\n", setupResp.WorkerID)
 	fmt.Println()
 
 	return &setupResp
@@ -149,7 +149,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 		return
 	}
 
-	logFile := fmt.Sprintf("/tmp/lute-worker-%s.log", setupResp.MachineID)
+	logFile := fmt.Sprintf("/tmp/lute-worker-%s.log", setupResp.WorkerID)
 	lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		slog.Warn("cannot open log file", "path", logFile, "err", err)
@@ -172,7 +172,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile *os.File) *exec.Cmd {
 	cmd := exec.Command(exePath,
 		"--server", setupResp.GRPCAddress,
-		"--machine-id", setupResp.MachineID,
+		"--worker-id", setupResp.WorkerID,
 	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -186,8 +186,8 @@ func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile
 // displayManualInstructions shows manual start instructions
 func displayManualInstructions(setupResp *types.SetupResponse) {
 	fmt.Println("Could not auto-start. Run manually:")
-	fmt.Printf("  lute-worker --server %s --machine-id %s\n",
-		setupResp.GRPCAddress, setupResp.MachineID)
+	fmt.Printf("  lute-worker --server %s --worker-id %s\n",
+		setupResp.GRPCAddress, setupResp.WorkerID)
 }
 
 // displayStartupInfo displays information about the started agent

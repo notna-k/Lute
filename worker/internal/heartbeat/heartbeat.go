@@ -11,7 +11,7 @@ import (
 
 // PongMessage builds a WorkerMessage containing a HeartbeatPong with current
 // status and collected metrics. Caller is responsible for sending it on the stream.
-func PongMessage(machineID string) *pb.WorkerMessage {
+func PongMessage(workerID string) *pb.WorkerMessage {
 	raw := metrics.Collect()
 	pong := &pb.HeartbeatPong{
 		Status:    "running",
@@ -19,7 +19,7 @@ func PongMessage(machineID string) *pb.WorkerMessage {
 		Timestamp: time.Now().Unix(),
 	}
 	return &pb.WorkerMessage{
-		MachineId: machineID,
+		WorkerId:  workerID,
 		Payload:   &pb.WorkerMessage_HeartbeatPong{HeartbeatPong: pong},
 	}
 }

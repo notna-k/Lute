@@ -11,32 +11,32 @@ import {
   Skeleton,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
-import AddMachineDialog from '../components/AddMachineDialog';
-import { useUserMachines, usePublicMachines } from '../hooks/useMachines';
+import AddWorkerDialog from '../components/AddWorkerDialog';
+import { useUserWorkers, usePublicWorkers } from '../hooks/useWorkers';
 
 const statCards = [
-  { key: 'total', name: 'Total Machines' },
+  { key: 'total', name: 'Total Workers' },
   { key: 'alive', name: 'Running' },
   { key: 'dead', name: 'Stopped' },
-  { key: 'public', name: 'Public Machines' },
+  { key: 'public', name: 'Public Workers' },
 ] as const;
 
 const Dashboard = () => {
   const { user } = useAuth();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const { data: userMachinesData, isLoading: userLoading, isError: userError } = useUserMachines();
-  const { data: publicMachinesData, isLoading: publicLoading, isError: publicError } = usePublicMachines();
+  const { data: userWorkersData, isLoading: userLoading, isError: userError } = useUserWorkers();
+  const { data: publicWorkersData, isLoading: publicLoading, isError: publicError } = usePublicWorkers();
 
-  const userMachines = userMachinesData ?? [];
-  const publicMachines = publicMachinesData ?? [];
+  const userWorkers = userWorkersData ?? [];
+  const publicWorkers = publicWorkersData ?? [];
 
   const stats = useMemo(() => {
-    const alive = userMachines.filter((m) => m.status === 'alive').length;
-    const dead = userMachines.filter((m) => m.status === 'dead').length;
-    const total = userMachines.length;
-    const publicCount = publicMachines.length;
+    const alive = userWorkers.filter((w) => w.status === 'alive').length;
+    const dead = userWorkers.filter((w) => w.status === 'dead').length;
+    const total = userWorkers.length;
+    const publicCount = publicWorkers.length;
     return { total, alive, dead, public: publicCount };
-  }, [userMachines, publicMachines]);
+  }, [userWorkers, publicWorkers]);
 
   const loading = userLoading || publicLoading;
   const error = userError || publicError;
@@ -53,11 +53,10 @@ const Dashboard = () => {
           Welcome back, {user?.displayName || user?.email}!
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Here's an overview of your virtual machines
+          Here&apos;s an overview of your workers
         </Typography>
       </Box>
 
-      {/* Stats Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {statCards.map(({ key, name }) => (
           <Grid item xs={12} sm={6} lg={3} key={name}>
@@ -81,7 +80,6 @@ const Dashboard = () => {
         ))}
       </Grid>
 
-      {/* Quick Actions */}
       <Paper sx={{ p: 3, mb: 4 }}>
         <Typography variant="h6" gutterBottom fontWeight="medium">
           Quick Actions
@@ -90,7 +88,7 @@ const Dashboard = () => {
           <Grid item xs={12} sm={4}>
             <MuiLink
               component={Link}
-              to="/machines"
+              to="/workers"
               underline="none"
               sx={{ display: 'block' }}
             >
@@ -105,10 +103,10 @@ const Dashboard = () => {
                 }}
               >
                 <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                  My Machines
+                  My Workers
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  View and manage your VMs
+                  View and manage your workers
                 </Typography>
               </Paper>
             </MuiLink>
@@ -116,7 +114,7 @@ const Dashboard = () => {
           <Grid item xs={12} sm={4}>
             <MuiLink
               component={Link}
-              to="/public-machines"
+              to="/public-workers"
               underline="none"
               sx={{ display: 'block' }}
             >
@@ -131,10 +129,10 @@ const Dashboard = () => {
                 }}
               >
                 <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                  Public Machines
+                  Public Workers
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Browse shared VMs
+                  Browse shared workers
                 </Typography>
               </Paper>
             </MuiLink>
@@ -152,17 +150,16 @@ const Dashboard = () => {
               onClick={() => setAddDialogOpen(true)}
             >
               <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                Add Machine
+                Add Worker
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Install the agent on a new VM
+                Install the agent on a new host
               </Typography>
             </Paper>
           </Grid>
         </Grid>
       </Paper>
 
-      {/* Recent Activity */}
       <Paper>
         <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
           <Typography variant="h6" fontWeight="medium">
@@ -176,7 +173,7 @@ const Dashboard = () => {
         </Box>
       </Paper>
 
-      <AddMachineDialog
+      <AddWorkerDialog
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
       />
