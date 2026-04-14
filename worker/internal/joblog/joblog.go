@@ -43,7 +43,7 @@ func ReadTail(path string, limit int, beforeExclusive int64) Result {
 		}
 		return Result{Err: err.Error()}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	st, err := f.Stat()
 	if err != nil {
@@ -177,7 +177,7 @@ func ReadHead(path string, limit int, startOffset int64) Result {
 		}
 		return Result{Err: err.Error()}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	st, err := f.Stat()
 	if err != nil {

@@ -49,7 +49,7 @@ func (r *WorkerRepository) GetByUserID(ctx context.Context, userID primitive.Obj
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []*models.Worker
 	if err := cursor.All(ctx, &out); err != nil {
@@ -63,7 +63,7 @@ func (r *WorkerRepository) GetPublic(ctx context.Context) ([]*models.Worker, err
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []*models.Worker
 	if err := cursor.All(ctx, &out); err != nil {
@@ -106,7 +106,7 @@ func (r *WorkerRepository) List(ctx context.Context, filter bson.M, opts *option
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []*models.Worker
 	if err := cursor.All(ctx, &out); err != nil {
@@ -155,7 +155,7 @@ func (r *WorkerRepository) ListByStatus(ctx context.Context, status string) ([]*
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []*models.Worker
 	if err := cursor.All(ctx, &out); err != nil {
@@ -229,7 +229,7 @@ func (r *WorkerRepository) ListMonitored(ctx context.Context) ([]*models.Worker,
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []*models.Worker
 	if err := cursor.All(ctx, &out); err != nil {
@@ -261,7 +261,7 @@ func (r *WorkerRepository) AggregateCountsByUserID(ctx context.Context) ([]Count
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []CountByUserIDAndStatusResult
 	if err := cursor.All(ctx, &out); err != nil {

@@ -1,5 +1,8 @@
 .PHONY: dev-up dev-down dev-build dev-clean dev-logs dev-restart \
-       worker-build worker-build-all worker-version help
+       worker-build worker-build-all worker-version go-lint help
+
+# Pin for reproducible CI/local runs (install: https://golangci-lint.run/welcome/install/)
+GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 
 # Docker Compose file location
 COMPOSE_DIR := infrastructure/dev
@@ -27,6 +30,17 @@ help:
 	@echo "    make worker-build         - Build worker for current platform"
 	@echo "    make worker-build-all     - Cross-compile worker for linux/darwin/windows"
 	@echo "    make worker-version       - Show current worker version"
+	@echo ""
+	@echo "  Go:"
+	@echo "    make go-lint              - Run golangci-lint on api/ and worker/ (not shared/proto)"
+
+# === Go lint ===
+
+go-lint:
+	@echo "==> lint api"
+	cd api && $(GOLANGCI_LINT) run ./...
+	@echo "==> lint worker"
+	cd worker && $(GOLANGCI_LINT) run ./...
 
 # === Docker / Dev targets ===
 

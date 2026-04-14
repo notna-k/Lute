@@ -18,7 +18,6 @@ func main() {
 		log.Fatalf("Failed to initialize: %v", err)
 	}
 	defer deps.Close()
-
 	srv := server.New(
 		deps.Config,
 		deps.Database,

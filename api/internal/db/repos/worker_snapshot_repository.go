@@ -54,7 +54,7 @@ func (r *WorkerSnapshotRepository) GetByWorkerIDs(ctx context.Context, workerIDs
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var out []*models.WorkerSnapshot
 	if err := cursor.All(ctx, &out); err != nil {

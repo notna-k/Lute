@@ -105,7 +105,7 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 	if err != nil {
 		return nil, 0, fmt.Errorf("find job executions: %w", err)
 	}
-	defer cur.Close(ctx)
+	defer func() { _ = cur.Close(ctx) }()
 
 	var out []models.JobExecution
 	if err := cur.All(ctx, &out); err != nil {

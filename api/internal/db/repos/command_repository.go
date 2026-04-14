@@ -51,7 +51,7 @@ func (r *CommandRepository) GetPendingByWorkerID(ctx context.Context, workerID p
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var commands []*models.Command
 	if err := cursor.All(ctx, &commands); err != nil {
@@ -70,7 +70,7 @@ func (r *CommandRepository) GetByWorkerID(ctx context.Context, workerID primitiv
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var commands []*models.Command
 	if err := cursor.All(ctx, &commands); err != nil {

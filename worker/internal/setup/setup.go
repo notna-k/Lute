@@ -111,7 +111,7 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 		slog.Error("Failed to connect to server", "err", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -156,7 +156,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 		displayManualInstructions(setupResp)
 		return
 	}
-	defer lf.Close()
+	defer func() { _ = lf.Close() }()
 
 	cmd := createWorkerCommand(exePath, setupResp, lf)
 	if err := cmd.Start(); err != nil {

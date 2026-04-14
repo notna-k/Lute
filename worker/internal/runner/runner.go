@@ -52,9 +52,8 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 	if err != nil {
 		return 0, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	logSystem(jobLogger, slog.LevelInfo, "temp dir", slog.String("path", dir))
-
 
 	repo := strings.TrimSpace(spec.SourceRepository)
 	if repo != "" {
@@ -68,7 +67,6 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 	} else {
 		logSystem(jobLogger, slog.LevelInfo, "no source repository; empty workspace")
 	}
-
 
 	scriptPath := filepath.Join(dir, commandScriptName)
 	if err := os.WriteFile(scriptPath, []byte(spec.Command), 0700); err != nil {
@@ -86,7 +84,7 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 	if err != nil {
 		return 0, fmt.Errorf("docker client: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	exitCode, err := runContainer(runCtx, cli, dir, spec, jobLogger)
 	if err != nil {

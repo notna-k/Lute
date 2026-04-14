@@ -158,7 +158,7 @@ func registerViaREST(apiURL string) (string, string) {
 		slog.Error("REST registration failed", "err", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -214,7 +214,7 @@ func runStream(ctx context.Context, serverAddr, workerID string, queues []string
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := pb.NewWorkerServiceClient(conn)
 	stream, err := client.Connect(ctx)
