@@ -102,4 +102,8 @@ message JobResult {
   string execution_log_file  = 6;
 }
 
-message DrainSignal {}
+// DrainSignal asks a worker to stop picking up new jobs. If `shutdown` is true,
+// the worker also exits its process after in-flight jobs complete.
+message DrainSignal {
+  bool shutdown = 1;
+}

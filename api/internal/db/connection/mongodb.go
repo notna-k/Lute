@@ -116,11 +116,23 @@ func (m *MongoDB) EnsureCollections(ctx context.Context) error {
 			return fmt.Errorf("create worker_snapshots compound index: %w", err)
 		}
 	}
-	// Indexes on workers for List/GetByUserID (user_id) and GetPublic (is_public)
+	// Indexes on workers collection
 	workersColl := m.Database.Collection(CollectionWorkers)
 	for _, idx := range []mongo.IndexModel{
+		// user_id lookup for List/GetByUserID
 		{Keys: bson.D{{Key: "user_id", Value: 1}}},
-		{Keys: bson.D{{Key: "is_public", Value: 1}}},
+		// Enforce at most one worker per (user, agent_ip). Partial filter skips
+		// pre-registration rows that don't have an IP yet. Worker.AgentIP uses
+		// `bson:"agent_ip,omitempty"`, so unset/empty values aren't persisted
+		// and are naturally excluded by $exists.
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "agent_ip", Value: 1}},
+			Options: options.Index().
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{
+					"agent_ip": bson.M{"$exists": true, "$type": "string"},
+				}),
+		},
 	} {
 		_, err = workersColl.Indexes().CreateOne(ctx, idx)
 		if err != nil {

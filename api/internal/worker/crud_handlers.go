@@ -70,15 +70,6 @@ func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 	c.JSON(http.StatusOK, list)
 }
 
-func (h *WorkerHandler) ListPublicWorkers(c *gin.Context) {
-	list, err := h.workerService.GetPublic(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, list)
-}
-
 func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
 	id, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
@@ -169,6 +160,15 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
+
+	stopped := false
+	if h.connMgr != nil {
+		if conn := h.connMgr.Get(id.Hex()); conn != nil {
+			conn.Shutdown()
+			stopped = true
+		}
+	}
+
 	if err := h.workerService.Delete(c.Request.Context(), id, userIDObj); err != nil {
 		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -181,5 +181,10 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Worker deleted successfully"})
+
+	msg := "Worker deleted successfully"
+	if stopped {
+		msg = "Worker deleted; stop signal sent to live agent"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": msg, "stop_signal_sent": stopped})
 }

@@ -45,10 +45,6 @@ func (s *WorkerService) GetByUserID(ctx context.Context, userID primitive.Object
 	return s.workerRepo.GetByUserID(ctx, userID)
 }
 
-func (s *WorkerService) GetPublic(ctx context.Context) ([]*models.Worker, error) {
-	return s.workerRepo.GetPublic(ctx)
-}
-
 func (s *WorkerService) Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, w *models.Worker) (*models.Worker, error) {
 	existing, err := s.workerRepo.GetByID(ctx, id)
 	if err != nil {

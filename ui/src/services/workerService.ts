@@ -4,7 +4,6 @@ import { Worker } from '../types';
 export interface CreateWorkerRequest {
     name: string;
     description?: string;
-    is_public?: boolean;
     metadata?: Record<string, unknown>;
 }
 
@@ -12,17 +11,13 @@ export interface UpdateWorkerRequest {
     name?: string;
     description?: string;
     status?: string;
-    is_public?: boolean;
     metadata?: Record<string, unknown>;
 }
 
 export const workerService = {
     getUserWorkers: async (): Promise<Worker[]> => {
-        return apiClient.get<Worker[]>('/api/v1/workers');
-    },
-
-    getPublicWorkers: async (): Promise<Worker[]> => {
-        return apiClient.get<Worker[]>('/api/v1/workers/public');
+        const data = await apiClient.get<Worker[] | null>('/api/v1/workers');
+        return data ?? [];
     },
 
     getWorker: async (id: string): Promise<Worker> => {

@@ -58,20 +58,6 @@ func (r *WorkerRepository) GetByUserID(ctx context.Context, userID primitive.Obj
 	return out, nil
 }
 
-func (r *WorkerRepository) GetPublic(ctx context.Context) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, bson.M{"is_public": true})
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (r *WorkerRepository) Update(ctx context.Context, id primitive.ObjectID, w *models.Worker) error {
 	w.BeforeUpdate()
 	update := bson.M{
@@ -99,6 +85,28 @@ func (r *WorkerRepository) UpdateStatus(ctx context.Context, id primitive.Object
 
 func (r *WorkerRepository) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {
 	return nil, mongo.ErrNoDocuments
+}
+
+// GetByUserIDAndIP returns all workers owned by userID whose agent_ip matches ip.
+// IP uniqueness is scoped per user because private-range addresses aren't globally unique.
+func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID primitive.ObjectID, ip string) ([]*models.Worker, error) {
+	if ip == "" {
+		return nil, nil
+	}
+	cursor, err := r.Collection.Find(ctx, bson.M{
+		"user_id":  userID,
+		"agent_ip": ip,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var out []*models.Worker
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *WorkerRepository) List(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]*models.Worker, error) {

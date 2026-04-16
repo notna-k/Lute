@@ -10,16 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emotion/react": "^11.11.1",
-    "@emotion/styled": "^11.11.0",
-    "@mui/icons-material": "^5.15.0",
-    "@mui/material": "^5.15.0",
+    "@headlessui/react": "^1.7.19",
     "@tanstack/react-query": "^5.17.0",
+    "clsx": "^2.1.1",
     "firebase": "^10.14.1",
+    "lucide-react": "^0.468.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.3",
-    "recharts": "^3.7.0"
+    "recharts": "^3.7.0",
+    "tailwind-merge": "^2.5.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

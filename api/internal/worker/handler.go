@@ -307,8 +307,10 @@ echo "==> Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 ${INSTALL_DIR}/${BINARY_NAME} --version
 
 echo ""
-echo "==> Run the worker:"
-echo "    ${BINARY_NAME} --server <GRPC_HOST:PORT> --worker-id <WORKER_ID>"
+echo "==> Next step: register this host with the Lute server"
+echo "    ${BINARY_NAME} setup --claim-code <CODE>"
+echo ""
+echo "    (copy the full command from the Add Worker dialog in the Lute UI)"
 `, baseURL, baseURL, baseURL)
 
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))
@@ -344,12 +346,47 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 		return
 	}
 
+	ip := strings.TrimSpace(req.IP)
+	if ip == "" {
+		ip = c.ClientIP()
+	}
+
+	if ip != "" {
+		existing, err := h.workerRepo.GetByUserIDAndIP(ctx, userID, ip)
+		if err != nil {
+			log.Printf("Failed to check existing workers by IP: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
+			return
+		}
+		for _, w := range existing {
+			if w.Status == "alive" || w.Status == "registered" {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": fmt.Sprintf("a worker (%q, id %s) is already registered and alive at IP %s; delete it first or stop its agent before registering a new one", w.Name, w.ID.Hex(), ip),
+				})
+				return
+			}
+		}
+		for _, w := range existing {
+			if h.connMgr != nil {
+				if conn := h.connMgr.Get(w.ID.Hex()); conn != nil {
+					conn.Shutdown()
+				}
+			}
+			if err := h.workerRepo.Delete(ctx, w.ID); err != nil {
+				log.Printf("Failed to delete stale worker %s on IP %s: %v", w.ID.Hex(), ip, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reclaim stale worker at this IP"})
+				return
+			}
+			log.Printf("Reclaimed stale worker id=%s name=%q status=%s on IP %s", w.ID.Hex(), w.Name, w.Status, ip)
+		}
+	}
+
 	metadata := map[string]interface{}{
 		"hostname": req.Hostname,
 		"os":       req.OS,
 		"arch":     req.Arch,
 		"cpus":     req.CPUs,
-		"ip":       req.IP,
+		"ip":       ip,
 	}
 	for k, v := range req.Metadata {
 		metadata[k] = v
@@ -369,7 +406,7 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	}
 
 	w.Status = "registered"
-	w.AgentIP = req.IP
+	w.AgentIP = ip
 	w.AgentVersion = req.Version
 	w.LastSeen = time.Now()
 

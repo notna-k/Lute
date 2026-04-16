@@ -13,7 +13,6 @@ type Worker struct {
 	Name           string                 `json:"name" bson:"name"`
 	Description    string                 `json:"description" bson:"description"`
 	Status         string                 `json:"status" bson:"status"` // "pending", "registered", "alive", "dead"
-	IsPublic       bool                   `json:"is_public" bson:"is_public"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
 	AgentIP        string                 `json:"agent_ip,omitempty" bson:"agent_ip,omitempty"`
 	AgentVersion   string                 `json:"agent_version,omitempty" bson:"agent_version,omitempty"`

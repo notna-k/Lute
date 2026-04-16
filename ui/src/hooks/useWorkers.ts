@@ -18,15 +18,6 @@ export const useUserWorkers = () => {
     });
 };
 
-export const usePublicWorkers = () => {
-    return useQuery({
-        queryKey: workerKeys.list('public'),
-        queryFn: workerService.getPublicWorkers,
-        staleTime: 60000,
-        gcTime: 10 * 60 * 1000,
-    });
-};
-
 export const useWorker = (id: string) => {
     return useQuery({
         queryKey: workerKeys.detail(id),

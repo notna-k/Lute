@@ -12,7 +12,6 @@ export interface Worker {
   name: string;
   description?: string;
   status: 'running' | 'stopped' | 'paused' | 'pending' | 'alive' | 'dead';
-  is_public: boolean;
   agent_ip?: string;
   agent_version?: string;
   last_seen?: string;
@@ -32,7 +31,6 @@ export interface VM {
   memory: number;
   disk: number;
   ownerId?: string;
-  isPublic?: boolean;
   createdAt: string;
   updatedAt: string;
 }

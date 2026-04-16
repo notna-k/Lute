@@ -70,18 +70,10 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	}
 	total := len(workersList)
 
-	publicWorkers, err := h.workerService.GetPublic(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	publicCount := len(publicWorkers)
-
 	c.JSON(http.StatusOK, gin.H{
-		"total":  total,
-		"alive":  alive,
-		"dead":   dead,
-		"public": publicCount,
+		"total": total,
+		"alive": alive,
+		"dead":  dead,
 	})
 }
 

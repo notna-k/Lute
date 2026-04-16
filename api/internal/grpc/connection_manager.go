@@ -46,7 +46,7 @@ type WorkerConnection struct {
 	stream   pb.WorkerService_ConnectServer
 	pingCh   chan pingRequest
 	jobCh    chan *pb.JobAssignment
-	drainCh  chan struct{}
+	drainCh  chan *pb.DrainSignal
 	logReqCh chan *pb.JobLogRequest
 
 	logMu      sync.Mutex
@@ -63,7 +63,7 @@ func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer)
 		stream:      stream,
 		pingCh:      make(chan pingRequest, 1),
 		jobCh:       make(chan *pb.JobAssignment, 1024),
-		drainCh:     make(chan struct{}, 1),
+		drainCh:     make(chan *pb.DrainSignal, 1),
 		logReqCh:    make(chan *pb.JobLogRequest, 32),
 		logWaiters:  make(map[string]chan jobLogResult),
 	}
@@ -108,11 +108,21 @@ func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 
 // Drain signals the worker to stop accepting new jobs.
 func (wc *WorkerConnection) Drain() {
+	wc.sendDrain(&pb.DrainSignal{})
+}
+
+// Shutdown signals the worker to stop accepting new jobs and exit its process
+// once in-flight jobs complete.
+func (wc *WorkerConnection) Shutdown() {
+	wc.sendDrain(&pb.DrainSignal{Shutdown: true})
+}
+
+func (wc *WorkerConnection) sendDrain(sig *pb.DrainSignal) {
 	wc.mu.Lock()
 	wc.draining = true
 	wc.mu.Unlock()
 	select {
-	case wc.drainCh <- struct{}{}:
+	case wc.drainCh <- sig:
 	default:
 	}
 }
@@ -274,10 +284,13 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				return
 			}
 
-		case <-wc.drainCh:
+		case sig := <-wc.drainCh:
+			if sig == nil {
+				sig = &pb.DrainSignal{}
+			}
 			_ = wc.stream.Send(&pb.ServerMessage{
 				Payload: &pb.ServerMessage_Drain{
-					Drain: &pb.DrainSignal{},
+					Drain: sig,
 				},
 			})
 

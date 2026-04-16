@@ -951,8 +951,11 @@ func (x *JobResult) GetExecutionLogFile() string {
 	return ""
 }
 
+// DrainSignal asks a worker to stop picking up new jobs. If `shutdown` is true,
+// the worker also exits its process after in-flight jobs complete.
 type DrainSignal struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Shutdown      bool                   `protobuf:"varint,1,opt,name=shutdown,proto3" json:"shutdown,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -985,6 +988,13 @@ func (x *DrainSignal) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DrainSignal.ProtoReflect.Descriptor instead.
 func (*DrainSignal) Descriptor() ([]byte, []int) {
 	return file_worker_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DrainSignal) GetShutdown() bool {
+	if x != nil {
+		return x.Shutdown
+	}
+	return false
 }
 
 var File_worker_proto protoreflect.FileDescriptor
@@ -1060,8 +1070,9 @@ const file_worker_proto_rawDesc = "" +
 	"\n" +
 	"elapsed_ms\x18\x04 \x01(\x03R\telapsedMs\x12\x19\n" +
 	"\blog_file\x18\x05 \x01(\tR\alogFile\x12,\n" +
-	"\x12execution_log_file\x18\x06 \x01(\tR\x10executionLogFile\"\r\n" +
-	"\vDrainSignal*8\n" +
+	"\x12execution_log_file\x18\x06 \x01(\tR\x10executionLogFile\")\n" +
+	"\vDrainSignal\x12\x1a\n" +
+	"\bshutdown\x18\x01 \x01(\bR\bshutdown*8\n" +
 	"\x10LogReadDirection\x12\x11\n" +
 	"\rLOG_READ_TAIL\x10\x00\x12\x11\n" +
 	"\rLOG_READ_HEAD\x10\x012L\n" +

@@ -40,7 +40,7 @@ func Run(apiURL, version, buildTime, claimCode string) {
 	setupResp := registerWithServer(apiURL, sysInfo)
 
 	// 4. Auto-start the worker in detached (background) mode
-	startWorker(setupResp, version)
+	startWorker(setupResp)
 }
 
 // promptServiceName prompts the user for a service name
@@ -120,6 +120,14 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 	}
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusConflict {
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "✗ Registration rejected: another worker is already registered for this machine.")
+			fmt.Fprintln(os.Stderr, "  "+extractErrorMessage(respBody))
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "  Delete the existing worker in the Lute UI, or stop its agent process, then try again.")
+			os.Exit(1)
+		}
 		slog.Error("Server returned error", "status", resp.StatusCode, "body", string(respBody))
 		os.Exit(1)
 	}
@@ -139,7 +147,7 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 }
 
 // startWorker starts the worker in background mode
-func startWorker(setupResp *types.SetupResponse, version string) {
+func startWorker(setupResp *types.SetupResponse) {
 	fmt.Println("Starting worker in background...")
 
 	exePath, err := os.Executable()
@@ -149,7 +157,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 		return
 	}
 
-	logFile := fmt.Sprintf("/tmp/lute-worker-%s.log", setupResp.WorkerID)
+	logFile := DaemonLogPath()
 	lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		slog.Warn("cannot open log file", "path", logFile, "err", err)
@@ -171,6 +179,7 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 // createWorkerCommand creates the command to start the worker
 func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile *os.File) *exec.Cmd {
 	cmd := exec.Command(exePath,
+		"run",
 		"--server", setupResp.GRPCAddress,
 		"--worker-id", setupResp.WorkerID,
 	)
@@ -186,8 +195,20 @@ func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile
 // displayManualInstructions shows manual start instructions
 func displayManualInstructions(setupResp *types.SetupResponse) {
 	fmt.Println("Could not auto-start. Run manually:")
-	fmt.Printf("  lute-worker --server %s --worker-id %s\n",
+	fmt.Printf("  lute-worker run --server %s --worker-id %s\n",
 		setupResp.GRPCAddress, setupResp.WorkerID)
+}
+
+// extractErrorMessage pulls the "error" field out of a JSON error body, falling
+// back to the raw body when it isn't JSON.
+func extractErrorMessage(body []byte) string {
+	var envelope struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Error != "" {
+		return envelope.Error
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // displayStartupInfo displays information about the started agent
@@ -197,5 +218,5 @@ func displayStartupInfo(pid int, logFile string) {
 	fmt.Println()
 	fmt.Println("Manage:")
 	fmt.Printf("  Stop:   kill %d\n", pid)
-	fmt.Printf("  Logs:   tail -f %s\n", logFile)
+	fmt.Printf("  Logs:   lute-worker logs -f\n")
 }

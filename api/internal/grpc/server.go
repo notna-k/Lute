@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/config"
@@ -101,10 +104,13 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 
 	w, err := s.workerRepo.GetByID(stream.Context(), wid)
 	if err != nil {
-		return fmt.Errorf("connect: worker %s not found: %w", workerID, err)
+		if err == mongo.ErrNoDocuments {
+			return status.Errorf(codes.NotFound, "worker %s not found (it may have been deleted)", workerID)
+		}
+		return fmt.Errorf("connect: worker %s lookup failed: %w", workerID, err)
 	}
 	if w.Status == "dead" {
-		return fmt.Errorf("connect: worker %s is dead; set status to pending to re-enable", workerID)
+		return status.Errorf(codes.FailedPrecondition, "worker %s is dead; set status to pending to re-enable", workerID)
 	}
 
 	if w.Status == "pending" {

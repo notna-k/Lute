@@ -11,8 +11,6 @@ import (
 func SetupRoutes(r *gin.RouterGroup, h *WorkerHandler, userRepo *repos.UserRepository) {
 	g := r.Group("/workers")
 	{
-		g.GET("/public", h.ListPublicWorkers)
-
 		boot := g.Group("/bootstrap")
 		{
 			boot.GET("/install.sh", h.InstallScript)
