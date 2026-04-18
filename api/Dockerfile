@@ -1,5 +1,33 @@
 # syntax=docker/dockerfile:1
-# Build stage
+
+# ---- UI (Vite), embedded into the API binary ----
+FROM node:22-alpine AS ui-builder
+
+ARG VITE_FIREBASE_API_KEY
+ARG VITE_FIREBASE_AUTH_DOMAIN
+ARG VITE_FIREBASE_PROJECT_ID
+ARG VITE_FIREBASE_STORAGE_BUCKET
+ARG VITE_FIREBASE_MESSAGING_SENDER_ID
+ARG VITE_FIREBASE_APP_ID
+ARG VITE_METRICS_UPDATE_INTERVAL_SECONDS=5
+
+ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY \
+    VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN \
+    VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID \
+    VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET \
+    VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID \
+    VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID \
+    VITE_METRICS_UPDATE_INTERVAL_SECONDS=$VITE_METRICS_UPDATE_INTERVAL_SECONDS \
+    VITE_API_URL=
+
+WORKDIR /app/ui
+COPY ui/package.json ui/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+COPY ui .
+RUN npm run build
+
+# ---- Go API + worker binaries ----
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
@@ -23,8 +51,10 @@ COPY shared/proto shared/proto
 COPY api api
 COPY worker worker
 
+# Embedded SPA (must exist before go build)
+COPY --from=ui-builder /app/ui/dist /app/api/internal/ui/web
+
 # Build the API server (use Go build cache for faster recompiles)
-# Entrypoint is cmd/api after refactor to internal layout
 WORKDIR /app/api
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o api ./cmd/api

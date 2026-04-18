@@ -1,68 +1,87 @@
 package router
 
 import (
-	luteGrpc "github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/dashboard"
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/repos"
-	"github.com/lute/api/internal/dashboard"
+	luteGrpc "github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/health"
 	"github.com/lute/api/internal/jobs"
 	"github.com/lute/api/internal/middleware"
+	"github.com/lute/api/internal/publicapi"
 	"github.com/lute/api/internal/queue"
+	"github.com/lute/api/internal/ui"
 	"github.com/lute/api/internal/websocket"
 	"github.com/lute/api/internal/worker"
 
 	"github.com/gin-gonic/gin"
 )
 
+// SetupRouterDeps bundles router dependencies so the signature does not grow
+// unbounded as new domains are added.
+type SetupRouterDeps struct {
+	Config             *config.Config
+	DB                 *connection.MongoDB
+	WorkerRepo         *repos.WorkerRepository
+	UserRepo           *repos.UserRepository
+	CommandRepo        *repos.CommandRepository
+	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
+	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
+	JobExecutionRepo   *repos.JobExecutionRepository
+	APIKeyRepo         *repos.APIKeyRepository
+	RunRepo            *repos.RunRepository
+	Hub                *websocket.Hub
+	QueueEngine        *queue.Engine
+	StatsAgg           *queue.StatsAggregator
+	GRPCServer         *luteGrpc.Server
+}
+
 // SetupRouter builds the gin.Engine with global middleware and all domain routes.
-func SetupRouter(
-	cfg *config.Config,
-	db *connection.MongoDB,
-	workerRepo *repos.WorkerRepository,
-	userRepo *repos.UserRepository,
-	commandRepo *repos.CommandRepository,
-	uptimeSnapshotRepo *repos.UptimeSnapshotRepository,
-	workerSnapshotRepo *repos.WorkerSnapshotRepository,
-	hub *websocket.Hub,
-	queueEngine *queue.Engine,
-	statsAgg *queue.StatsAggregator,
-	grpcServer *luteGrpc.Server,
-	jobExecutionRepo *repos.JobExecutionRepository,
-) *gin.Engine {
-	gin.SetMode(cfg.Server.Mode)
+func SetupRouter(d SetupRouterDeps) *gin.Engine {
+	gin.SetMode(d.Config.Server.Mode)
 
 	r := gin.New()
-
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS())
 
-	healthHandler := health.NewHealthHandler(db)
+	healthHandler := health.NewHealthHandler(d.DB)
 	api := r.Group("/api")
 	{
 		health.SetupRoutes(api, healthHandler)
 	}
 
-	wsHandler := websocket.NewWebSocketHandler(hub, cfg)
+	wsHandler := websocket.NewWebSocketHandler(d.Hub, d.Config)
 	api.GET("/ws", middleware.OptionalAuthMiddleware(), wsHandler.HandleWebSocket)
 
-	workerService := worker.NewWorkerService(workerRepo)
-	workerHandler := worker.NewWorkerHandler(cfg.WorkerBinary.Dir, cfg, workerRepo, commandRepo, grpcServer.ConnMgr)
-	dashboardHandler := dashboard.NewDashboardHandler(cfg, workerService, workerSnapshotRepo)
+	workerService := worker.NewWorkerService(d.WorkerRepo)
+	workerHandler := worker.NewWorkerHandler(d.Config.WorkerBinary.Dir, d.Config, d.WorkerRepo, d.CommandRepo, d.GRPCServer.ConnMgr)
+	dashboardHandler := dashboard.NewDashboardHandler(d.Config, workerService, d.WorkerSnapshotRepo)
+	apiKeysHandler := publicapi.NewAPIKeysHandler(d.APIKeyRepo)
 
-	jobHandler := jobs.NewJobHandler(queueEngine, statsAgg, grpcServer, jobExecutionRepo)
-	executionsHandler := jobs.NewExecutionsHandler(jobExecutionRepo)
-	queueHandler := jobs.NewQueueHandler(queueEngine, statsAgg)
-	dlqHandler := jobs.NewDLQHandler(queueEngine, grpcServer)
+	jobHandler := jobs.NewJobHandler(d.QueueEngine, d.StatsAgg, d.GRPCServer, d.JobExecutionRepo)
+	executionsHandler := jobs.NewExecutionsHandler(d.JobExecutionRepo)
+	queueHandler := jobs.NewQueueHandler(d.QueueEngine, d.StatsAgg)
+	dlqHandler := jobs.NewDLQHandler(d.QueueEngine, d.GRPCServer)
 
 	v1 := api.Group("/v1")
 	{
-		worker.SetupRoutes(v1, workerHandler, userRepo)
-		dashboard.SetupRoutes(v1, dashboardHandler, userRepo)
-		jobs.SetupRoutes(v1, jobHandler, queueHandler, dlqHandler, executionsHandler)
+		worker.SetupRoutes(v1, workerHandler, d.UserRepo)
+		dashboard.SetupRoutes(v1, dashboardHandler, d.UserRepo)
+
+		authed := v1.Group("")
+		authed.Use(middleware.AuthMiddleware(d.UserRepo))
+		{
+			jobs.SetupRoutes(authed, jobHandler, queueHandler, dlqHandler, executionsHandler)
+			publicapi.SetupAPIKeyRoutes(authed, apiKeysHandler)
+		}
 	}
 
+	runsHandler := publicapi.NewRunsHandler(d.QueueEngine, d.StatsAgg, d.GRPCServer, d.RunRepo, d.JobExecutionRepo)
+	pub := api.Group("/public/v1")
+	publicapi.SetupPublicRoutes(pub, d.APIKeyRepo, runsHandler, workerHandler)
+
+	ui.Register(r)
 	return r
 }

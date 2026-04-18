@@ -27,6 +27,12 @@ func ParseWorkerID(hex string) (primitive.ObjectID, error) {
 	return primitive.ObjectIDFromHex(hex)
 }
 
+// WebhookEmitter is the narrow interface the gRPC layer uses to fire run events.
+// It is satisfied by *webhooks.Emitter and can be nil to disable emission.
+type WebhookEmitter interface {
+	Emit(ctx context.Context, jobID, event string, payload map[string]interface{})
+}
+
 type Server struct {
 	pb.UnimplementedWorkerServiceServer
 	config                 *config.Config
@@ -38,6 +44,7 @@ type Server struct {
 	ConnMgr                *ConnectionManager
 	grpcServer             *grpc.Server
 	OnConnectionRegistered func()
+	WebhookEmitter         WebhookEmitter
 }
 
 func NewServer(
@@ -148,6 +155,11 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 			s.statsAgg.RecordProcessed(ctx, job.Queue, result.ElapsedMs)
 			s.broadcastJobEvent("completed", job)
 		}
+		s.emitWebhook(ctx, result.JobId, "run.completed", map[string]interface{}{
+			"success":    true,
+			"elapsed_ms": result.ElapsedMs,
+			"worker_id":  workerID,
+		})
 	} else {
 		if err := s.queueEngine.Fail(ctx, result.JobId, result.Error); err != nil {
 			log.Printf("handleJobResult: fail %s: %v", result.JobId, err)
@@ -157,6 +169,16 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 			s.statsAgg.RecordFailed(ctx, job.Queue)
 			s.broadcastJobEvent("failed", job)
 		}
+		// Only fire the public webhook once the job is truly dead (DLQ), not on
+		// per-attempt retries. Internal retries are an implementation detail.
+		if job != nil && job.Status == "dead" {
+			s.emitWebhook(ctx, result.JobId, "run.failed", map[string]interface{}{
+				"success":   false,
+				"error":     result.Error,
+				"attempts":  job.Attempts,
+				"worker_id": workerID,
+			})
+		}
 	}
 
 	s.persistExecution(ctx, workerID, result)
@@ -165,6 +187,13 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 	if job != nil {
 		s.DispatchQueue(ctx, job.Queue)
 	}
+}
+
+func (s *Server) emitWebhook(ctx context.Context, jobID, event string, payload map[string]interface{}) {
+	if s.WebhookEmitter == nil {
+		return
+	}
+	s.WebhookEmitter.Emit(ctx, jobID, event, payload)
 }
 
 func (s *Server) persistExecution(ctx context.Context, workerID string, result *pb.JobResult) {
@@ -245,6 +274,10 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 
 	log.Printf("DispatchJob: assigned job %s to worker %s", job.ID, worker.WorkerID)
 	s.broadcastJobEvent("started", job)
+	s.emitWebhook(ctx, job.ID, "run.started", map[string]interface{}{
+		"worker_id": worker.WorkerID,
+		"attempts":  job.Attempts,
+	})
 	return true
 }
 

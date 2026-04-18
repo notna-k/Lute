@@ -151,7 +151,7 @@ func cmdRun(args []string) {
 func cmdSetup(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
 	f := &setupFlags{}
-	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API base URL")
+	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API origin (scheme+host; registration POSTs to /api/public/v1/workers/bootstrap/register)")
 	fs.StringVar(&f.claimCode, "claim-code", "", "Claim code from the Add Worker dialog in the Lute UI (required)")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "Usage: lute-worker setup --claim-code <CODE> [--api URL]")
@@ -279,7 +279,7 @@ func legacyMain(args []string) {
 	fs := flag.NewFlagSet("lute-worker", flag.ExitOnError)
 	f := &legacyFlags{}
 	fs.StringVar(&f.serverAddr, "server", defaultGRPCAddr, "gRPC server address")
-	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API base URL")
+	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API origin (scheme+host; setup uses /api/public/v1/workers/bootstrap/register)")
 	fs.StringVar(&f.workerID, "worker-id", "", "Worker ID (skip REST registration if provided)")
 	fs.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this worker to your account")
 	fs.StringVar(&f.queues, "queues", defaultQueues, "Comma-separated list of queues to process")

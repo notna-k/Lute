@@ -34,15 +34,15 @@ type WorkerBinaryInfo struct {
 
 // WorkerSetupRequest is sent by the worker during --setup to register a new machine
 type WorkerSetupRequest struct {
-	Name      string           `json:"name" binding:"required"`
-	Hostname  string           `json:"hostname"`
-	OS        string           `json:"os"`
-	Arch      string           `json:"arch"`
-	CPUs      int              `json:"cpus"`
-	IP        string           `json:"ip"`
-	Version   string           `json:"version"`
+	Name      string            `json:"name" binding:"required"`
+	Hostname  string            `json:"hostname"`
+	OS        string            `json:"os"`
+	Arch      string            `json:"arch"`
+	CPUs      int               `json:"cpus"`
+	IP        string            `json:"ip"`
+	Version   string            `json:"version"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
-	ClaimCode string           `json:"claim_code,omitempty"` // optional; links machine to user when valid
+	ClaimCode string            `json:"claim_code,omitempty"` // optional; links machine to user when valid
 }
 
 // WorkerSetupResponse is returned after bootstrap registration creates a worker row.
@@ -60,16 +60,16 @@ type claimEntry struct {
 
 // WorkerHandler serves worker binaries, bootstrap, CRUD, commands, and connection info.
 type WorkerHandler struct {
-	binaryDir      string
-	mu             sync.RWMutex
-	cache          map[string]*WorkerBinaryInfo
-	claimMu        sync.RWMutex
-	claimCodes     map[string]*claimEntry
-	cfg            *config.Config
-	workerRepo     *repos.WorkerRepository
-	commandRepo    *repos.CommandRepository
-	workerService  *WorkerService
-	connMgr        *luteGrpc.ConnectionManager
+	binaryDir     string
+	mu            sync.RWMutex
+	cache         map[string]*WorkerBinaryInfo
+	claimMu       sync.RWMutex
+	claimCodes    map[string]*claimEntry
+	cfg           *config.Config
+	workerRepo    *repos.WorkerRepository
+	commandRepo   *repos.CommandRepository
+	workerService *WorkerService
+	connMgr       *luteGrpc.ConnectionManager
 }
 
 // NewWorkerHandler creates a handler that serves worker binaries from binaryDir.
@@ -277,11 +277,18 @@ func (h *WorkerHandler) InstallScript(c *gin.Context) {
 	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
 
+	bootstrapPath := "/api/public/v1/workers/bootstrap"
+	if strings.HasSuffix(c.Request.URL.Path, "/install.sh") {
+		bootstrapPath = strings.TrimSuffix(c.Request.URL.Path, "/install.sh")
+	}
+	installURL := baseURL + bootstrapPath + "/install.sh"
+	downloadURL := baseURL + bootstrapPath + "/download/${OS}/${ARCH}"
+
 	script := fmt.Sprintf(`#!/bin/bash
 set -e
 
 # Lute Worker Installer
-# Usage: curl -sSL %s/api/v1/workers/bootstrap/install.sh | bash -s -- --worker-id <ID> --server <GRPC_ADDR>
+# Usage: curl -sSL %s | bash -s -- --worker-id <ID> --server <GRPC_ADDR>
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -298,7 +305,7 @@ echo "==> Detecting platform: ${OS}/${ARCH}"
 echo "==> Downloading worker from %s ..."
 
 curl -fSL -o "/tmp/${BINARY_NAME}" \
-  "%s/api/v1/workers/bootstrap/download/${OS}/${ARCH}"
+  "%s"
 
 chmod +x "/tmp/${BINARY_NAME}"
 sudo mv "/tmp/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
@@ -311,7 +318,7 @@ echo "==> Next step: register this host with the Lute server"
 echo "    ${BINARY_NAME} setup --claim-code <CODE>"
 echo ""
 echo "    (copy the full command from the Add Worker dialog in the Lute UI)"
-`, baseURL, baseURL, baseURL)
+`, installURL, baseURL, downloadURL)
 
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))
 }
@@ -535,10 +542,10 @@ func (h *WorkerHandler) SendCommand(c *gin.Context) {
 
 	cmd := &models.Command{
 		WorkerID: workerID,
-		Command:   req.Command,
-		Args:      req.Args,
-		Env:       req.Env,
-		Status:    "pending",
+		Command:  req.Command,
+		Args:     req.Args,
+		Env:      req.Env,
+		Status:   "pending",
 	}
 
 	if err := h.commandRepo.Create(ctx, cmd); err != nil {
@@ -593,9 +600,9 @@ func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
 	}
 
 	result := gin.H{
-		"worker_id":   w.ID.Hex(),
-		"name":        w.Name,
-		"status":      w.Status,
+		"worker_id": w.ID.Hex(),
+		"name":      w.Name,
+		"status":    w.Status,
 	}
 
 	if w.Status != "pending" && !w.LastSeen.IsZero() {

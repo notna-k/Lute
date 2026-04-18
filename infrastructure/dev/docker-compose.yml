@@ -45,6 +45,13 @@ services:
       args:
         - WORKER_VERSION=${WORKER_VERSION:-0.1.0}
         - BUILD_TIME=${BUILD_TIME:-unknown}
+        - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
+        - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
+        - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
+        - VITE_FIREBASE_STORAGE_BUCKET=${VITE_FIREBASE_STORAGE_BUCKET}
+        - VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID}
+        - VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
+        - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
     container_name: lute-api
     restart: unless-stopped
     ports:
@@ -88,28 +95,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  ui:
-    build:
-      context: ../../ui
-      dockerfile: Dockerfile
-      args:
-        - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
-        - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
-        - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
-        - VITE_FIREBASE_STORAGE_BUCKET=${VITE_FIREBASE_STORAGE_BUCKET}
-        - VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID}
-        - VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID}
-        - VITE_API_URL=${VITE_API_URL}
-        - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
-    container_name: lute-ui
-    restart: unless-stopped
-    ports:
-      - "${UI_PORT:-3000}:80"
-    depends_on:
-      - api
-    networks:
-      - lute-network
 
 networks:
   lute-network:

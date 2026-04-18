@@ -1,5 +1,6 @@
 .PHONY: dev-up dev-down dev-build dev-clean dev-logs dev-restart \
-       worker-build worker-build-all worker-version go-lint help
+       worker-build worker-build-all worker-version go-lint help \
+       ui-build api-build
 
 # Pin for reproducible CI/local runs (install: https://golangci-lint.run/welcome/install/)
 GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
@@ -33,6 +34,24 @@ help:
 	@echo ""
 	@echo "  Go:"
 	@echo "    make go-lint              - Run golangci-lint on api/ and worker/ (not shared/proto)"
+	@echo ""
+	@echo "  Release (embedded UI in api binary):"
+	@echo "    make ui-build             - npm ci + vite build → api/internal/ui/dist"
+	@echo "    make api-build            - ui-build then CGO_ENABLED=0 go build api → bin/api"
+
+# === Embedded UI + API binary (requires Node for ui-build) ===
+
+ui-build:
+	@echo "==> Building UI (VITE_API_URL empty for same-origin API)"
+	cd ui && npm ci && VITE_API_URL= npm run build
+	rm -rf api/internal/ui/web
+	cp -r ui/dist api/internal/ui/web
+
+api-build: ui-build
+	@echo "==> Building api binary with embedded UI"
+	mkdir -p bin
+	cd api && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../bin/api ./cmd/api
+	@echo "Built bin/api"
 
 # === Go lint ===
 

@@ -23,6 +23,9 @@ const (
 	CollectionUptimeSnapshots  = "uptime_snapshots"
 	CollectionWorkerSnapshots  = "worker_snapshots"
 	CollectionJobExecutions    = "job_executions"
+	CollectionAPIKeys          = "api_keys"
+	CollectionRuns             = "runs"
+	CollectionWebhookDeliveries = "webhook_deliveries"
 )
 
 type MongoDB struct {
@@ -63,7 +66,7 @@ func NewMongoDB(cfg *config.Config) (*MongoDB, error) {
 // EnsureCollections creates the required collections if they don't exist,
 // so the "lute" database and collections appear as soon as the API starts.
 func (m *MongoDB) EnsureCollections(ctx context.Context) error {
-	for _, name := range []string{CollectionWorkers, CollectionUsers, CollectionCommands, CollectionUptimeSnapshots, CollectionWorkerSnapshots, CollectionJobExecutions} {
+	for _, name := range []string{CollectionWorkers, CollectionUsers, CollectionCommands, CollectionUptimeSnapshots, CollectionWorkerSnapshots, CollectionJobExecutions, CollectionAPIKeys, CollectionRuns, CollectionWebhookDeliveries} {
 		if err := m.Database.CreateCollection(ctx, name); err != nil {
 			// Code 48 = namespace already exists
 			var ce mongo.CommandError
@@ -157,6 +160,58 @@ func (m *MongoDB) EnsureCollections(ctx context.Context) error {
 			return fmt.Errorf("create job_executions index: %w", err)
 		}
 	}
+
+	apiKeysColl := m.Database.Collection(CollectionAPIKeys)
+	for _, idx := range []mongo.IndexModel{
+		{Keys: bson.D{{Key: "prefix", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: -1}}},
+	} {
+		if _, err := apiKeysColl.Indexes().CreateOne(ctx, idx); err != nil {
+			var ce mongo.CommandError
+			if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
+				continue
+			}
+			return fmt.Errorf("create api_keys index: %w", err)
+		}
+	}
+
+	runsColl := m.Database.Collection(CollectionRuns)
+	for _, idx := range []mongo.IndexModel{
+		{Keys: bson.D{{Key: "job_id", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: -1}}},
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "idempotency_key", Value: 1}},
+			Options: options.Index().
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{
+					"idempotency_key": bson.M{"$exists": true, "$type": "string"},
+				}),
+		},
+	} {
+		if _, err := runsColl.Indexes().CreateOne(ctx, idx); err != nil {
+			var ce mongo.CommandError
+			if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
+				continue
+			}
+			return fmt.Errorf("create runs index: %w", err)
+		}
+	}
+
+	webhookColl := m.Database.Collection(CollectionWebhookDeliveries)
+	for _, idx := range []mongo.IndexModel{
+		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "next_retry_at", Value: 1}}},
+		{Keys: bson.D{{Key: "job_id", Value: 1}}},
+		{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: -1}}},
+	} {
+		if _, err := webhookColl.Indexes().CreateOne(ctx, idx); err != nil {
+			var ce mongo.CommandError
+			if errors.As(err, &ce) && (ce.HasErrorCode(85) || ce.HasErrorCode(86)) {
+				continue
+			}
+			return fmt.Errorf("create webhook_deliveries index: %w", err)
+		}
+	}
+
 	return nil
 }
 

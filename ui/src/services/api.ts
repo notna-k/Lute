@@ -1,6 +1,19 @@
 import { auth } from '../config/firebase';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+/** Empty string = same-origin (embedded UI + API). */
+function resolveApiBaseURL(): string {
+  const raw = import.meta.env.VITE_API_URL;
+  if (raw === undefined || raw === null) {
+    return "http://localhost:8080";
+  }
+  const s = String(raw).trim();
+  if (s === "") {
+    return "";
+  }
+  return s.replace(/\/$/, "");
+}
+
+const API_URL = resolveApiBaseURL();
 
 class ApiClient {
     private baseURL: string;

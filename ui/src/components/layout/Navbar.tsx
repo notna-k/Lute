@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Menu as MenuIcon,
   Server,
+  Settings,
   Terminal,
   X,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, match: (p) => p === "/" || p === "/dashboard" },
   { to: "/workers", label: "Workers", icon: Server, match: (p) => p.startsWith("/workers") },
   { to: "/executions", label: "Executions", icon: Terminal, match: (p) => p.startsWith("/executions") || p.startsWith("/jobs") },
+  { to: "/settings", label: "Settings", icon: Settings, match: (p) => p.startsWith("/settings") },
 ];
 
 function isActive(pathname: string, item: NavItem): boolean {

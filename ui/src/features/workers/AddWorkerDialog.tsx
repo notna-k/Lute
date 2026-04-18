@@ -20,7 +20,16 @@ interface ClaimCodeResponse {
   expires_at: string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+function apiHttpOrigin(): string {
+  const env = import.meta.env.VITE_API_URL;
+  if (env !== undefined && env !== null && String(env).trim() !== "") {
+    return String(env).replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return "http://localhost:8080";
+}
 
 function useClaimCode(open: boolean) {
   const [code, setCode] = useState<string | null>(null);
@@ -66,8 +75,9 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
   const { code, error, loading } = useClaimCode(open);
   const [copied, setCopied] = useState(false);
 
-  const installCommand = `curl -sSL ${API_URL}/api/v1/workers/bootstrap/install.sh | bash`;
-  const setupCommand = `lute-worker setup --api ${API_URL}`;
+  const origin = apiHttpOrigin();
+  const installCommand = `curl -sSL ${origin}/api/public/v1/workers/bootstrap/install.sh | bash`;
+  const setupCommand = `lute-worker setup --api ${origin}`;
   const fullCommand = code
     ? `${installCommand} && ${setupCommand} --claim-code ${code}`
     : "";

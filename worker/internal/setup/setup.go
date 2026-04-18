@@ -105,7 +105,7 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 		os.Exit(1)
 	}
 
-	url := strings.TrimRight(apiURL, "/") + "/api/v1/workers/bootstrap/register"
+	url := strings.TrimRight(apiURL, "/") + "/api/public/v1/workers/bootstrap/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		slog.Error("Failed to connect to server", "err", err)

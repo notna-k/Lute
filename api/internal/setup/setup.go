@@ -16,18 +16,21 @@ import (
 
 // Dependencies holds all initialized dependencies
 type Dependencies struct {
-	Config               *config.Config
-	Database             *connection.MongoDB
-	Redis                *redis.Client
-	QueueEngine          *queue.Engine
-	QueueScheduler       *queue.Scheduler
-	StatsAggregator      *queue.StatsAggregator
-	WorkerRepo           *repos.WorkerRepository
-	UserRepo             *repos.UserRepository
-	CommandRepo          *repos.CommandRepository
-	UptimeSnapshotRepo   *repos.UptimeSnapshotRepository
-	WorkerSnapshotRepo   *repos.WorkerSnapshotRepository
-	JobExecutionRepo     *repos.JobExecutionRepository
+	Config             *config.Config
+	Database           *connection.MongoDB
+	Redis              *redis.Client
+	QueueEngine        *queue.Engine
+	QueueScheduler     *queue.Scheduler
+	StatsAggregator    *queue.StatsAggregator
+	WorkerRepo         *repos.WorkerRepository
+	UserRepo           *repos.UserRepository
+	CommandRepo        *repos.CommandRepository
+	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
+	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
+	JobExecutionRepo   *repos.JobExecutionRepository
+	APIKeyRepo         *repos.APIKeyRepository
+	RunRepo            *repos.RunRepository
+	WebhookRepo        *repos.WebhookDeliveryRepository
 }
 
 // Initialize loads configuration and initializes all dependencies
@@ -58,18 +61,21 @@ func Initialize() (*Dependencies, error) {
 	reposInit := initializeRepositories(db)
 
 	return &Dependencies{
-		Config:              cfg,
-		Database:            db,
-		Redis:               rdb,
-		QueueEngine:         queueEngine,
-		QueueScheduler:      queueScheduler,
-		StatsAggregator:     statsAgg,
-		WorkerRepo:           reposInit.WorkerRepo,
-		UserRepo:             reposInit.UserRepo,
-		CommandRepo:          reposInit.CommandRepo,
-		UptimeSnapshotRepo:   reposInit.UptimeSnapshotRepo,
-		WorkerSnapshotRepo:   reposInit.WorkerSnapshotRepo,
-		JobExecutionRepo:     reposInit.JobExecutionRepo,
+		Config:             cfg,
+		Database:           db,
+		Redis:              rdb,
+		QueueEngine:        queueEngine,
+		QueueScheduler:     queueScheduler,
+		StatsAggregator:    statsAgg,
+		WorkerRepo:         reposInit.WorkerRepo,
+		UserRepo:           reposInit.UserRepo,
+		CommandRepo:        reposInit.CommandRepo,
+		UptimeSnapshotRepo: reposInit.UptimeSnapshotRepo,
+		WorkerSnapshotRepo: reposInit.WorkerSnapshotRepo,
+		JobExecutionRepo:   reposInit.JobExecutionRepo,
+		APIKeyRepo:         reposInit.APIKeyRepo,
+		RunRepo:            reposInit.RunRepo,
+		WebhookRepo:        reposInit.WebhookRepo,
 	}, nil
 }
 
@@ -119,21 +125,27 @@ func initializeDatabase(cfg *config.Config) (*connection.MongoDB, error) {
 
 // Repositories holds all repository instances
 type Repositories struct {
-	WorkerRepo           *repos.WorkerRepository
-	UserRepo             *repos.UserRepository
-	CommandRepo          *repos.CommandRepository
-	UptimeSnapshotRepo   *repos.UptimeSnapshotRepository
-	WorkerSnapshotRepo   *repos.WorkerSnapshotRepository
-	JobExecutionRepo     *repos.JobExecutionRepository
+	WorkerRepo         *repos.WorkerRepository
+	UserRepo           *repos.UserRepository
+	CommandRepo        *repos.CommandRepository
+	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
+	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
+	JobExecutionRepo   *repos.JobExecutionRepository
+	APIKeyRepo         *repos.APIKeyRepository
+	RunRepo            *repos.RunRepository
+	WebhookRepo        *repos.WebhookDeliveryRepository
 }
 
 func initializeRepositories(db *connection.MongoDB) *Repositories {
 	return &Repositories{
-		WorkerRepo:           repos.NewWorkerRepository(db.Database),
-		UserRepo:             repos.NewUserRepository(db.Database),
-		CommandRepo:          repos.NewCommandRepository(db.Database),
-		UptimeSnapshotRepo:   repos.NewUptimeSnapshotRepository(db.Database),
-		WorkerSnapshotRepo:   repos.NewWorkerSnapshotRepository(db.Database),
-		JobExecutionRepo:     repos.NewJobExecutionRepository(db.Database),
+		WorkerRepo:         repos.NewWorkerRepository(db.Database),
+		UserRepo:           repos.NewUserRepository(db.Database),
+		CommandRepo:        repos.NewCommandRepository(db.Database),
+		UptimeSnapshotRepo: repos.NewUptimeSnapshotRepository(db.Database),
+		WorkerSnapshotRepo: repos.NewWorkerSnapshotRepository(db.Database),
+		JobExecutionRepo:   repos.NewJobExecutionRepository(db.Database),
+		APIKeyRepo:         repos.NewAPIKeyRepository(db.Database),
+		RunRepo:            repos.NewRunRepository(db.Database),
+		WebhookRepo:        repos.NewWebhookDeliveryRepository(db.Database),
 	}
 }

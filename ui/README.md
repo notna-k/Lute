@@ -68,8 +68,7 @@ npm run preview
 ui/
 ├── src/
 │   ├── components/       # Reusable React components
-│   │   ├── Layout.tsx
-│   │   └── ProtectedRoute.tsx
+│   │   └── layout/       # App shell, navbar, etc.
 │   ├── contexts/         # React contexts
 │   │   └── AuthContext.tsx
 │   ├── pages/           # Page components
