@@ -4,38 +4,38 @@
     "JavaScript": {
       "formatter": "language_server",
       "code_actions_on_format": {
-        "source.fixAll.eslint": true
+        "source.fixAll.eslint": true,
       },
       "tab_size": 2,
-      "hard_tabs": false
+      "hard_tabs": false,
     },
     "TypeScript": {
       "code_actions_on_format": {
-        "source.fixAll.eslint": true
+        "source.fixAll.eslint": true,
       },
       "tab_size": 2,
-      "hard_tabs": false
+      "hard_tabs": false,
     },
     "TSX": {
       "code_actions_on_format": {
-        "source.fixAll.eslint": true
+        "source.fixAll.eslint": true,
       },
       "tab_size": 2,
-      "hard_tabs": false
+      "hard_tabs": false,
     },
     "JSX": {
       "code_actions_on_format": {
-        "source.fixAll.eslint": true
+        "source.fixAll.eslint": true,
       },
       "tab_size": 2,
-      "hard_tabs": false
-    }
+      "hard_tabs": false,
+    },
   },
   "lsp": {
     "eslint": {
       "settings": {
-        "workingDirectories": ["./ui"]
-      }
-    }
-  }
+        "workingDirectories": ["./ui"],
+      },
+    },
+  },
 }
