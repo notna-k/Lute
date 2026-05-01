@@ -10,8 +10,8 @@ import (
 )
 
 func validateGitHubRepo(repoURL string) error {
-	if repoURL == "" {
-		return fmt.Errorf("source_repository is required")
+	if strings.TrimSpace(repoURL) == "" {
+		return nil
 	}
 	u, err := url.Parse(repoURL)
 	if err != nil {

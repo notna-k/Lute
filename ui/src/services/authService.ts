@@ -17,7 +17,7 @@ export const signInWithGoogle = async (): Promise<User> => {
       displayName: user.displayName,
       photoURL: user.photoURL,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error signing in with Google:', error);
     // Re-throw with more context
     throw error;

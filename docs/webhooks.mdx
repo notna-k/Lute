@@ -1,0 +1,105 @@
+---
+title: "Webhooks"
+description: "Receive signed event callbacks when runs change state."
+---
+
+Webhooks are optional. If you do not configure one on a run, Lute does not
+call out to your service — you poll `GET /runs/{id}` instead. If you do,
+Lute delivers a signed JSON POST for every event you subscribe to.
+
+## Configure a webhook
+
+Set the `webhook` block when you create a run:
+
+```json
+{
+  "webhook": {
+    "url": "https://your.app/lute/webhook",
+    "events": ["run.completed", "run.failed"],
+    "secret": "whsec_your_own_secret_optional"
+  }
+}
+```
+
+If you omit `secret`, Lute generates one and returns it in the response as
+`webhook_secret`. This is the only time you will see it — store it in your
+secret manager immediately.
+
+## Supported events
+
+| Event           | When it fires                                  |
+|-----------------|------------------------------------------------|
+| `run.started`   | A worker has accepted the run and begun work.  |
+| `run.completed` | The run finished successfully.                 |
+| `run.failed`    | The run is permanently dead (retries exhausted or cancelled). |
+
+Internal retries do not fire `run.failed`. Lute only sends it once the run
+reaches the terminal `dead` state.
+
+## Payload shape
+
+```json
+{
+  "event": "run.completed",
+  "run_id": "f0e0b3...",
+  "queue": "default",
+  "type": "container",
+  "timestamp": 1744831245,
+  "data": {
+    "success": true,
+    "elapsed_ms": 12453,
+    "worker_id": "65f21..."
+  }
+}
+```
+
+## Request headers
+
+Every delivery carries these headers:
+
+| Header             | Meaning                                                                   |
+|--------------------|---------------------------------------------------------------------------|
+| `X-Lute-Event`     | The event name, e.g. `run.completed`.                                     |
+| `X-Lute-Delivery`  | A unique id for this delivery attempt. Safe to log for idempotency.       |
+| `X-Lute-Timestamp` | Unix seconds when the payload was signed.                                 |
+| `X-Lute-Signature` | `t=<timestamp>,v1=<hex-hmac-sha256>` over `<timestamp>.<raw-body>`.       |
+
+## Verify the signature
+
+Verification is intentionally Stripe-compatible so existing libraries work.
+In Go:
+
+```go
+func verify(secret, header string, body []byte) bool {
+    var ts, sig string
+    for _, part := range strings.Split(header, ",") {
+        kv := strings.SplitN(part, "=", 2)
+        if len(kv) != 2 {
+            continue
+        }
+        switch kv[0] {
+        case "t":
+            ts = kv[1]
+        case "v1":
+            sig = kv[1]
+        }
+    }
+    mac := hmac.New(sha256.New, []byte(secret))
+    fmt.Fprintf(mac, "%s.", ts)
+    mac.Write(body)
+    expected := hex.EncodeToString(mac.Sum(nil))
+    return hmac.Equal([]byte(expected), []byte(sig))
+}
+```
+
+Reject requests whose timestamp is more than a few minutes old to prevent
+replay.
+
+## Retries and at-least-once delivery
+
+Lute considers a delivery successful when your endpoint returns a 2xx
+response within ten seconds. Any other result is retried with exponential
+backoff (30s, 1m, 2m, 4m, 8m, 16m) up to six attempts total before the
+delivery is marked `failed`. Because retries exist, plan for **at-least-once**
+delivery: the same `X-Lute-Delivery` id may arrive twice, and you should
+deduplicate on that id or on `run_id` + `event`.

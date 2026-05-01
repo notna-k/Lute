@@ -49,8 +49,7 @@ func NewEngine(rdb *redis.Client) *Engine {
 func queueKey(name string) string  { return "queue:" + name }
 func jobKey(id string) string      { return "job:" + id }
 func dlqKey(name string) string    { return "dlq:" + name }
-func delayedKey() string           { return "delayed" }
-func cronKey() string              { return "cron" }
+func delayedKey() string { return "delayed" }
 
 // Enqueue adds a job to the queue (or delayed set if opts.Delay > 0).
 func (e *Engine) Enqueue(ctx context.Context, job *Job, opts EnqueueOpts) error {
@@ -89,11 +88,14 @@ func (e *Engine) Enqueue(ctx context.Context, job *Job, opts EnqueueOpts) error 
 // Dequeue removes the highest-priority job from the given queue.
 // Returns nil, nil if the queue is empty.
 func (e *Engine) Dequeue(ctx context.Context, queueName string) (*Job, error) {
-	results, err := e.rdb.ZRevRangeByScore(ctx, queueKey(queueName), &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    "+inf",
-		Offset: 0,
-		Count:  1,
+	results, err := e.rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     queueKey(queueName),
+		Start:   "-inf",
+		Stop:    "+inf",
+		ByScore: true,
+		Rev:     true,
+		Offset:  0,
+		Count:   1,
 	}).Result()
 	if err != nil {
 		return nil, fmt.Errorf("zrevrangebyscore: %w", err)
@@ -183,6 +185,16 @@ func (e *Engine) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	return &job, nil
 }
 
+// SetWorkerID records which machine is executing a running job.
+func (e *Engine) SetWorkerID(ctx context.Context, jobID, workerID string) error {
+	job, err := e.GetJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	job.WorkerID = workerID
+	return e.saveJob(ctx, job)
+}
+
 // DeleteJob removes a job from Redis.
 func (e *Engine) DeleteJob(ctx context.Context, jobID string) error {
 	job, err := e.GetJob(ctx, jobID)
@@ -248,7 +260,12 @@ func (e *Engine) ListQueues(ctx context.Context) ([]string, error) {
 
 // ListQueueJobs returns paginated job IDs from a queue.
 func (e *Engine) ListQueueJobs(ctx context.Context, queueName string, offset, limit int64) ([]string, error) {
-	return e.rdb.ZRevRange(ctx, queueKey(queueName), offset, offset+limit-1).Result()
+	return e.rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:   queueKey(queueName),
+		Start: offset,
+		Stop:  offset + limit - 1,
+		Rev:   true,
+	}).Result()
 }
 
 // DLQList returns job IDs from the dead letter queue.
@@ -313,9 +330,11 @@ func (e *Engine) saveJob(ctx context.Context, job *Job) error {
 // Returns the number of jobs promoted and the distinct queue names that received work.
 func (e *Engine) PromoteDelayed(ctx context.Context) (int, []string, error) {
 	now := float64(time.Now().Unix())
-	jobIDs, err := e.rdb.ZRangeByScore(ctx, delayedKey(), &redis.ZRangeBy{
-		Min: "-inf",
-		Max: fmt.Sprintf("%f", now),
+	jobIDs, err := e.rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     delayedKey(),
+		Start:   "-inf",
+		Stop:    fmt.Sprintf("%f", now),
+		ByScore: true,
 	}).Result()
 	if err != nil {
 		return 0, nil, err

@@ -1,26 +1,32 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/mongo"
 
+	pb "github.com/lute/proto"
+	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/queue"
 )
 
 type JobHandler struct {
-	engine  *queue.Engine
-	stats   *queue.StatsAggregator
-	grpcSrv *grpc.Server
+	engine       *queue.Engine
+	stats        *queue.StatsAggregator
+	grpcSrv      *grpc.Server
+	jobExecRepo  *repos.JobExecutionRepository
 }
 
-func NewJobHandler(engine *queue.Engine, stats *queue.StatsAggregator, grpcSrv *grpc.Server) *JobHandler {
-	return &JobHandler{engine: engine, stats: stats, grpcSrv: grpcSrv}
+func NewJobHandler(engine *queue.Engine, stats *queue.StatsAggregator, grpcSrv *grpc.Server, jobExecRepo *repos.JobExecutionRepository) *JobHandler {
+	return &JobHandler{engine: engine, stats: stats, grpcSrv: grpcSrv, jobExecRepo: jobExecRepo}
 }
 
 type EnqueueRequest struct {
@@ -99,6 +105,7 @@ func (h *JobHandler) RetryJob(c *gin.Context) {
 	job.Attempts = 0
 	job.Error = ""
 	job.DoneAt = 0
+	job.WorkerID = ""
 	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{MaxRetries: job.MaxRetries, TimeoutSec: job.TimeoutSec}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -118,6 +125,129 @@ func (h *JobHandler) CancelJob(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job cancelled"})
+}
+
+const (
+	defaultLogLimit = 200
+	maxLogLimit     = 500
+	logRPCDeadline  = 30 * time.Second
+)
+
+// GetJobLogs proxies a chunked read of the job log file from the worker that ran (or runs) the job.
+func (h *JobHandler) GetJobLogs(c *gin.Context) {
+	jobID := c.Param("id")
+	ctx := c.Request.Context()
+
+	job, err := h.engine.GetJob(ctx, jobID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+
+	workerID, err := h.resolveLogWorker(ctx, job)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	directionStr := c.DefaultQuery("direction", "tail")
+	var dir pb.LogReadDirection
+	switch directionStr {
+	case "head":
+		dir = pb.LogReadDirection_LOG_READ_HEAD
+	case "tail":
+		dir = pb.LogReadDirection_LOG_READ_TAIL
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "direction must be tail or head"})
+		return
+	}
+
+	limit := defaultLogLimit
+	if ls := c.Query("limit"); ls != "" {
+		n, err := strconv.Atoi(ls)
+		if err != nil || n < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+			return
+		}
+		if n > maxLogLimit {
+			n = maxLogLimit
+		}
+		limit = n
+	}
+
+	var anchor int64
+	if cur := c.Query("cursor"); cur != "" {
+		anchor, err = strconv.ParseInt(cur, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cursor"})
+			return
+		}
+	}
+
+	if h.grpcSrv == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "worker gateway unavailable"})
+		return
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, logRPCDeadline)
+	defer cancel()
+
+	pbReq := &pb.JobLogRequest{
+		JobId:        jobID,
+		Direction:    dir,
+		Limit:        int32(limit),
+		AnchorOffset: anchor,
+	}
+
+	resp, err := h.grpcSrv.RequestJobLog(rpcCtx, workerID, pbReq)
+	if err != nil {
+		if errors.Is(err, grpc.ErrNoConnection) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "worker not connected"})
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	lines := resp.GetLines()
+	if lines == nil {
+		lines = []string{}
+	}
+	out := gin.H{
+		"lines":     lines,
+		"direction": directionStr,
+		"has_more":  resp.HasMore,
+		"file_size": resp.FileSize,
+	}
+	if resp.NextAnchor != 0 || resp.HasMore {
+		out["next_cursor"] = strconv.FormatInt(resp.NextAnchor, 10)
+	}
+	if resp.Error != "" {
+		out["error"] = resp.Error
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (string, error) {
+	if job.Status == "running" && job.WorkerID != "" {
+		return job.WorkerID, nil
+	}
+
+	if h.jobExecRepo == nil {
+		return "", errors.New("no execution record available for this job")
+	}
+
+	exec, err := h.jobExecRepo.GetByJobID(ctx, job.ID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return "", errors.New("no execution record for this job; logs are only available after a run or while running on a worker")
+		}
+		return "", err
+	}
+	if exec.WorkerID == "" {
+		return "", errors.New("execution record has no worker id")
+	}
+	return exec.WorkerID, nil
 }
 
 type QueueHandler struct {
@@ -270,18 +400,3 @@ func (h *DLQHandler) RetryAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "DLQ retried", "count": count})
 }
 
-type WorkersInfoHandler struct {
-	connMgr *grpc.ConnectionManager
-}
-
-func NewWorkersInfoHandler(connMgr *grpc.ConnectionManager) *WorkersInfoHandler {
-	return &WorkersInfoHandler{connMgr: connMgr}
-}
-
-func (h *WorkersInfoHandler) ListWorkers(c *gin.Context) {
-	workers := h.connMgr.ActiveWorkers()
-	c.JSON(http.StatusOK, gin.H{
-		"workers": workers,
-		"count":   len(workers),
-	})
-}

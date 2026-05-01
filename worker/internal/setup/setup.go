@@ -18,7 +18,7 @@ import (
 )
 
 // Run executes the interactive setup process.
-// claimCode is optional; when set, the new machine is linked to that user.
+// claimCode is optional; when set, the new worker is linked to that user.
 func Run(apiURL, version, buildTime, claimCode string) {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -40,7 +40,7 @@ func Run(apiURL, version, buildTime, claimCode string) {
 	setupResp := registerWithServer(apiURL, sysInfo)
 
 	// 4. Auto-start the worker in detached (background) mode
-	startWorker(setupResp, version)
+	startWorker(setupResp)
 }
 
 // promptServiceName prompts the user for a service name
@@ -105,13 +105,13 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 		os.Exit(1)
 	}
 
-	url := strings.TrimRight(apiURL, "/") + "/api/v1/worker/register"
+	url := strings.TrimRight(apiURL, "/") + "/api/public/v1/workers/bootstrap/register"
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		slog.Error("Failed to connect to server", "err", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -120,6 +120,14 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 	}
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusConflict {
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "✗ Registration rejected: another worker is already registered for this machine.")
+			fmt.Fprintln(os.Stderr, "  "+extractErrorMessage(respBody))
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "  Delete the existing worker in the Lute UI, or stop its agent process, then try again.")
+			os.Exit(1)
+		}
 		slog.Error("Server returned error", "status", resp.StatusCode, "body", string(respBody))
 		os.Exit(1)
 	}
@@ -131,15 +139,15 @@ func registerWithServer(apiURL string, sysInfo *types.SetupRequest) *types.Setup
 	}
 
 	fmt.Println()
-	fmt.Println("✓ Machine registered successfully!")
-	fmt.Printf("  Machine ID: %s\n", setupResp.MachineID)
+	fmt.Println("✓ Worker registered successfully!")
+	fmt.Printf("  Worker ID: %s\n", setupResp.WorkerID)
 	fmt.Println()
 
 	return &setupResp
 }
 
 // startWorker starts the worker in background mode
-func startWorker(setupResp *types.SetupResponse, version string) {
+func startWorker(setupResp *types.SetupResponse) {
 	fmt.Println("Starting worker in background...")
 
 	exePath, err := os.Executable()
@@ -149,14 +157,14 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 		return
 	}
 
-	logFile := fmt.Sprintf("/tmp/lute-worker-%s.log", setupResp.MachineID)
+	logFile := DaemonLogPath()
 	lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		slog.Warn("cannot open log file", "path", logFile, "err", err)
 		displayManualInstructions(setupResp)
 		return
 	}
-	defer lf.Close()
+	defer func() { _ = lf.Close() }()
 
 	cmd := createWorkerCommand(exePath, setupResp, lf)
 	if err := cmd.Start(); err != nil {
@@ -171,8 +179,9 @@ func startWorker(setupResp *types.SetupResponse, version string) {
 // createWorkerCommand creates the command to start the worker
 func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile *os.File) *exec.Cmd {
 	cmd := exec.Command(exePath,
+		"run",
 		"--server", setupResp.GRPCAddress,
-		"--machine-id", setupResp.MachineID,
+		"--worker-id", setupResp.WorkerID,
 	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -186,8 +195,20 @@ func createWorkerCommand(exePath string, setupResp *types.SetupResponse, logFile
 // displayManualInstructions shows manual start instructions
 func displayManualInstructions(setupResp *types.SetupResponse) {
 	fmt.Println("Could not auto-start. Run manually:")
-	fmt.Printf("  lute-worker --server %s --machine-id %s\n",
-		setupResp.GRPCAddress, setupResp.MachineID)
+	fmt.Printf("  lute-worker run --server %s --worker-id %s\n",
+		setupResp.GRPCAddress, setupResp.WorkerID)
+}
+
+// extractErrorMessage pulls the "error" field out of a JSON error body, falling
+// back to the raw body when it isn't JSON.
+func extractErrorMessage(body []byte) string {
+	var envelope struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Error != "" {
+		return envelope.Error
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // displayStartupInfo displays information about the started agent
@@ -197,5 +218,5 @@ func displayStartupInfo(pid int, logFile string) {
 	fmt.Println()
 	fmt.Println("Manage:")
 	fmt.Printf("  Stop:   kill %d\n", pid)
-	fmt.Printf("  Logs:   tail -f %s\n", logFile)
+	fmt.Printf("  Logs:   lute-worker logs -f\n")
 }

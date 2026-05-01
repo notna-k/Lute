@@ -55,7 +55,7 @@ func InitFirebase(projectID string) error {
 // verifyFirebaseToken verifies a Firebase ID token and returns the user ID and email
 func verifyFirebaseToken(ctx context.Context, idToken string) (string, string, error) {
 	if firebaseAuth == nil {
-		return "", "", fmt.Errorf("Firebase not initialized")
+		return "", "", fmt.Errorf("firebase not initialized")
 	}
 
 	token, err := firebaseAuth.VerifyIDToken(ctx, idToken)
