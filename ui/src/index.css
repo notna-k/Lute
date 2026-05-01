@@ -1,18 +1,150 @@
+@import url("https://rsms.me/inter/inter.css");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  :root {
+    --color-bg: 248 250 252;
+    --color-bg-subtle: 241 245 249;
+    --color-bg-muted: 226 232 240;
+    --color-bg-elevated: 255 255 255;
+    --color-bg-inverse: 15 23 42;
+
+    --color-surface: 255 255 255;
+    --color-surface-hover: 241 245 249;
+    --color-surface-active: 226 232 240;
+
+    --color-border: 226 232 240;
+    --color-border-strong: 203 213 225;
+    --color-border-subtle: 241 245 249;
+
+    --color-fg: 15 23 42;
+    --color-fg-muted: 71 85 105;
+    --color-fg-subtle: 148 163 184;
+    --color-fg-on-primary: 255 255 255;
+    --color-fg-inverse: 248 250 252;
+
+    --color-primary: 37 99 235;
+    --color-primary-hover: 29 78 216;
+    --color-primary-active: 30 64 175;
+    --color-primary-subtle: 219 234 254;
+
+    --color-success: 22 163 74;
+    --color-success-subtle: 220 252 231;
+    --color-success-fg: 21 128 61;
+
+    --color-warning: 217 119 6;
+    --color-warning-subtle: 254 243 199;
+    --color-warning-fg: 180 83 9;
+
+    --color-danger: 220 38 38;
+    --color-danger-subtle: 254 226 226;
+    --color-danger-fg: 185 28 28;
+
+    --color-info: 37 99 235;
+    --color-info-subtle: 219 234 254;
+    --color-info-fg: 29 78 216;
+  }
+
+  .dark {
+    --color-bg: 2 6 23;
+    --color-bg-subtle: 15 23 42;
+    --color-bg-muted: 30 41 59;
+    --color-bg-elevated: 15 23 42;
+    --color-bg-inverse: 248 250 252;
+
+    --color-surface: 15 23 42;
+    --color-surface-hover: 30 41 59;
+    --color-surface-active: 51 65 85;
+
+    --color-border: 30 41 59;
+    --color-border-strong: 51 65 85;
+    --color-border-subtle: 15 23 42;
+
+    --color-fg: 241 245 249;
+    --color-fg-muted: 148 163 184;
+    --color-fg-subtle: 100 116 139;
+    --color-fg-on-primary: 255 255 255;
+    --color-fg-inverse: 15 23 42;
+
+    --color-primary: 59 130 246;
+    --color-primary-hover: 96 165 250;
+    --color-primary-active: 147 197 253;
+    --color-primary-subtle: 30 58 138;
+
+    --color-success: 34 197 94;
+    --color-success-subtle: 20 83 45;
+    --color-success-fg: 134 239 172;
+
+    --color-warning: 245 158 11;
+    --color-warning-subtle: 120 53 15;
+    --color-warning-fg: 252 211 77;
+
+    --color-danger: 239 68 68;
+    --color-danger-subtle: 127 29 29;
+    --color-danger-fg: 252 165 165;
+
+    --color-info: 59 130 246;
+    --color-info-subtle: 30 58 138;
+    --color-info-fg: 147 197 253;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system,
+      BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-color: rgb(var(--color-border));
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-bg;
+  }
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+@layer components {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-border-strong)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--color-border-strong));
+    border-radius: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--color-fg-subtle));
+  }
 }
 
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}

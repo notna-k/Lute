@@ -1,0 +1,12 @@
+# https://golangci-lint.run/docs/configuration/file/
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  exclusions:
+    # Generated protobuf/gRPC code — lint api/ and worker/ only via Makefile.
+    paths:
+      - shared/proto

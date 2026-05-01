@@ -137,3 +137,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Worker binaries
+worker/bin/
+
+# Vite hashed assets copied into api/internal/ui/web (see make ui-build); placeholder index.html is tracked
+api/internal/ui/web/assets/

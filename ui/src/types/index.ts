@@ -5,14 +5,13 @@ export interface User {
   photoURL: string | null;
 }
 
-// Machine interface matching backend API response
-export interface Machine {
+// Worker row from API (registered agent / compute node).
+export interface Worker {
   id: string;
   user_id: string;
   name: string;
   description?: string;
   status: 'running' | 'stopped' | 'paused' | 'pending' | 'alive' | 'dead';
-  is_public: boolean;
   agent_ip?: string;
   agent_version?: string;
   last_seen?: string;
@@ -32,7 +31,6 @@ export interface VM {
   memory: number;
   disk: number;
   ownerId?: string;
-  isPublic?: boolean;
   createdAt: string;
   updatedAt: string;
 }
