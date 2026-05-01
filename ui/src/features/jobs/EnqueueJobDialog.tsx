@@ -13,10 +13,7 @@ import {
 import { jobService, type EnqueueRequest } from '@/services/jobService';
 
 const RUNTIME_OPTIONS = [
-  { label: 'Node:25.0.0 - Latest stable', value: 'node:25' },
-  { label: 'Node:24.0.1 - LTS', value: 'node:24' },
-  { label: 'Node:22.0.0 - LTS', value: 'node:22' },
-  { label: 'Node:20.0.0 - LTS', value: 'node:20' },
+  { label: 'Node 25', value: 'node:25' },
   { label: 'Python:3.13.0 - Latest stable', value: 'python:3.13' },
   { label: 'Python:3.12.0 - LTS', value: 'python:3.12' },
   { label: 'Python:3.11.0 - LTS', value: 'python:3.11' },

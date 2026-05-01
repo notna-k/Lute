@@ -1,0 +1,27 @@
+# Build context is the repo root (infrastructure/dev/docker-compose.yml: context: ../..).
+# Docker only reads THIS file — not api/.dockerignore or ui/.dockerignore.
+
+.git
+.gitignore
+
+# Host install; image runs `npm ci` — copying node_modules is slow and huge.
+ui/node_modules
+ui/dist
+
+# Misplaced dependency dir at repo root
+node_modules
+
+worker/bin
+
+# Stale embedded UI from local `make ui-build` — Docker rebuilds UI in ui-builder stage.
+api/internal/ui/web
+
+.env
+.env.*
+!.env.example
+
+.idea
+.vscode
+.cursor
+.DS_Store
+*.log

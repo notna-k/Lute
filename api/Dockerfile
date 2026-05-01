@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- UI (Vite), embedded into the API binary ----
-FROM node:22-alpine AS ui-builder
+FROM node:25-alpine AS ui-builder
 
 ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN

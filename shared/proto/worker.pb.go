@@ -802,7 +802,7 @@ func (x *JobAssignment) GetTimeoutSec() int32 {
 type ContainerJobSpec struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	SourceRepository string                 `protobuf:"bytes,1,opt,name=source_repository,json=sourceRepository,proto3" json:"source_repository,omitempty"`                                                                  // optional; https GitHub URL when set
-	Runtime          string                 `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`                                                                                                            // Docker image name, e.g. python:3.12, node:20
+	Runtime          string                 `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`                                                                                                            // Docker image name, e.g. python:3.12, node:25
 	RequestParams    map[string]string      `protobuf:"bytes,3,rep,name=request_params,json=requestParams,proto3" json:"request_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // user inputs -> env vars in container
 	Command          string                 `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`                                                                                                            // bash script to run inside the container
 	unknownFields    protoimpl.UnknownFields
