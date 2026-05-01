@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, RotateCcw, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { ArrowLeft, RefreshCw, RotateCcw, X } from 'lucide-react';
 import {
   Alert,
   Badge,
@@ -12,23 +12,23 @@ import {
   PageHeader,
   Skeleton,
   Tooltip,
-} from "@/components/ui";
-import { jobService, type Job } from "@/services/jobService";
-import { LogViewer } from "@/features/jobs/LogViewer";
-import type { BadgeTone } from "@/components/ui";
+} from '@/components/ui';
+import { jobService, type Job } from '@/services/jobService';
+import { LogViewer } from '@/features/jobs/LogViewer';
+import type { BadgeTone } from '@/components/ui';
 
 const JOB_LOG_PAGE = 200;
 
 const STATUS_TONE: Record<string, BadgeTone> = {
-  done: "success",
-  running: "info",
-  pending: "warning",
-  dead: "danger",
-  cancelled: "neutral",
+  done: 'success',
+  running: 'info',
+  pending: 'warning',
+  dead: 'danger',
+  cancelled: 'neutral',
 };
 
 function formatTs(unix: number | undefined): string {
-  if (!unix) return "—";
+  if (!unix) return '—';
   return new Date(unix * 1000).toLocaleString();
 }
 
@@ -40,11 +40,11 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xxs font-semibold uppercase tracking-wider text-fg-muted">
+    <div className='flex flex-col gap-1'>
+      <span className='text-xxs font-semibold uppercase tracking-wider text-fg-muted'>
         {label}
       </span>
-      <div className="text-sm text-fg">{children}</div>
+      <div className='text-sm text-fg'>{children}</div>
     </div>
   );
 }
@@ -76,7 +76,7 @@ const ExecutionDetail = () => {
       const j = await jobService.getJob(id);
       setJob(j);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load job");
+      setError(e instanceof Error ? e.message : 'Failed to load job');
     } finally {
       setLoading(false);
     }
@@ -100,7 +100,7 @@ const ExecutionDetail = () => {
       setLogsError(null);
       try {
         const r = await jobService.getJobLogs(id, {
-          direction: "tail",
+          direction: 'tail',
           limit: JOB_LOG_PAGE,
           cursor,
         });
@@ -129,7 +129,7 @@ const ExecutionDetail = () => {
           }
         });
       } catch (e) {
-        setLogsError(e instanceof Error ? e.message : "Failed to load logs");
+        setLogsError(e instanceof Error ? e.message : 'Failed to load logs');
         if (!prepend) {
           setLogLines([]);
           setLogHasMore(false);
@@ -170,7 +170,7 @@ const ExecutionDetail = () => {
       await jobService.retryJob(id);
       await fetchJob();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Retry failed");
+      setActionError(e instanceof Error ? e.message : 'Retry failed');
     } finally {
       setRetrying(false);
     }
@@ -184,7 +184,7 @@ const ExecutionDetail = () => {
       await jobService.cancelJob(id);
       await fetchJob();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Cancel failed");
+      setActionError(e instanceof Error ? e.message : 'Cancel failed');
     } finally {
       setCancelling(false);
     }
@@ -192,10 +192,10 @@ const ExecutionDetail = () => {
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-10 w-80" />
-        <Skeleton className="h-40 w-full rounded-lg" />
+      <div className='space-y-4'>
+        <Skeleton className='h-6 w-48' />
+        <Skeleton className='h-10 w-80' />
+        <Skeleton className='h-40 w-full rounded-lg' />
       </div>
     );
   }
@@ -204,47 +204,47 @@ const ExecutionDetail = () => {
     return (
       <>
         <Link
-          to="/executions"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
+          to='/executions'
+          className='mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg'
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className='h-4 w-4' />
           Back to executions
         </Link>
-        <Alert tone="danger">{error ?? "Job not found"}</Alert>
+        <Alert tone='danger'>{error ?? 'Job not found'}</Alert>
       </>
     );
   }
 
-  const canRetry = job.status === "dead" || job.status === "done";
-  const canCancel = job.status === "pending";
+  const canRetry = job.status === 'dead' || job.status === 'done';
+  const canCancel = job.status === 'pending';
 
   return (
     <>
       <Link
-        to="/executions"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
+        to='/executions'
+        className='mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg'
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className='h-4 w-4' />
         Back to executions
       </Link>
 
       <PageHeader
-        title={<span className="font-mono text-xl sm:text-2xl">{job.id}</span>}
+        title={<span className='font-mono text-xl sm:text-2xl'>{job.id}</span>}
         description={
           <span>
             {job.type} · {job.queue}
           </span>
         }
         actions={
-          <div className="flex items-center gap-2">
-            <Badge tone={STATUS_TONE[job.status] ?? "neutral"} dot>
+          <div className='flex items-center gap-2'>
+            <Badge tone={STATUS_TONE[job.status] ?? 'neutral'} dot>
               {job.status}
             </Badge>
-            <Tooltip content="Refresh job and logs">
+            <Tooltip content='Refresh job and logs'>
               <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<RefreshCw className="h-4 w-4" />}
+                variant='outline'
+                size='sm'
+                leftIcon={<RefreshCw className='h-4 w-4' />}
                 onClick={async () => {
                   await fetchJob();
                   void loadLogsTail();
@@ -255,9 +255,9 @@ const ExecutionDetail = () => {
             </Tooltip>
             {canRetry && (
               <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<RotateCcw className="h-4 w-4" />}
+                variant='outline'
+                size='sm'
+                leftIcon={<RotateCcw className='h-4 w-4' />}
                 loading={retrying}
                 onClick={handleRetry}
               >
@@ -266,9 +266,9 @@ const ExecutionDetail = () => {
             )}
             {canCancel && (
               <Button
-                variant="danger"
-                size="sm"
-                leftIcon={<X className="h-4 w-4" />}
+                variant='danger'
+                size='sm'
+                leftIcon={<X className='h-4 w-4' />}
                 loading={cancelling}
                 onClick={handleCancel}
               >
@@ -280,36 +280,36 @@ const ExecutionDetail = () => {
       />
 
       {actionError && (
-        <Alert tone="danger" className="mb-4">
+        <Alert tone='danger' className='mb-4'>
           {actionError}
         </Alert>
       )}
 
-      <Card className="mb-4">
+      <Card className='mb-4'>
         <CardHeader>
           <CardTitle>Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            <Field label="Queue">{job.queue}</Field>
-            <Field label="Type">
-              <span className="font-mono text-sm">{job.type}</span>
+          <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3'>
+            <Field label='Queue'>{job.queue}</Field>
+            <Field label='Type'>
+              <span className='font-mono text-sm'>{job.type}</span>
             </Field>
-            <Field label="Status">
-              <Badge tone={STATUS_TONE[job.status] ?? "neutral"} dot>
+            <Field label='Status'>
+              <Badge tone={STATUS_TONE[job.status] ?? 'neutral'} dot>
                 {job.status}
               </Badge>
             </Field>
-            <Field label="Enqueued">{formatTs(job.enqueued_at)}</Field>
-            <Field label="Started">{formatTs(job.started_at)}</Field>
-            <Field label="Completed">{formatTs(job.done_at)}</Field>
-            <Field label="Attempts">
+            <Field label='Enqueued'>{formatTs(job.enqueued_at)}</Field>
+            <Field label='Started'>{formatTs(job.started_at)}</Field>
+            <Field label='Completed'>{formatTs(job.done_at)}</Field>
+            <Field label='Attempts'>
               {job.attempts} / {job.max_retries}
             </Field>
-            <Field label="Timeout">{job.timeout_sec}s</Field>
+            <Field label='Timeout'>{job.timeout_sec}s</Field>
             {job.worker_id && (
-              <Field label="Worker">
-                <span className="font-mono text-sm">{job.worker_id}</span>
+              <Field label='Worker'>
+                <span className='font-mono text-sm'>{job.worker_id}</span>
               </Field>
             )}
           </div>
@@ -317,13 +317,13 @@ const ExecutionDetail = () => {
       </Card>
 
       {job.error && (
-        <Card className="mb-4">
+        <Card className='mb-4'>
           <CardHeader>
             <CardTitle>Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <Alert tone="danger">
-              <pre className="whitespace-pre-wrap break-all font-mono text-xs">
+            <Alert tone='danger'>
+              <pre className='whitespace-pre-wrap break-all font-mono text-xs'>
                 {job.error}
               </pre>
             </Alert>
@@ -332,12 +332,12 @@ const ExecutionDetail = () => {
       )}
 
       {job.payload != null && (
-        <Card className="mb-4">
+        <Card className='mb-4'>
           <CardHeader>
             <CardTitle>Payload</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-bg-subtle p-3 font-mono text-xs text-fg">
+            <pre className='overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-bg-subtle p-3 font-mono text-xs text-fg'>
               {JSON.stringify(job.payload, null, 2)}
             </pre>
           </CardContent>
@@ -350,7 +350,7 @@ const ExecutionDetail = () => {
         </CardHeader>
         <CardContent>
           {logsError && (
-            <Alert tone="warning" className="mb-3">
+            <Alert tone='warning' className='mb-3'>
               {logsError}
             </Alert>
           )}

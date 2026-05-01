@@ -1,19 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from 'react';
 import {
   dashboardService,
   type DashboardUptimePeriod,
   type DashboardUptimeResponse,
-} from "../services/dashboardService";
+} from '../services/dashboardService';
 
 const metricsUpdateIntervalMs = (() => {
   const raw = import.meta.env.VITE_METRICS_UPDATE_INTERVAL_SECONDS;
-  if (raw === undefined || raw === "") return 60 * 1000;
+  if (raw === undefined || raw === '') return 60 * 1000;
   const sec = Number(raw);
   return Number.isFinite(sec) && sec > 0 ? sec * 1000 : 60 * 1000;
 })();
 
 export const useDashboardUptime = (
-  period: DashboardUptimePeriod = "7d",
+  period: DashboardUptimePeriod = '7d',
   workerId?: string,
 ) => {
   const enabled = workerId === undefined || workerId.length > 0;

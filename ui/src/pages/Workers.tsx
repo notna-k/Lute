@@ -1,15 +1,15 @@
-import { useState } from "react";
-import { Plus, Server } from "lucide-react";
+import { useState } from 'react';
+import { Plus, Server } from 'lucide-react';
 import {
   useDeleteWorker,
   useReEnableWorker,
   useUserWorkers,
-} from "@/hooks/useWorkers";
-import type { Worker } from "@/types";
-import { Alert, Button, EmptyState, PageHeader } from "@/components/ui";
-import { AddWorkerDialog } from "@/features/workers/AddWorkerDialog";
-import { DeleteWorkerDialog } from "@/features/workers/DeleteWorkerDialog";
-import { WorkerList } from "@/features/workers/WorkerList";
+} from '@/hooks/useWorkers';
+import type { Worker } from '@/types';
+import { Alert, Button, EmptyState, PageHeader } from '@/components/ui';
+import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
+import { DeleteWorkerDialog } from '@/features/workers/DeleteWorkerDialog';
+import { WorkerList } from '@/features/workers/WorkerList';
 
 const Workers = () => {
   const [addOpen, setAddOpen] = useState(false);
@@ -33,11 +33,11 @@ const Workers = () => {
   return (
     <>
       <PageHeader
-        title="Workers"
-        description="Register, monitor, and manage compute agents."
+        title='Workers'
+        description='Register, monitor, and manage compute agents.'
         actions={
           <Button
-            leftIcon={<Plus className="h-4 w-4" />}
+            leftIcon={<Plus className='h-4 w-4' />}
             onClick={() => setAddOpen(true)}
           >
             Add worker
@@ -46,11 +46,11 @@ const Workers = () => {
       />
 
       {userQuery.isError && (
-        <Alert tone="danger" className="mb-4">
-          Failed to load workers:{" "}
+        <Alert tone='danger' className='mb-4'>
+          Failed to load workers:{' '}
           {userQuery.error instanceof Error
             ? userQuery.error.message
-            : "Unknown error"}
+            : 'Unknown error'}
         </Alert>
       )}
 
@@ -71,12 +71,12 @@ const Workers = () => {
         }
         empty={
           <EmptyState
-            icon={<Server className="h-5 w-5" />}
-            title="No workers yet"
-            description="Register your first compute agent to start running jobs."
+            icon={<Server className='h-5 w-5' />}
+            title='No workers yet'
+            description='Register your first compute agent to start running jobs.'
             action={
               <Button
-                leftIcon={<Plus className="h-4 w-4" />}
+                leftIcon={<Plus className='h-4 w-4' />}
                 onClick={() => setAddOpen(true)}
               >
                 Add your first worker

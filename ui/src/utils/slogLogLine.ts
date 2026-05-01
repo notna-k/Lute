@@ -109,7 +109,12 @@ export function parseSlogLogLine(raw: string): ParsedSlogLine {
         const severity = normalizeSeverity(obj.level);
         const source = normalizeSource(obj.source);
         const timestampDisplay = formatTimestamp(obj.time);
-        const { time: _t, level: _l, msg, source: _s, ...rest } = obj;
+        const msg = obj.msg;
+        const rest = { ...obj };
+        delete rest.time;
+        delete rest.level;
+        delete rest.source;
+        delete rest.msg;
         const message = buildMessage(msg, rest);
         return {
             severity,

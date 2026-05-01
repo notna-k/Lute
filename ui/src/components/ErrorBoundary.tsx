@@ -1,5 +1,5 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Alert, Button } from "@/components/ui";
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Alert, Button } from '@/components/ui';
 
 interface Props {
   children: ReactNode;
@@ -17,7 +17,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Unhandled error in UI:", error, info);
+    console.error('Unhandled error in UI:', error, info);
   }
 
   private reset = () => this.setState({ error: null });
@@ -25,19 +25,19 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div className="mx-auto max-w-2xl px-4 py-16">
-          <Alert tone="danger" title="Something went wrong">
-            <p className="mb-3">
-              {this.state.error.message || "An unexpected error occurred."}
+        <div className='mx-auto max-w-2xl px-4 py-16'>
+          <Alert tone='danger' title='Something went wrong'>
+            <p className='mb-3'>
+              {this.state.error.message || 'An unexpected error occurred.'}
             </p>
-            <div className="flex gap-2">
+            <div className='flex gap-2'>
               <Button
-                variant="secondary"
+                variant='secondary'
                 onClick={() => window.location.reload()}
               >
                 Reload page
               </Button>
-              <Button variant="outline" onClick={this.reset}>
+              <Button variant='outline' onClick={this.reset}>
                 Try again
               </Button>
             </div>

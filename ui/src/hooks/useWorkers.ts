@@ -1,21 +1,21 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   workerService,
   CreateWorkerRequest,
   UpdateWorkerRequest,
-} from "../services/workerService";
+} from '../services/workerService';
 
 export const workerKeys = {
-  all: ["workers"] as const,
-  lists: () => [...workerKeys.all, "list"] as const,
+  all: ['workers'] as const,
+  lists: () => [...workerKeys.all, 'list'] as const,
   list: (filter: string) => [...workerKeys.lists(), filter] as const,
-  details: () => [...workerKeys.all, "detail"] as const,
+  details: () => [...workerKeys.all, 'detail'] as const,
   detail: (id: string) => [...workerKeys.details(), id] as const,
 };
 
 export const useUserWorkers = () => {
   return useQuery({
-    queryKey: workerKeys.list("user"),
+    queryKey: workerKeys.list('user'),
     queryFn: workerService.getUserWorkers,
     staleTime: 30000,
     gcTime: 5 * 60 * 1000,
@@ -36,7 +36,7 @@ export const useCreateWorker = () => {
   return useMutation({
     mutationFn: (data: CreateWorkerRequest) => workerService.createWorker(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: workerKeys.list("user") });
+      queryClient.invalidateQueries({ queryKey: workerKeys.list('user') });
     },
   });
 };

@@ -4,13 +4,13 @@ import { auth } from '../config/firebase';
 function resolveApiBaseURL(): string {
   const raw = import.meta.env.VITE_API_URL;
   if (raw === undefined || raw === null) {
-    return "http://localhost:8080";
+    return 'http://localhost:8080';
   }
   const s = String(raw).trim();
-  if (s === "") {
-    return "";
+  if (s === '') {
+    return '';
   }
-  return s.replace(/\/$/, "");
+  return s.replace(/\/$/, '');
 }
 
 const API_URL = resolveApiBaseURL();

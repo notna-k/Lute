@@ -1,5 +1,5 @@
-import { Button, Dialog } from "@/components/ui";
-import type { Worker } from "@/types";
+import { Button, Dialog } from '@/components/ui';
+import type { Worker } from '@/types';
 
 interface DeleteWorkerDialogProps {
   worker: Worker | null;
@@ -18,24 +18,24 @@ export function DeleteWorkerDialog({
     <Dialog
       open={!!worker}
       onClose={onCancel}
-      size="sm"
-      title="Delete worker?"
+      size='sm'
+      title='Delete worker?'
       footer={
         <>
-          <Button variant="ghost" onClick={onCancel} disabled={pending}>
+          <Button variant='ghost' onClick={onCancel} disabled={pending}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={onConfirm} loading={pending}>
+          <Button variant='danger' onClick={onConfirm} loading={pending}>
             Delete
           </Button>
         </>
       }
     >
       {worker && (
-        <div className="space-y-2 text-sm text-fg-muted">
+        <div className='space-y-2 text-sm text-fg-muted'>
           <p>
-            Are you sure you want to delete{" "}
-            <span className="font-semibold text-fg">{worker.name}</span>? This
+            Are you sure you want to delete{' '}
+            <span className='font-semibold text-fg'>{worker.name}</span>? This
             will remove the worker and its history. This action cannot be
             undone.
           </p>

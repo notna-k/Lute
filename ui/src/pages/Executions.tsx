@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Plus, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, RefreshCw } from 'lucide-react';
 import {
   Alert,
   Badge,
@@ -21,18 +21,18 @@ import {
   Table,
   Tooltip,
   Tr,
-} from "@/components/ui";
-import { EnqueueJobDialog } from "@/features/jobs/EnqueueJobDialog";
+} from '@/components/ui';
+import { EnqueueJobDialog } from '@/features/jobs/EnqueueJobDialog';
 import {
   executionService,
   type JobExecution,
-} from "@/services/executionService";
-import { cn } from "@/lib/cn";
+} from '@/services/executionService';
+import { cn } from '@/lib/cn';
 
 const PAGE_SIZE = 25;
 
 function formatFinished(iso: string): string {
-  if (!iso) return "—";
+  if (!iso) return '—';
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return iso;
   return new Date(ms).toLocaleString();
@@ -44,18 +44,18 @@ function formatDuration(ms: number): string {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
-type StatusFilter = "" | "success" | "failed";
-type SortOption = "finished_at_desc" | "finished_at_asc";
+type StatusFilter = '' | 'success' | 'failed';
+type SortOption = 'finished_at_desc' | 'finished_at_asc';
 
 const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "success", label: "Success" },
-  { value: "failed", label: "Failed" },
+  { value: '', label: 'All statuses' },
+  { value: 'success', label: 'Success' },
+  { value: 'failed', label: 'Failed' },
 ] as const;
 
 const SORT_OPTIONS = [
-  { value: "finished_at_desc", label: "Newest first" },
-  { value: "finished_at_asc", label: "Oldest first" },
+  { value: 'finished_at_desc', label: 'Newest first' },
+  { value: 'finished_at_asc', label: 'Oldest first' },
 ] as const;
 
 const Executions = () => {
@@ -66,10 +66,10 @@ const Executions = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [queueFilter, setQueueFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
-  const [sort, setSort] = useState<SortOption>("finished_at_desc");
+  const [queueFilter, setQueueFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+  const [sort, setSort] = useState<SortOption>('finished_at_desc');
 
   const [queueOptions, setQueueOptions] = useState<string[]>([]);
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
@@ -100,7 +100,7 @@ const Executions = () => {
       setRows(res.executions ?? []);
       setTotal(res.total ?? 0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load executions");
+      setError(e instanceof Error ? e.message : 'Failed to load executions');
       setRows([]);
       setTotal(0);
     } finally {
@@ -119,24 +119,24 @@ const Executions = () => {
   return (
     <>
       <PageHeader
-        title="Executions"
-        description="Completed job runs (newest first by default)."
+        title='Executions'
+        description='Completed job runs (newest first by default).'
         actions={
-          <div className="flex items-center gap-2">
-            <Tooltip content="Refresh">
+          <div className='flex items-center gap-2'>
+            <Tooltip content='Refresh'>
               <IconButton
-                label="Refresh"
-                variant="outline"
+                label='Refresh'
+                variant='outline'
                 onClick={() => void fetchExecutions()}
                 disabled={loading}
               >
                 <RefreshCw
-                  className={cn("h-4 w-4", loading && "animate-spin")}
+                  className={cn('h-4 w-4', loading && 'animate-spin')}
                 />
               </IconButton>
             </Tooltip>
             <Button
-              leftIcon={<Plus className="h-4 w-4" />}
+              leftIcon={<Plus className='h-4 w-4' />}
               onClick={() => setDialogOpen(true)}
             >
               Trigger job
@@ -145,9 +145,9 @@ const Executions = () => {
         }
       />
 
-      <Card className="mb-4 p-4">
-        <div className="grid gap-3 md:grid-cols-4">
-          <Field label="Status">
+      <Card className='mb-4 p-4'>
+        <div className='grid gap-3 md:grid-cols-4'>
+          <Field label='Status'>
             <Select<StatusFilter>
               value={statusFilter}
               onChange={(v) => {
@@ -160,39 +160,39 @@ const Executions = () => {
               }))}
             />
           </Field>
-          <Field label="Queue">
+          <Field label='Queue'>
             <Input
               value={queueFilter}
-              placeholder="Exact match"
+              placeholder='Exact match'
               onChange={(e) => {
                 setQueueFilter(e.target.value);
                 setPage(0);
               }}
-              list="exec-queue-options"
+              list='exec-queue-options'
             />
-            <datalist id="exec-queue-options">
+            <datalist id='exec-queue-options'>
               {queueOptions.map((q) => (
                 <option key={q} value={q} />
               ))}
             </datalist>
           </Field>
-          <Field label="Type">
+          <Field label='Type'>
             <Input
               value={typeFilter}
-              placeholder="Exact match"
+              placeholder='Exact match'
               onChange={(e) => {
                 setTypeFilter(e.target.value);
                 setPage(0);
               }}
-              list="exec-type-options"
+              list='exec-type-options'
             />
-            <datalist id="exec-type-options">
+            <datalist id='exec-type-options'>
               {typeOptions.map((t) => (
                 <option key={t} value={t} />
               ))}
             </datalist>
           </Field>
-          <Field label="Sort">
+          <Field label='Sort'>
             <Select<SortOption>
               value={sort}
               onChange={(v) => {
@@ -209,28 +209,28 @@ const Executions = () => {
       </Card>
 
       {error && (
-        <Alert tone="danger" className="mb-4">
+        <Alert tone='danger' className='mb-4'>
           {error}
         </Alert>
       )}
 
       {loading && rows.length === 0 ? (
         <Card>
-          <div className="p-4">
-            <div className="space-y-2">
+          <div className='p-4'>
+            <div className='space-y-2'>
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
+                <Skeleton key={i} className='h-10 w-full' />
               ))}
             </div>
           </div>
         </Card>
       ) : rows.length === 0 ? (
         <EmptyState
-          title="No executions match your filters"
-          description="Try loosening the filters or trigger a new job."
+          title='No executions match your filters'
+          description='Try loosening the filters or trigger a new job.'
           action={
             <Button
-              leftIcon={<Plus className="h-4 w-4" />}
+              leftIcon={<Plus className='h-4 w-4' />}
               onClick={() => setDialogOpen(true)}
             >
               Trigger job
@@ -238,7 +238,7 @@ const Executions = () => {
           }
         />
       ) : (
-        <Card className="overflow-hidden">
+        <Card className='overflow-hidden'>
           <Table>
             <THead>
               <Tr>
@@ -248,7 +248,7 @@ const Executions = () => {
                 <Th>Queue</Th>
                 <Th>Type</Th>
                 <Th>Worker</Th>
-                <Th className="text-right">Duration</Th>
+                <Th className='text-right'>Duration</Th>
                 <Th>Error</Th>
               </Tr>
             </THead>
@@ -256,22 +256,22 @@ const Executions = () => {
               {rows.map((ex) => (
                 <Tr
                   key={ex.id}
-                  className="cursor-pointer"
+                  className='cursor-pointer'
                   onClick={() => navigate(`/executions/${ex.job_id}`)}
                 >
-                  <Td className="whitespace-nowrap tabular-nums">
+                  <Td className='whitespace-nowrap tabular-nums'>
                     {formatFinished(ex.finished_at)}
                   </Td>
                   <Td>
-                    <Badge tone={ex.success ? "success" : "danger"} dot>
-                      {ex.success ? "Success" : "Failed"}
+                    <Badge tone={ex.success ? 'success' : 'danger'} dot>
+                      {ex.success ? 'Success' : 'Failed'}
                     </Badge>
                   </Td>
                   <Td>
                     <Link
                       to={`/executions/${ex.job_id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="font-mono text-primary hover:underline"
+                      className='font-mono text-primary hover:underline'
                     >
                       {ex.job_id.length > 12
                         ? `${ex.job_id.slice(0, 10)}…`
@@ -279,25 +279,25 @@ const Executions = () => {
                     </Link>
                   </Td>
                   <Td>{ex.queue}</Td>
-                  <Td className="font-mono text-xs">{ex.type}</Td>
-                  <Td className="font-mono text-xs text-fg-muted">
+                  <Td className='font-mono text-xs'>{ex.type}</Td>
+                  <Td className='font-mono text-xs text-fg-muted'>
                     {ex.worker_id
                       ? ex.worker_id.length > 10
                         ? `${ex.worker_id.slice(0, 8)}…`
                         : ex.worker_id
-                      : "—"}
+                      : '—'}
                   </Td>
-                  <Td className="text-right tabular-nums">
+                  <Td className='text-right tabular-nums'>
                     {formatDuration(ex.elapsed_ms)}
                   </Td>
                   <Td
                     className={cn(
-                      "max-w-[220px] truncate",
-                      ex.error ? "text-danger-fg" : "text-fg-subtle"
+                      'max-w-[220px] truncate',
+                      ex.error ? 'text-danger-fg' : 'text-fg-subtle'
                     )}
-                    title={ex.error || ""}
+                    title={ex.error || ''}
                   >
-                    {ex.error || "—"}
+                    {ex.error || '—'}
                   </Td>
                 </Tr>
               ))}
@@ -315,7 +315,7 @@ const Executions = () => {
       <EnqueueJobDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        defaultQueue="default"
+        defaultQueue='default'
         onEnqueued={(jobId) => navigate(`/executions/${jobId}`)}
       />
     </>

@@ -1,19 +1,19 @@
-import type { BadgeTone } from "@/components/ui";
-import type { Worker } from "@/types";
+import type { BadgeTone } from '@/components/ui';
+import type { Worker } from '@/types';
 
-export function statusTone(status: Worker["status"]): BadgeTone {
+export function statusTone(status: Worker['status']): BadgeTone {
   switch (status) {
-    case "alive":
-    case "running":
-      return "success";
-    case "dead":
-    case "stopped":
-      return "danger";
-    case "pending":
-    case "paused":
-      return "warning";
+    case 'alive':
+    case 'running':
+      return 'success';
+    case 'dead':
+    case 'stopped':
+      return 'danger';
+    case 'pending':
+    case 'paused':
+      return 'warning';
     default:
-      return "neutral";
+      return 'neutral';
   }
 }
 
@@ -24,7 +24,7 @@ export function workerInitials(name: string): string {
       .map((s) => s[0])
       .filter(Boolean)
       .slice(0, 2)
-      .join("")
-      .toUpperCase() || "?"
+      .join('')
+      .toUpperCase() || '?'
   );
 }

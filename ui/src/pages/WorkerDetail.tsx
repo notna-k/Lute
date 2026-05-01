@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Power } from "lucide-react";
-import { useReEnableWorker, useWorker } from "@/hooks/useWorkers";
-import { useDashboardUptime } from "@/hooks/useDashboard";
-import type { ChartPoint, DashboardUptimePeriod } from "@/services/dashboardService";
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { ArrowLeft, Power } from 'lucide-react';
+import { useReEnableWorker, useWorker } from '@/hooks/useWorkers';
+import { useDashboardUptime } from '@/hooks/useDashboard';
+import type { ChartPoint, DashboardUptimePeriod } from '@/services/dashboardService';
 import {
   Alert,
   Badge,
@@ -11,45 +11,45 @@ import {
   PageHeader,
   Skeleton,
   Tabs,
-} from "@/components/ui";
+} from '@/components/ui';
 import {
   MetricsChart,
   type MetricKey,
-} from "@/features/workers/MetricsChart";
-import { statusTone } from "@/features/workers/utils";
+} from '@/features/workers/MetricsChart';
+import { statusTone } from '@/features/workers/utils';
 
 const PERIOD_ITEMS: { value: DashboardUptimePeriod; label: string }[] = [
-  { value: "10m", label: "10 min" },
-  { value: "1h", label: "1 hour" },
-  { value: "24h", label: "24 hours" },
-  { value: "7d", label: "7 days" },
+  { value: '10m', label: '10 min' },
+  { value: '1h', label: '1 hour' },
+  { value: '24h', label: '24 hours' },
+  { value: '7d', label: '7 days' },
 ];
 
 function buildTickFormatter(period: DashboardUptimePeriod) {
   return (ts: number) => {
     const d = new Date(ts);
-    if (period === "10m" || period === "1h" || period === "24h") {
+    if (period === '10m' || period === '1h' || period === '24h') {
       return d.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: period === "10m" ? "2-digit" : undefined,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: period === '10m' ? '2-digit' : undefined,
         hour12: false,
       });
     }
-    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 }
 
 const WorkerDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const [period, setPeriod] = useState<DashboardUptimePeriod>("7d");
+  const [period, setPeriod] = useState<DashboardUptimePeriod>('7d');
 
   const {
     data: worker,
     isLoading: workerLoading,
     isError: workerError,
     refetch: refetchWorker,
-  } = useWorker(id ?? "");
+  } = useWorker(id ?? '');
   const { data: chartData, isLoading: uptimeLoading } = useDashboardUptime(
     period,
     id ?? undefined
@@ -58,8 +58,8 @@ const WorkerDetail = () => {
 
   if (!id) {
     return (
-      <Alert tone="danger" title="Missing worker ID">
-        <Link to="/workers" className="text-primary underline">
+      <Alert tone='danger' title='Missing worker ID'>
+        <Link to='/workers' className='text-primary underline'>
           Back to workers
         </Link>
       </Alert>
@@ -68,18 +68,18 @@ const WorkerDetail = () => {
 
   if (workerLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-10 w-72" />
-        <Skeleton className="h-60 w-full rounded-lg" />
+      <div className='space-y-4'>
+        <Skeleton className='h-6 w-48' />
+        <Skeleton className='h-10 w-72' />
+        <Skeleton className='h-60 w-full rounded-lg' />
       </div>
     );
   }
 
   if (workerError || !worker) {
     return (
-      <Alert tone="danger" title="Worker not found">
-        <Link to="/workers" className="text-primary underline">
+      <Alert tone='danger' title='Worker not found'>
+        <Link to='/workers' className='text-primary underline'>
           Back to workers
         </Link>
       </Alert>
@@ -93,7 +93,7 @@ const WorkerDetail = () => {
   const diskYDomain: [number, number] | undefined = chartData?.disk_y_domain;
   const empty = points.length === 0 && !uptimeLoading;
   const tickFormatter = buildTickFormatter(period);
-  const tickCount = period === "24h" ? 6 : 8;
+  const tickCount = period === '24h' ? 6 : 8;
 
   const pointsByMetric = (k: MetricKey) =>
     points.filter((p) => p[k] != null);
@@ -101,18 +101,18 @@ const WorkerDetail = () => {
   return (
     <>
       <Link
-        to="/workers"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
+        to='/workers'
+        className='mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg'
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className='h-4 w-4' />
         Back to workers
       </Link>
 
       <PageHeader
         title={worker.name}
-        description="Uptime, CPU, memory and disk usage over time."
+        description='Uptime, CPU, memory and disk usage over time.'
         actions={
-          <div className="flex items-center gap-2">
+          <div className='flex items-center gap-2'>
             <Badge tone={statusTone(worker.status)} dot>
               {worker.status}
             </Badge>
@@ -120,16 +120,16 @@ const WorkerDetail = () => {
         }
       />
 
-      {worker.status === "dead" && (
+      {worker.status === 'dead' && (
         <Alert
-          tone="warning"
-          className="mb-4"
-          title="This worker is marked dead"
+          tone='warning'
+          className='mb-4'
+          title='This worker is marked dead'
           action={
             <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Power className="h-4 w-4" />}
+              variant='outline'
+              size='sm'
+              leftIcon={<Power className='h-4 w-4' />}
               loading={reEnable.isPending}
               onClick={() =>
                 reEnable.mutate(id, {
@@ -145,52 +145,52 @@ const WorkerDetail = () => {
         </Alert>
       )}
 
-      <div className="mb-4">
+      <div className='mb-4'>
         <Tabs<DashboardUptimePeriod>
           value={period}
           onChange={setPeriod}
           items={PERIOD_ITEMS}
-          variant="pill"
+          variant='pill'
         />
       </div>
 
       {empty ? (
-        <Alert tone="info" title="No metrics yet">
+        <Alert tone='info' title='No metrics yet'>
           Data is collected every few minutes. Come back soon.
         </Alert>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className='flex flex-col gap-4'>
           <MetricsChart
-            title="CPU load"
-            data={pointsByMetric("cpu_load")}
-            metric="cpu_load"
+            title='CPU load'
+            data={pointsByMetric('cpu_load')}
+            metric='cpu_load'
             domain={domain}
             loading={uptimeLoading}
             tickFormatter={tickFormatter}
             tickCount={tickCount}
-            valueFormatter={(v) => (v != null ? v.toFixed(2) : "—")}
+            valueFormatter={(v) => (v != null ? v.toFixed(2) : '—')}
           />
           <MetricsChart
-            title="Memory (MB)"
-            data={pointsByMetric("mem_usage_mb")}
-            metric="mem_usage_mb"
+            title='Memory (MB)'
+            data={pointsByMetric('mem_usage_mb')}
+            metric='mem_usage_mb'
             domain={domain}
             loading={uptimeLoading}
             tickFormatter={tickFormatter}
             tickCount={tickCount}
-            valueFormatter={(v) => (v != null ? v.toFixed(1) : "—")}
+            valueFormatter={(v) => (v != null ? v.toFixed(1) : '—')}
           />
           <MetricsChart
-            title="Disk used (GB)"
-            data={pointsByMetric("disk_used_gb")}
-            metric="disk_used_gb"
+            title='Disk used (GB)'
+            data={pointsByMetric('disk_used_gb')}
+            metric='disk_used_gb'
             domain={domain}
             yDomain={diskYDomain}
             loading={uptimeLoading}
             tickFormatter={tickFormatter}
             tickCount={tickCount}
             valueFormatter={(v) =>
-              v != null ? `${v.toFixed(2)} GB` : "—"
+              v != null ? `${v.toFixed(2)} GB` : '—'
             }
             yTickFormatter={(v) => `${Number(v).toFixed(0)} GB`}
           />
