@@ -19,19 +19,22 @@ func main() {
 	}
 	defer deps.Close()
 
-	srv := server.New(
-		deps.Config,
-		deps.Database,
-		deps.MachineRepo,
-		deps.UserRepo,
-		deps.CommandRepo,
-		deps.UptimeSnapshotRepo,
-		deps.MachineSnapshotRepo,
-		deps.JobExecutionRepo,
-		deps.QueueEngine,
-		deps.QueueScheduler,
-		deps.StatsAggregator,
-	)
+	srv := server.New(server.Deps{
+		Config:             deps.Config,
+		Database:           deps.Database,
+		WorkerRepo:         deps.WorkerRepo,
+		UserRepo:           deps.UserRepo,
+		CommandRepo:        deps.CommandRepo,
+		UptimeSnapshotRepo: deps.UptimeSnapshotRepo,
+		WorkerSnapshotRepo: deps.WorkerSnapshotRepo,
+		JobExecutionRepo:   deps.JobExecutionRepo,
+		APIKeyRepo:         deps.APIKeyRepo,
+		RunRepo:            deps.RunRepo,
+		WebhookRepo:        deps.WebhookRepo,
+		QueueEngine:        deps.QueueEngine,
+		QueueScheduler:     deps.QueueScheduler,
+		StatsAgg:           deps.StatsAggregator,
+	})
 
 	if err := srv.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

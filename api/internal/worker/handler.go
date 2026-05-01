@@ -19,6 +19,7 @@ import (
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	luteGrpc "github.com/lute/api/internal/grpc"
 )
 
 // WorkerBinaryInfo describes one compiled worker binary
@@ -33,20 +34,20 @@ type WorkerBinaryInfo struct {
 
 // WorkerSetupRequest is sent by the worker during --setup to register a new machine
 type WorkerSetupRequest struct {
-	Name      string           `json:"name" binding:"required"`
-	Hostname  string           `json:"hostname"`
-	OS        string           `json:"os"`
-	Arch      string           `json:"arch"`
-	CPUs      int              `json:"cpus"`
-	IP        string           `json:"ip"`
-	Version   string           `json:"version"`
+	Name      string            `json:"name" binding:"required"`
+	Hostname  string            `json:"hostname"`
+	OS        string            `json:"os"`
+	Arch      string            `json:"arch"`
+	CPUs      int               `json:"cpus"`
+	IP        string            `json:"ip"`
+	Version   string            `json:"version"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
-	ClaimCode string           `json:"claim_code,omitempty"` // optional; links machine to user when valid
+	ClaimCode string            `json:"claim_code,omitempty"` // optional; links machine to user when valid
 }
 
-// WorkerSetupResponse is returned after the worker registers a new machine
+// WorkerSetupResponse is returned after bootstrap registration creates a worker row.
 type WorkerSetupResponse struct {
-	MachineID   string `json:"machine_id"`
+	WorkerID    string `json:"worker_id"`
 	GRPCAddress string `json:"grpc_address"`
 	Message     string `json:"message"`
 }
@@ -57,32 +58,37 @@ type claimEntry struct {
 	ExpiresAt time.Time
 }
 
-// WorkerHandler serves compiled worker binaries and handles worker registration
+// WorkerHandler serves worker binaries, bootstrap, CRUD, commands, and connection info.
 type WorkerHandler struct {
-	binaryDir   string
-	mu          sync.RWMutex
-	cache       map[string]*WorkerBinaryInfo
-	claimMu     sync.RWMutex
-	claimCodes  map[string]*claimEntry
-	cfg         *config.Config
-	machineRepo *repos.MachineRepository
-	commandRepo *repos.CommandRepository
+	binaryDir     string
+	mu            sync.RWMutex
+	cache         map[string]*WorkerBinaryInfo
+	claimMu       sync.RWMutex
+	claimCodes    map[string]*claimEntry
+	cfg           *config.Config
+	workerRepo    *repos.WorkerRepository
+	commandRepo   *repos.CommandRepository
+	workerService *WorkerService
+	connMgr       *luteGrpc.ConnectionManager
 }
 
 // NewWorkerHandler creates a handler that serves worker binaries from binaryDir.
 func NewWorkerHandler(
 	binaryDir string,
 	cfg *config.Config,
-	machineRepo *repos.MachineRepository,
+	workerRepo *repos.WorkerRepository,
 	commandRepo *repos.CommandRepository,
+	connMgr *luteGrpc.ConnectionManager,
 ) *WorkerHandler {
 	h := &WorkerHandler{
-		binaryDir:   binaryDir,
-		cache:       make(map[string]*WorkerBinaryInfo),
-		claimCodes:  make(map[string]*claimEntry),
-		cfg:         cfg,
-		machineRepo: machineRepo,
-		commandRepo: commandRepo,
+		binaryDir:     binaryDir,
+		cache:         make(map[string]*WorkerBinaryInfo),
+		claimCodes:    make(map[string]*claimEntry),
+		cfg:           cfg,
+		workerRepo:    workerRepo,
+		commandRepo:   commandRepo,
+		workerService: NewWorkerService(workerRepo),
+		connMgr:       connMgr,
 	}
 	h.refreshCache()
 	return h
@@ -271,11 +277,18 @@ func (h *WorkerHandler) InstallScript(c *gin.Context) {
 	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
 
+	bootstrapPath := "/api/public/v1/workers/bootstrap"
+	if strings.HasSuffix(c.Request.URL.Path, "/install.sh") {
+		bootstrapPath = strings.TrimSuffix(c.Request.URL.Path, "/install.sh")
+	}
+	installURL := baseURL + bootstrapPath + "/install.sh"
+	downloadURL := baseURL + bootstrapPath + "/download/${OS}/${ARCH}"
+
 	script := fmt.Sprintf(`#!/bin/bash
 set -e
 
 # Lute Worker Installer
-# Usage: curl -sSL %s/api/v1/worker/install.sh | bash -s -- --machine-id <ID> --server <GRPC_ADDR>
+# Usage: curl -sSL %s | bash -s -- --worker-id <ID> --server <GRPC_ADDR>
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -292,7 +305,7 @@ echo "==> Detecting platform: ${OS}/${ARCH}"
 echo "==> Downloading worker from %s ..."
 
 curl -fSL -o "/tmp/${BINARY_NAME}" \
-  "%s/api/v1/worker/download/${OS}/${ARCH}"
+  "%s"
 
 chmod +x "/tmp/${BINARY_NAME}"
 sudo mv "/tmp/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
@@ -301,9 +314,11 @@ echo "==> Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 ${INSTALL_DIR}/${BINARY_NAME} --version
 
 echo ""
-echo "==> Run the worker:"
-echo "    ${BINARY_NAME} --server <GRPC_HOST:PORT> --machine-id <MACHINE_ID>"
-`, baseURL, baseURL, baseURL)
+echo "==> Next step: register this host with the Lute server"
+echo "    ${BINARY_NAME} setup --claim-code <CODE>"
+echo ""
+echo "    (copy the full command from the Add Worker dialog in the Lute UI)"
+`, installURL, baseURL, downloadURL)
 
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))
 }
@@ -316,7 +331,7 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	}
 	if req.ClaimCode == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "claim_code is required. Open the Add Machine dialog in the Lute UI (while logged in), copy the full command including --claim-code, and run it on this VM.",
+			"error": "claim_code is required. Open the Add Worker dialog in the Lute UI (while logged in), copy the full command including --claim-code, and run it on this host.",
 		})
 		return
 	}
@@ -326,16 +341,51 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	uidStr, ok := h.consumeClaimCode(req.ClaimCode)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid or expired claim code. Codes are single-use and expire after 15 minutes. Open the Add Machine dialog in the Lute UI (while logged in), copy the full command again (it includes a new --claim-code), and run it on this VM.",
+			"error": "invalid or expired claim code. Codes are single-use and expire after 15 minutes. Open the Add Worker dialog in the Lute UI (while logged in), copy the full command again (it includes a new --claim-code), and run it on this host.",
 		})
 		return
 	}
 	userID, err := primitive.ObjectIDFromHex(uidStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid claim code format. Use the exact command from the Add Machine dialog in the Lute UI.",
+			"error": "invalid claim code format. Use the exact command from the Add Worker dialog in the Lute UI.",
 		})
 		return
+	}
+
+	ip := strings.TrimSpace(req.IP)
+	if ip == "" {
+		ip = c.ClientIP()
+	}
+
+	if ip != "" {
+		existing, err := h.workerRepo.GetByUserIDAndIP(ctx, userID, ip)
+		if err != nil {
+			log.Printf("Failed to check existing workers by IP: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
+			return
+		}
+		for _, w := range existing {
+			if w.Status == "alive" || w.Status == "registered" {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": fmt.Sprintf("a worker (%q, id %s) is already registered and alive at IP %s; delete it first or stop its agent before registering a new one", w.Name, w.ID.Hex(), ip),
+				})
+				return
+			}
+		}
+		for _, w := range existing {
+			if h.connMgr != nil {
+				if conn := h.connMgr.Get(w.ID.Hex()); conn != nil {
+					conn.Shutdown()
+				}
+			}
+			if err := h.workerRepo.Delete(ctx, w.ID); err != nil {
+				log.Printf("Failed to delete stale worker %s on IP %s: %v", w.ID.Hex(), ip, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reclaim stale worker at this IP"})
+				return
+			}
+			log.Printf("Reclaimed stale worker id=%s name=%q status=%s on IP %s", w.ID.Hex(), w.Name, w.Status, ip)
+		}
 	}
 
 	metadata := map[string]interface{}{
@@ -343,33 +393,33 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 		"os":       req.OS,
 		"arch":     req.Arch,
 		"cpus":     req.CPUs,
-		"ip":       req.IP,
+		"ip":       ip,
 	}
 	for k, v := range req.Metadata {
 		metadata[k] = v
 	}
 
-	machine := &models.Machine{
+	w := &models.Worker{
 		UserID:      userID,
 		Name:        req.Name,
 		Description: fmt.Sprintf("Registered from agent on %s (%s/%s)", req.Hostname, req.OS, req.Arch),
 		Status:      "pending",
 		Metadata:    metadata,
 	}
-	if err := h.machineRepo.Create(ctx, machine); err != nil {
-		log.Printf("Failed to create machine: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create machine"})
+	if err := h.workerRepo.Create(ctx, w); err != nil {
+		log.Printf("Failed to create worker: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create worker"})
 		return
 	}
 
-	machine.Status = "registered"
-	machine.AgentIP = req.IP
-	machine.AgentVersion = req.Version
-	machine.LastSeen = time.Now()
+	w.Status = "registered"
+	w.AgentIP = ip
+	w.AgentVersion = req.Version
+	w.LastSeen = time.Now()
 
-	if err := h.machineRepo.Update(ctx, machine.ID, machine); err != nil {
-		log.Printf("Failed to update machine with agent info: %v", err)
-		_ = h.machineRepo.Delete(ctx, machine.ID)
+	if err := h.workerRepo.Update(ctx, w.ID, w); err != nil {
+		log.Printf("Failed to update worker with agent info: %v", err)
+		_ = h.workerRepo.Delete(ctx, w.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
 		return
 	}
@@ -391,13 +441,13 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 
 	grpcAddr := fmt.Sprintf("%s:%s", host, h.cfg.GRPC.Port)
 
-	log.Printf("Worker registered: machine=%s host=%s grpc=%s",
-		machine.ID.Hex(), req.Hostname, grpcAddr)
+	log.Printf("Worker registered: id=%s host=%s grpc=%s",
+		w.ID.Hex(), req.Hostname, grpcAddr)
 
 	c.JSON(http.StatusCreated, WorkerSetupResponse{
-		MachineID:   machine.ID.Hex(),
+		WorkerID:    w.ID.Hex(),
 		GRPCAddress: grpcAddr,
-		Message:     "Machine registered successfully",
+		Message:     "Worker registered successfully",
 	})
 }
 
@@ -439,7 +489,7 @@ func sha256File(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -464,10 +514,10 @@ type SendCommandRequest struct {
 }
 
 func (h *WorkerHandler) SendCommand(c *gin.Context) {
-	machineIDStr := c.Param("machineId")
-	machineID, err := primitive.ObjectIDFromHex(machineIDStr)
+	workerIDStr := c.Param("id")
+	workerID, err := primitive.ObjectIDFromHex(workerIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid machine_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
 		return
 	}
 
@@ -479,23 +529,23 @@ func (h *WorkerHandler) SendCommand(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	machine, err := h.machineRepo.GetByID(ctx, machineID)
+	w, err := h.workerRepo.GetByID(ctx, workerID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
 		return
 	}
 
-	if machine.Status == "" || machine.Status == "pending" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "machine has no worker connected"})
+	if w.Status == "" || w.Status == "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "worker has no active agent connection"})
 		return
 	}
 
 	cmd := &models.Command{
-		MachineID: machineID,
-		Command:   req.Command,
-		Args:      req.Args,
-		Env:       req.Env,
-		Status:    "pending",
+		WorkerID: workerID,
+		Command:  req.Command,
+		Args:     req.Args,
+		Env:      req.Env,
+		Status:   "pending",
 	}
 
 	if err := h.commandRepo.Create(ctx, cmd); err != nil {
@@ -512,15 +562,15 @@ func (h *WorkerHandler) SendCommand(c *gin.Context) {
 }
 
 func (h *WorkerHandler) ListCommands(c *gin.Context) {
-	machineIDStr := c.Param("machineId")
-	machineID, err := primitive.ObjectIDFromHex(machineIDStr)
+	workerIDStr := c.Param("id")
+	workerID, err := primitive.ObjectIDFromHex(workerIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid machine_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
 		return
 	}
 
 	ctx := c.Request.Context()
-	commands, err := h.commandRepo.GetByMachineID(ctx, machineID, 50)
+	commands, err := h.commandRepo.GetByWorkerID(ctx, workerID, 50)
 	if err != nil {
 		log.Printf("Failed to list commands: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list commands"})
@@ -533,33 +583,33 @@ func (h *WorkerHandler) ListCommands(c *gin.Context) {
 	})
 }
 
-func (h *WorkerHandler) GetWorkerStatus(c *gin.Context) {
-	machineIDStr := c.Param("machineId")
-	machineID, err := primitive.ObjectIDFromHex(machineIDStr)
+func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
+	workerIDStr := c.Param("id")
+	workerOID, err := primitive.ObjectIDFromHex(workerIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid machine_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
 		return
 	}
 
 	ctx := c.Request.Context()
 
-	machine, err := h.machineRepo.GetByID(ctx, machineID)
+	w, err := h.workerRepo.GetByID(ctx, workerOID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "machine not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
 		return
 	}
 
 	result := gin.H{
-		"machine_id":      machine.ID.Hex(),
-		"machine_name":    machine.Name,
-		"machine_status":  machine.Status,
+		"worker_id": w.ID.Hex(),
+		"name":      w.Name,
+		"status":    w.Status,
 	}
 
-	if machine.Status != "pending" && !machine.LastSeen.IsZero() {
-		result["agent_ip"] = machine.AgentIP
-		result["agent_version"] = machine.AgentVersion
-		result["last_seen"] = machine.LastSeen
-		result["metrics"] = machine.Metrics
+	if w.Status != "pending" && !w.LastSeen.IsZero() {
+		result["agent_ip"] = w.AgentIP
+		result["agent_version"] = w.AgentVersion
+		result["last_seen"] = w.LastSeen
+		result["metrics"] = w.Metrics
 	}
 
 	c.JSON(http.StatusOK, result)

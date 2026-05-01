@@ -13,11 +13,11 @@ import (
 
 // HeartbeatChecker periodically pings connected agents over their
 // bidirectional gRPC streams. On a successful pong the retry counter is
-// reset; on failure it is incremented. Once retries exceed max the machine
+// reset; on failure it is incremented. Once retries exceed max the worker
 // is marked dead and no longer polled.
 type HeartbeatChecker struct {
-	machineRepo *repos.MachineRepository
-	connMgr     *grpc.ConnectionManager
+	workerRepo *repos.WorkerRepository
+	connMgr    *grpc.ConnectionManager
 	interval    time.Duration
 	pingTimeout time.Duration
 	maxRetries  int
@@ -25,15 +25,15 @@ type HeartbeatChecker struct {
 }
 
 func NewHeartbeatChecker(
-	machineRepo *repos.MachineRepository,
+	workerRepo *repos.WorkerRepository,
 	connMgr *grpc.ConnectionManager,
 	interval time.Duration,
 	pingTimeout time.Duration,
 	maxRetries int,
 ) *HeartbeatChecker {
 	return &HeartbeatChecker{
-		machineRepo: machineRepo,
-		connMgr:     connMgr,
+		workerRepo: workerRepo,
+		connMgr:    connMgr,
 		interval:    interval,
 		pingTimeout: pingTimeout,
 		maxRetries:  maxRetries,
@@ -71,26 +71,26 @@ func (h *HeartbeatChecker) Start(ctx context.Context) {
 }
 
 func (h *HeartbeatChecker) check(ctx context.Context) {
-	machines, err := h.machineRepo.ListMonitored(ctx)
+	workers, err := h.workerRepo.ListMonitored(ctx)
 	if err != nil {
 		log.Printf("Heartbeat checker: list monitored: %v", err)
 		return
 	}
 
-	for _, m := range machines {
-		machineID := m.ID.Hex()
-		conn := h.connMgr.Get(machineID)
+	for _, w := range workers {
+		workerID := w.ID.Hex()
+		conn := h.connMgr.Get(workerID)
 
 		if conn == nil {
-			h.handleMiss(ctx, machineID)
+			h.handleMiss(ctx, workerID)
 			continue
 		}
 
-		log.Printf("Heartbeat checker: pinging machine %s", machineID)
+		log.Printf("Heartbeat checker: pinging worker %s", workerID)
 		pong, err := conn.Ping(h.pingTimeout)
 		if err != nil {
-			log.Printf("Heartbeat checker: ping %s failed: %v", machineID, err)
-			h.handleMiss(ctx, machineID)
+			log.Printf("Heartbeat checker: ping %s failed: %v", workerID, err)
+			h.handleMiss(ctx, workerID)
 			continue
 		}
 
@@ -98,32 +98,32 @@ func (h *HeartbeatChecker) check(ctx context.Context) {
 		if pong != nil {
 			metrics = metricValueMapToInterface(pong.GetMetrics())
 		}
-		if err := h.machineRepo.UpdateHeartbeat(ctx, m.ID, metrics); err != nil {
-			log.Printf("Heartbeat checker: update heartbeat %s: %v", machineID, err)
+		if err := h.workerRepo.UpdateHeartbeat(ctx, w.ID, metrics); err != nil {
+			log.Printf("Heartbeat checker: update heartbeat %s: %v", workerID, err)
 		} else {
-			log.Printf("Heartbeat checker: machine %s OK", machineID)
+			log.Printf("Heartbeat checker: worker %s OK", workerID)
 		}
 	}
 }
 
-func (h *HeartbeatChecker) handleMiss(ctx context.Context, machineID string) {
-	mid, err := grpc.ParseMachineID(machineID)
+func (h *HeartbeatChecker) handleMiss(ctx context.Context, workerID string) {
+	wid, err := grpc.ParseWorkerID(workerID)
 	if err != nil {
 		return
 	}
 
-	newRetry, err := h.machineRepo.IncrementHeartbeatRetry(ctx, mid)
+	newRetry, err := h.workerRepo.IncrementHeartbeatRetry(ctx, wid)
 	if err != nil {
-		log.Printf("Heartbeat checker: increment retry %s: %v", machineID, err)
+		log.Printf("Heartbeat checker: increment retry %s: %v", workerID, err)
 		return
 	}
 
 	if newRetry >= h.maxRetries {
-		if err := h.machineRepo.UpdateStatus(ctx, mid, "dead"); err != nil {
-			log.Printf("Heartbeat checker: mark dead %s: %v", machineID, err)
+		if err := h.workerRepo.UpdateStatus(ctx, wid, "dead"); err != nil {
+			log.Printf("Heartbeat checker: mark dead %s: %v", workerID, err)
 			return
 		}
-		log.Printf("Heartbeat checker: marked %s as dead (retry %d >= %d)", machineID, newRetry, h.maxRetries)
+		log.Printf("Heartbeat checker: marked %s as dead (retry %d >= %d)", workerID, newRetry, h.maxRetries)
 	}
 }
 

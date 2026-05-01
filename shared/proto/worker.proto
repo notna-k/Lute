@@ -9,11 +9,12 @@ service WorkerService {
 }
 
 message WorkerMessage {
-  string machine_id = 1;
+  string worker_id = 1;
   oneof payload {
     HeartbeatPong    heartbeat_pong = 2;
     JobResult        result         = 3;
     WorkerRegistration register     = 4;
+    JobLogResponse   job_log_response = 5;
   }
 }
 
@@ -22,7 +23,34 @@ message ServerMessage {
     HeartbeatPing heartbeat_ping = 1;
     JobAssignment assign         = 2;
     DrainSignal   drain          = 3;
+    JobLogRequest job_log_request  = 4;
   }
+}
+
+// LogReadDirection selects whether to read from the end of the file (tail) or the start (head).
+enum LogReadDirection {
+  LOG_READ_TAIL = 0;
+  LOG_READ_HEAD = 1;
+}
+
+// JobLogRequest asks the worker to return up to `limit` complete lines from a job log file.
+// TAIL: anchor_offset 0 = from EOF; anchor_offset X = read lines strictly before byte X.
+// HEAD: anchor_offset 0 = from BOF; anchor_offset X = start reading at byte X.
+message JobLogRequest {
+  string request_id = 1;
+  string job_id = 2;
+  LogReadDirection direction = 3;
+  int32 limit = 4;
+  int64 anchor_offset = 5;
+}
+
+message JobLogResponse {
+  string request_id = 1;
+  repeated string lines = 2;
+  int64 next_anchor = 3;
+  int64 file_size = 4;
+  bool has_more = 5;
+  string error = 6;
 }
 
 message HeartbeatPing {
@@ -44,9 +72,8 @@ message HeartbeatPong {
 }
 
 message WorkerRegistration {
-  string worker_id   = 1;
-  repeated string queues = 2;
-  int32 concurrency  = 3;
+  repeated string queues = 1;
+  int32 concurrency = 2;
 }
 
 message JobAssignment {
@@ -60,8 +87,8 @@ message JobAssignment {
 // ContainerJobSpec describes a job that runs inside a Docker container.
 // For type "container", JobAssignment.payload is JSON matching this message.
 message ContainerJobSpec {
-  string source_repository = 1;           // e.g. https://github.com/owner/repo.git
-  string runtime = 2;                     // Docker image name, e.g. python:3.12, node:20
+  string source_repository = 1;           // optional; https GitHub URL when set
+  string runtime = 2;                     // Docker image name, e.g. python:3.12, node:25
   map<string, string> request_params = 3; // user inputs -> env vars in container
   string command = 4;                     // bash script to run inside the container
 }
@@ -75,4 +102,8 @@ message JobResult {
   string execution_log_file  = 6;
 }
 
-message DrainSignal {}
+// DrainSignal asks a worker to stop picking up new jobs. If `shutdown` is true,
+// the worker also exits its process after in-flight jobs complete.
+message DrainSignal {
+  bool shutdown = 1;
+}

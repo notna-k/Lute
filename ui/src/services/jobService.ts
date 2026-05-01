@@ -38,6 +38,15 @@ export interface ListJobsResponse {
     count: number;
 }
 
+export interface JobLogsResponse {
+    lines: string[];
+    direction: string;
+    has_more: boolean;
+    file_size: number;
+    next_cursor?: string;
+    error?: string;
+}
+
 export const jobService = {
     listJobs: async (queueName: string, params?: { offset?: number; limit?: number }): Promise<ListJobsResponse> => {
         const qs = new URLSearchParams();
@@ -65,5 +74,16 @@ export const jobService = {
 
     cancelJob: async (id: string): Promise<{ message: string }> => {
         return apiClient.delete(`/api/v1/jobs/${id}`);
+    },
+
+    getJobLogs: async (
+        id: string,
+        params?: { direction?: 'tail' | 'head'; limit?: number; cursor?: string }
+    ): Promise<JobLogsResponse> => {
+        const qs = new URLSearchParams();
+        qs.set('direction', params?.direction ?? 'tail');
+        qs.set('limit', String(params?.limit ?? 200));
+        if (params?.cursor) qs.set('cursor', params.cursor);
+        return apiClient.get<JobLogsResponse>(`/api/v1/jobs/${id}/logs?${qs.toString()}`);
     },
 };

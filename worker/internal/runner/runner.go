@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -23,7 +24,7 @@ type Spec struct {
 const workspaceMount = "/workspace"
 const commandScriptName = "_user_command.sh"
 
-// Run clones the repo, writes the command script, runs a Docker container, and cleans up.
+// Run optionally clones a repo into the workspace, writes the command script, runs a Docker container, and cleans up.
 // System events are JSON-logged to job-{jobID}.log under logDir when logDir is set and also mirrored
 // to the default slog logger (console). Container stdout lines go to the job file only (source=container).
 // When logDir is empty, job file writes are discarded but system lines still appear on the default logger.
@@ -36,9 +37,6 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 
 	if spec == nil {
 		return 0, fmt.Errorf("spec is nil")
-	}
-	if err := validateGitHubRepo(spec.SourceRepository); err != nil {
-		return 0, fmt.Errorf("invalid source_repository: %w", err)
 	}
 	if spec.Runtime == "" {
 		return 0, fmt.Errorf("runtime (Docker image) is required")
@@ -54,15 +52,21 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 	if err != nil {
 		return 0, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	logSystem(jobLogger, slog.LevelInfo, "temp dir", slog.String("path", dir))
 
-
-	if err := cloneRepo(ctx, dir, spec.SourceRepository); err != nil {
-		return 0, fmt.Errorf("clone: %w", err)
+	repo := strings.TrimSpace(spec.SourceRepository)
+	if repo != "" {
+		if err := validateGitHubRepo(repo); err != nil {
+			return 0, fmt.Errorf("invalid source_repository: %w", err)
+		}
+		if err := cloneRepo(ctx, dir, repo); err != nil {
+			return 0, fmt.Errorf("clone: %w", err)
+		}
+		logSystem(jobLogger, slog.LevelInfo, "clone ok")
+	} else {
+		logSystem(jobLogger, slog.LevelInfo, "no source repository; empty workspace")
 	}
-	logSystem(jobLogger, slog.LevelInfo, "clone ok")
-
 
 	scriptPath := filepath.Join(dir, commandScriptName)
 	if err := os.WriteFile(scriptPath, []byte(spec.Command), 0700); err != nil {
@@ -80,7 +84,7 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 	if err != nil {
 		return 0, fmt.Errorf("docker client: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	exitCode, err := runContainer(runCtx, cli, dir, spec, jobLogger)
 	if err != nil {

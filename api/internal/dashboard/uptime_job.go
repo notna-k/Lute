@@ -8,17 +8,17 @@ import (
 	"github.com/lute/api/internal/db/repos"
 )
 
-// UptimeSnapshotJob runs periodically to record per-user machine counts for the dashboard uptime graph.
+// UptimeSnapshotJob runs periodically to record per-user worker counts for the dashboard uptime graph.
 type UptimeSnapshotJob struct {
-	machineRepo  *repos.MachineRepository
+	workerRepo   *repos.WorkerRepository
 	snapshotRepo *repos.UptimeSnapshotRepository
 	interval     time.Duration
 }
 
 // NewUptimeSnapshotJob creates a new UptimeSnapshotJob. interval is the time between snapshots (e.g. 5*time.Minute).
-func NewUptimeSnapshotJob(machineRepo *repos.MachineRepository, snapshotRepo *repos.UptimeSnapshotRepository, interval time.Duration) *UptimeSnapshotJob {
+func NewUptimeSnapshotJob(workerRepo *repos.WorkerRepository, snapshotRepo *repos.UptimeSnapshotRepository, interval time.Duration) *UptimeSnapshotJob {
 	return &UptimeSnapshotJob{
-		machineRepo:  machineRepo,
+		workerRepo:   workerRepo,
 		snapshotRepo: snapshotRepo,
 		interval:     interval,
 	}
@@ -42,7 +42,7 @@ func (j *UptimeSnapshotJob) Run(ctx context.Context) {
 }
 
 func (j *UptimeSnapshotJob) runOnce(ctx context.Context) {
-	rows, err := j.machineRepo.AggregateCountsByUserID(ctx)
+	rows, err := j.workerRepo.AggregateCountsByUserID(ctx)
 	if err != nil {
 		log.Printf("uptime snapshot: aggregate failed: %v", err)
 		return

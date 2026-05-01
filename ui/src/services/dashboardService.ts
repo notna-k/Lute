@@ -1,6 +1,6 @@
 import { apiClient } from './api';
 
-/** One bucket-aligned chart point. Null metrics = machine was down in this bucket (gap). */
+/** One bucket-aligned chart point. Null metrics = worker was down in this bucket (gap). */
 export interface ChartPoint {
     t: number;
     cpu_load?: number | null;
@@ -43,9 +43,9 @@ export const dashboardService = {
     getConfig: async (): Promise<DashboardConfigResponse> => {
         return apiClient.get<DashboardConfigResponse>('/api/v1/dashboard/config', { cache: 'no-store' });
     },
-    getUptime: async (period: DashboardUptimePeriod, machineId?: string): Promise<DashboardUptimeResponse> => {
+    getUptime: async (period: DashboardUptimePeriod, workerId?: string): Promise<DashboardUptimeResponse> => {
         const params = new URLSearchParams({ period });
-        if (machineId) params.set('machine_id', machineId);
+        if (workerId) params.set('worker_id', workerId);
         return apiClient.get<DashboardUptimeResponse>(`/api/v1/dashboard/uptime?${params.toString()}`, { cache: 'no-store' });
     },
 };

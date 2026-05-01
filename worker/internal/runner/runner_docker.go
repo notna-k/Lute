@@ -24,7 +24,9 @@ func runContainer(ctx context.Context, cli *client.Client, dir string, spec *Spe
 	if err != nil {
 		return 0, err
 	}
-	defer cli.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true})
+	defer func() {
+		_ = cli.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true})
+	}()
 
 	var logWG sync.WaitGroup
 	logWG.Go(func() {
@@ -49,7 +51,7 @@ func pullImage(ctx context.Context, cli *client.Client, imageName string, jobLog
 	if err != nil {
 		return fmt.Errorf("image pull %q: %w", imageName, err)
 	}
-	defer resp.Close()
+	defer func() { _ = resp.Close() }()
 	_, _ = io.Copy(io.Discard, resp)
 
 	logSystem(jobLogger, slog.LevelInfo, "image pull ok", slog.String("image", imageName))
@@ -132,7 +134,7 @@ func streamContainerLogs(ctx context.Context, cli *client.Client, containerID st
 	if err != nil {
 		return err
 	}
-	defer logReader.Close()
+	defer func() { _ = logReader.Close() }()
 
 	lw := &lineLogWriter{jobLogger: jobLogger}
 	_, err = stdcopy.StdCopy(lw, io.Discard, logReader)

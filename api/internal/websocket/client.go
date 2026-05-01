@@ -42,13 +42,13 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID string) *Client {
 func (c *Client) ReadPump(cfg *config.WebSocketConfig) {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
-	c.conn.SetReadDeadline(time.Now().Add(cfg.PongWait))
+	_ = c.conn.SetReadDeadline(time.Now().Add(cfg.PongWait))
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(cfg.PongWait))
+		_ = c.conn.SetReadDeadline(time.Now().Add(cfg.PongWait))
 		return nil
 	})
 
@@ -74,16 +74,16 @@ func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 	ticker := time.NewTicker(cfg.PingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(cfg.WriteWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(cfg.WriteWait))
 			if !ok {
 				// The hub closed the channel
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
@@ -91,13 +91,13 @@ func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			_, _ = w.Write(message)
 
 			// Add queued messages to the current websocket message
 			n := len(c.send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
+				_, _ = w.Write([]byte{'\n'})
+				_, _ = w.Write(<-c.send)
 			}
 
 			if err := w.Close(); err != nil {
@@ -105,7 +105,7 @@ func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(cfg.WriteWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(cfg.WriteWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
