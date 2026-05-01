@@ -23,13 +23,14 @@ ENV VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
 ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_METRICS_UPDATE_INTERVAL_SECONDS=$VITE_METRICS_UPDATE_INTERVAL_SECONDS
+ENV NPM_CONFIG_CACHE=/root/.cache/npm
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (cache npm across builds)
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+# Install dependencies (persist tarball cache across builds — requires BuildKit)
+RUN --mount=type=cache,target=/root/.cache/npm \
+    npm ci --prefer-offline --no-audit --no-fund
 
 # Copy source code
 COPY . .
