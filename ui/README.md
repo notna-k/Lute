@@ -15,7 +15,7 @@ A modern React application for managing virtual machines, built with Vite, TypeS
 
 ### Prerequisites
 
-- Node.js 18+ and npm/yarn/pnpm
+- Node.js **25.x** (see `engines` in `package.json`, `.nvmrc`) and npm
 
 ### Installation
 
@@ -68,8 +68,7 @@ npm run preview
 ui/
 ├── src/
 │   ├── components/       # Reusable React components
-│   │   ├── Layout.tsx
-│   │   └── ProtectedRoute.tsx
+│   │   └── layout/       # App shell, navbar, etc.
 │   ├── contexts/         # React contexts
 │   │   └── AuthContext.tsx
 │   ├── pages/           # Page components

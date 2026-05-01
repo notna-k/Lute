@@ -1,0 +1,338 @@
+package dashboard
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/models"
+	"github.com/lute/api/internal/db/repos"
+	wsvc "github.com/lute/api/internal/worker"
+)
+
+// DashboardHandler handles dashboard stats and uptime API.
+type DashboardHandler struct {
+	cfg           *config.Config
+	workerService *wsvc.WorkerService
+	snapshotRepo  *repos.WorkerSnapshotRepository
+}
+
+// NewDashboardHandler creates a new DashboardHandler.
+func NewDashboardHandler(cfg *config.Config, workerService *wsvc.WorkerService, snapshotRepo *repos.WorkerSnapshotRepository) *DashboardHandler {
+	return &DashboardHandler{
+		cfg:           cfg,
+		workerService: workerService,
+		snapshotRepo:  snapshotRepo,
+	}
+}
+
+// GetConfig returns dashboard/metrics client config (e.g. poll interval to match snapshot job).
+func (h *DashboardHandler) GetConfig(c *gin.Context) {
+	sec := int(h.cfg.Metrics.SnapshotInterval.Seconds())
+	if sec < 1 {
+		sec = 1
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"metrics_poll_interval_seconds": sec})
+}
+
+// GetStats handles GET /api/v1/dashboard/stats (authenticated).
+func (h *DashboardHandler) GetStats(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	workersList, err := h.workerService.GetByUserID(ctx, userIDObj)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var alive, dead int
+	for _, w := range workersList {
+		switch w.Status {
+		case "alive":
+			alive++
+		case "dead":
+			dead++
+		}
+	}
+	total := len(workersList)
+
+	c.JSON(http.StatusOK, gin.H{
+		"total": total,
+		"alive": alive,
+		"dead":  dead,
+	})
+}
+
+// ChartPoint is one bucket-aligned point for charts.
+type ChartPoint struct {
+	T           int64     `json:"t"`
+	CpuLoad     *float64  `json:"cpu_load"`
+	MemUsageMb  *float64  `json:"mem_usage_mb"`
+	DiskUsedGb  *float64  `json:"disk_used_gb"`
+	DiskTotalGb *float64  `json:"disk_total_gb"`
+}
+
+// ChartResponse is the dashboard uptime API response.
+type ChartResponse struct {
+	Points        []ChartPoint `json:"points"`
+	PeriodStartMs int64       `json:"period_start_ms"`
+	PeriodEndMs   int64       `json:"period_end_ms"`
+	DiskYDomain   [2]float64  `json:"disk_y_domain"`
+}
+
+const targetChartPoints = 80
+
+func bucketDuration(period string, snapshotInterval time.Duration) time.Duration {
+	if snapshotInterval <= 0 {
+		snapshotInterval = time.Minute
+	}
+	var periodDur time.Duration
+	switch period {
+	case "10m":
+		periodDur = 10 * time.Minute
+	case "1h":
+		periodDur = time.Hour
+	case "24h":
+		periodDur = 24 * time.Hour
+	case "7d":
+		periodDur = 7 * 24 * time.Hour
+	default:
+		periodDur = 7 * 24 * time.Hour
+	}
+	bucket := periodDur / targetChartPoints
+	if bucket < snapshotInterval {
+		bucket = snapshotInterval
+	}
+	return bucket
+}
+
+func buildChartPerWorker(snapshots []*models.WorkerSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
+	bucketMs := bucketDur.Milliseconds()
+	periodStartMs := periodStart.UnixMilli()
+	periodEndMs := periodEnd.UnixMilli()
+
+	type bucketVal struct {
+		at                      time.Time
+		cpu, mem, diskUsed, diskTotal float64
+	}
+	byBucket := make(map[int64]*bucketVal)
+	for _, s := range snapshots {
+		tMs := s.At.UnixMilli()
+		b := (tMs / bucketMs) * bucketMs
+		existing, ok := byBucket[b]
+		if !ok || s.At.After(existing.at) {
+			byBucket[b] = &bucketVal{
+				at:        s.At,
+				cpu:       floatFrom(s.Metrics, "cpu_load"),
+				mem:       floatFrom(s.Metrics, "mem_usage_mb"),
+				diskUsed:  floatFrom(s.Metrics, "disk_used_gb"),
+				diskTotal: floatFrom(s.Metrics, "disk_total_gb"),
+			}
+		}
+	}
+
+	diskMax = 1
+	for b := periodStartMs; b <= periodEndMs; b += bucketMs {
+		p := ChartPoint{T: b}
+		if v, ok := byBucket[b]; ok {
+			p.CpuLoad = ptrFloat(roundMetric(v.cpu))
+			p.MemUsageMb = ptrFloat(roundMetric(v.mem))
+			p.DiskUsedGb = ptrFloat(roundMetric(v.diskUsed))
+			p.DiskTotalGb = ptrFloat(roundMetric(v.diskTotal))
+			if v.diskTotal > diskMax {
+				diskMax = v.diskTotal
+			}
+		}
+		points = append(points, p)
+	}
+	return points, diskMax
+}
+
+func buildChartAggregated(snapshots []*models.WorkerSnapshot, periodStart, periodEnd time.Time, bucketDur time.Duration) (points []ChartPoint, diskMax float64) {
+	bucketMs := bucketDur.Milliseconds()
+	periodStartMs := periodStart.UnixMilli()
+	periodEndMs := periodEnd.UnixMilli()
+
+	type agg struct {
+		n            int
+		sumCpu       float64
+		sumMem       float64
+		sumDiskUsed  float64
+		sumDiskTotal float64
+	}
+	byBucket := make(map[int64]*agg)
+	for _, s := range snapshots {
+		tMs := s.At.UnixMilli()
+		b := (tMs / bucketMs) * bucketMs
+		a, ok := byBucket[b]
+		if !ok {
+			a = &agg{}
+			byBucket[b] = a
+		}
+		a.n++
+		a.sumCpu += floatFrom(s.Metrics, "cpu_load")
+		a.sumMem += floatFrom(s.Metrics, "mem_usage_mb")
+		a.sumDiskUsed += floatFrom(s.Metrics, "disk_used_gb")
+		a.sumDiskTotal += floatFrom(s.Metrics, "disk_total_gb")
+	}
+
+	diskMax = 1
+	for b := periodStartMs; b <= periodEndMs; b += bucketMs {
+		p := ChartPoint{T: b}
+		if a, ok := byBucket[b]; ok && a.n > 0 {
+			n := float64(a.n)
+			p.CpuLoad = ptrFloat(roundMetric(a.sumCpu / n))
+			p.MemUsageMb = ptrFloat(roundMetric(a.sumMem / n))
+			p.DiskUsedGb = ptrFloat(roundMetric(a.sumDiskUsed / n))
+			total := a.sumDiskTotal / n
+			p.DiskTotalGb = ptrFloat(roundMetric(total))
+			if total > diskMax {
+				diskMax = total
+			}
+		}
+		points = append(points, p)
+	}
+	return points, diskMax
+}
+
+func ptrFloat(f float64) *float64 { return &f }
+
+// GetUptime handles GET /api/v1/dashboard/uptime?period=7d (optional: worker_id=hex) (authenticated).
+func (h *DashboardHandler) GetUptime(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	period := c.DefaultQuery("period", "7d")
+	now := time.Now()
+	bucketDur := bucketDuration(period, h.cfg.Metrics.SnapshotInterval)
+	bucketMs := bucketDur.Milliseconds()
+
+	var rawStart time.Time
+	switch period {
+	case "10m":
+		rawStart = now.Add(-10 * time.Minute)
+	case "1h":
+		rawStart = now.Add(-1 * time.Hour)
+	case "24h":
+		rawStart = now.Add(-24 * time.Hour)
+	case "7d":
+		rawStart = now.Add(-7 * 24 * time.Hour)
+	default:
+		rawStart = now.Add(-7 * 24 * time.Hour)
+	}
+	periodStart := time.UnixMilli((rawStart.UnixMilli() / bucketMs) * bucketMs)
+	periodEnd := time.UnixMilli((now.UnixMilli() / bucketMs) * bucketMs)
+
+	ctx := c.Request.Context()
+	workerIDHex := c.Query("worker_id")
+	if workerIDHex != "" {
+		workerOID, err := primitive.ObjectIDFromHex(workerIDHex)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
+			return
+		}
+		w, err := h.workerService.GetByID(ctx, workerOID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
+			return
+		}
+		if w.UserID != userIDObj {
+			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
+			return
+		}
+		snapshots, err := h.snapshotRepo.GetByWorkerID(ctx, workerOID, periodStart)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		points, diskMax := buildChartPerWorker(snapshots, periodStart, periodEnd, bucketDur)
+		resp := ChartResponse{
+			Points:        points,
+			PeriodStartMs: periodStart.UnixMilli(),
+			PeriodEndMs:   periodEnd.UnixMilli(),
+			DiskYDomain:   [2]float64{0, diskMax},
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	workersList, err := h.workerService.GetByUserID(ctx, userIDObj)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(workersList) == 0 {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, ChartResponse{
+			Points:        nil,
+			PeriodStartMs: periodStart.UnixMilli(),
+			PeriodEndMs:   periodEnd.UnixMilli(),
+			DiskYDomain:   [2]float64{0, 1},
+		})
+		return
+	}
+	workerOIDs := make([]primitive.ObjectID, 0, len(workersList))
+	for _, w := range workersList {
+		workerOIDs = append(workerOIDs, w.ID)
+	}
+	snapshots, err := h.snapshotRepo.GetByWorkerIDs(ctx, workerOIDs, periodStart)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	points, diskMax := buildChartAggregated(snapshots, periodStart, periodEnd, bucketDur)
+	resp := ChartResponse{
+		Points:        points,
+		PeriodStartMs: periodStart.UnixMilli(),
+		PeriodEndMs:   periodEnd.UnixMilli(),
+		DiskYDomain:   [2]float64{0, diskMax},
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, resp)
+}
+
+func floatFrom(m map[string]interface{}, key string) float64 {
+	if m == nil {
+		return 0
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int:
+		return float64(x)
+	case int64:
+		return float64(x)
+	}
+	return 0
+}
+
+func roundMetric(v float64) float64 {
+	return float64(int(v*1000+0.5)) / 1000
+}
