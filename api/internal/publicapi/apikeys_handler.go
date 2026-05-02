@@ -5,10 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/lute/api/internal/apikey"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 )
@@ -114,13 +113,13 @@ func (h *APIKeysHandler) Revoke(c *gin.Context) {
 	if !ok {
 		return
 	}
-	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	keyID, err := id.FromHex(c.Param("id"))
 	if err != nil {
 		writeError(c, http.StatusBadRequest, "invalid_request", "invalid id")
 		return
 	}
-	if err := h.repo.Revoke(c.Request.Context(), id, userID); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
+	if err := h.repo.Revoke(c.Request.Context(), keyID, userID); err != nil {
+		if errors.Is(err, repos.ErrNotFound) {
 			writeError(c, http.StatusNotFound, "not_found", "API key not found")
 			return
 		}

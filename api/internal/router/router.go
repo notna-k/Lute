@@ -22,7 +22,7 @@ import (
 // unbounded as new domains are added.
 type SetupRouterDeps struct {
 	Config             *config.Config
-	DB                 *connection.MongoDB
+	DB                 *connection.SQLite
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository

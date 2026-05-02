@@ -3,21 +3,21 @@ package models
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/lute/api/internal/db/id"
 )
 
 // BaseModel contains common fields for all models
 type BaseModel struct {
-	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	CreatedAt time.Time          `json:"created_at" bson:"created_at"`
-	UpdatedAt time.Time          `json:"updated_at" bson:"updated_at"`
+	ID        id.ID     `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // BeforeCreate sets timestamps before creation
 func (b *BaseModel) BeforeCreate() {
 	now := time.Now()
 	if b.ID.IsZero() {
-		b.ID = primitive.NewObjectID()
+		b.ID = id.New()
 	}
 	b.CreatedAt = now
 	b.UpdatedAt = now

@@ -2,66 +2,66 @@ package repos
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 )
 
 type WebhookDeliveryRepository struct {
-	*Repository
+	db *sql.DB
 }
 
-func NewWebhookDeliveryRepository(db *mongo.Database) *WebhookDeliveryRepository {
-	return &WebhookDeliveryRepository{Repository: NewRepository(db, connection.CollectionWebhookDeliveries)}
+func NewWebhookDeliveryRepository(db *sql.DB) *WebhookDeliveryRepository {
+	return &WebhookDeliveryRepository{db: db}
 }
 
 func (r *WebhookDeliveryRepository) Create(ctx context.Context, d *models.WebhookDelivery) error {
 	d.BeforeCreate()
-	_, err := r.Collection.InsertOne(ctx, d)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO webhook_deliveries (
+		id, created_at, updated_at, run_id, job_id, user_id, event, url, payload, signature,
+		signed_timestamp, status, attempts, max_attempts, next_retry_at, last_error, response_status, delivered_at
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		d.ID.Hex(), timeMilli(d.CreatedAt), timeMilli(d.UpdatedAt), d.RunID.Hex(), d.JobID, d.UserID.Hex(),
+		d.Event, d.URL, d.Payload, d.Signature, d.SignedTimestamp, d.Status, d.Attempts, d.MaxAttempts,
+		timeMilli(d.NextRetryAt), d.LastError, d.ResponseStatus, timePtrArg(d.DeliveredAt),
+	)
 	return err
 }
 
-// ClaimDue atomically selects up to `limit` pending deliveries whose retry time has come,
-// flipping them to "in_flight" so concurrent dispatchers do not pick the same row.
 func (r *WebhookDeliveryRepository) ClaimDue(ctx context.Context, limit int64) ([]models.WebhookDelivery, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	now := time.Now()
-
-	filter := bson.M{
-		"status":        "pending",
-		"next_retry_at": bson.M{"$lte": now},
-	}
-	opts := options.Find().
-		SetSort(bson.D{{Key: "next_retry_at", Value: 1}}).
-		SetLimit(limit)
-
-	cur, err := r.Collection.Find(ctx, filter, opts)
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, created_at, updated_at, run_id, job_id, user_id, event, url, payload, signature,
+			signed_timestamp, status, attempts, max_attempts, next_retry_at, last_error, response_status, delivered_at
+		FROM webhook_deliveries
+		WHERE status = 'pending' AND next_retry_at <= ?
+		ORDER BY next_retry_at ASC
+		LIMIT ?`, timeMilli(now), limit)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cur.Close(ctx) }()
+	defer func() { _ = rows.Close() }()
 
-	var candidates []models.WebhookDelivery
-	if err := cur.All(ctx, &candidates); err != nil {
+	candidates, err := scanWebhookRows(rows)
+	if err != nil {
 		return nil, err
 	}
 
 	claimed := make([]models.WebhookDelivery, 0, len(candidates))
 	for _, d := range candidates {
-		res, err := r.Collection.UpdateOne(
-			ctx,
-			bson.M{"_id": d.ID, "status": "pending"},
-			bson.M{"$set": bson.M{"status": "in_flight", "updated_at": now}},
-		)
-		if err != nil || res.MatchedCount == 0 {
+		res, err := r.db.ExecContext(ctx, `
+			UPDATE webhook_deliveries SET status = 'in_flight', updated_at = ?
+			WHERE id = ? AND status = 'pending'`, timeMilli(now), d.ID.Hex())
+		if err != nil {
+			continue
+		}
+		n, err := res.RowsAffected()
+		if err != nil || n == 0 {
 			continue
 		}
 		d.Status = "in_flight"
@@ -70,77 +70,78 @@ func (r *WebhookDeliveryRepository) ClaimDue(ctx context.Context, limit int64) (
 	return claimed, nil
 }
 
-// MarkDelivered records a successful webhook delivery.
-func (r *WebhookDeliveryRepository) MarkDelivered(ctx context.Context, id primitive.ObjectID, attempts, status int) error {
+func scanWebhookRows(rows *sql.Rows) ([]models.WebhookDelivery, error) {
+	var out []models.WebhookDelivery
+	for rows.Next() {
+		var d models.WebhookDelivery
+		var ca, ua, nra int64
+		var idStr, rid, jid, uid string
+		var del sql.NullInt64
+		if err := rows.Scan(
+			&idStr, &ca, &ua, &rid, &jid, &uid, &d.Event, &d.URL, &d.Payload, &d.Signature,
+			&d.SignedTimestamp, &d.Status, &d.Attempts, &d.MaxAttempts, &nra, &d.LastError, &d.ResponseStatus, &del,
+		); err != nil {
+			return nil, err
+		}
+		d.ID = id.ID(idStr)
+		d.CreatedAt = time.UnixMilli(ca).UTC()
+		d.UpdatedAt = time.UnixMilli(ua).UTC()
+		d.RunID = id.ID(rid)
+		d.JobID = jid
+		d.UserID = id.ID(uid)
+		d.NextRetryAt = time.UnixMilli(nra).UTC()
+		d.DeliveredAt = readTimePtr(del)
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+func (r *WebhookDeliveryRepository) MarkDelivered(ctx context.Context, delID id.ID, attempts, status int) error {
 	now := time.Now()
-	_, err := r.Collection.UpdateOne(
-		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": bson.M{
-			"status":          "delivered",
-			"attempts":        attempts,
-			"response_status": status,
-			"delivered_at":    now,
-			"updated_at":      now,
-		}},
-	)
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE webhook_deliveries SET status = 'delivered', attempts = ?, response_status = ?,
+			delivered_at = ?, updated_at = ? WHERE id = ?`,
+		attempts, status, timeMilli(now), timeMilli(now), delID.Hex())
 	return err
 }
 
-// MarkRetry reschedules a delivery with exponential backoff up to MaxAttempts,
-// or marks it "failed" when attempts are exhausted.
 func (r *WebhookDeliveryRepository) MarkRetry(
 	ctx context.Context,
-	id primitive.ObjectID,
-	attempts int,
-	maxAttempts int,
+	delID id.ID,
+	attempts, maxAttempts int,
 	lastErr string,
 	responseStatus int,
 ) error {
 	now := time.Now()
 	if attempts >= maxAttempts {
-		_, err := r.Collection.UpdateOne(
-			ctx,
-			bson.M{"_id": id},
-			bson.M{"$set": bson.M{
-				"status":          "failed",
-				"attempts":        attempts,
-				"response_status": responseStatus,
-				"last_error":      lastErr,
-				"updated_at":      now,
-			}},
-		)
+		_, err := r.db.ExecContext(ctx, `
+			UPDATE webhook_deliveries SET status = 'failed', attempts = ?, response_status = ?,
+				last_error = ?, updated_at = ? WHERE id = ?`,
+			attempts, responseStatus, lastErr, timeMilli(now), delID.Hex())
 		return err
 	}
 	delay := time.Duration(1<<uint(attempts)) * 30 * time.Second
 	if delay > 30*time.Minute {
 		delay = 30 * time.Minute
 	}
-	_, err := r.Collection.UpdateOne(
-		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": bson.M{
-			"status":          "pending",
-			"attempts":        attempts,
-			"response_status": responseStatus,
-			"last_error":      lastErr,
-			"next_retry_at":   now.Add(delay),
-			"updated_at":      now,
-		}},
-	)
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE webhook_deliveries SET status = 'pending', attempts = ?, response_status = ?,
+			last_error = ?, next_retry_at = ?, updated_at = ? WHERE id = ?`,
+		attempts, responseStatus, lastErr, timeMilli(now.Add(delay)), timeMilli(now), delID.Hex())
 	return err
 }
 
-// ListByJobID returns deliveries tied to a job (for debugging / run details).
 func (r *WebhookDeliveryRepository) ListByJobID(ctx context.Context, jobID string) ([]models.WebhookDelivery, error) {
-	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
-	cur, err := r.Collection.Find(ctx, bson.M{"job_id": jobID}, opts)
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, created_at, updated_at, run_id, job_id, user_id, event, url, payload, signature,
+			signed_timestamp, status, attempts, max_attempts, next_retry_at, last_error, response_status, delivered_at
+		FROM webhook_deliveries WHERE job_id = ? ORDER BY created_at DESC`, jobID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cur.Close(ctx) }()
-	var out []models.WebhookDelivery
-	if err := cur.All(ctx, &out); err != nil {
+	defer func() { _ = rows.Close() }()
+	out, err := scanWebhookRows(rows)
+	if err != nil {
 		return nil, err
 	}
 	if out == nil {

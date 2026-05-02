@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 )
 
@@ -20,7 +20,7 @@ func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -34,12 +34,12 @@ func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 }
 
 func (h *WorkerHandler) GetWorker(c *gin.Context) {
-	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	wid, err := id.FromHex(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
 	}
-	w, err := h.workerService.GetByID(c.Request.Context(), id)
+	w, err := h.workerService.GetByID(c.Request.Context(), wid)
 	if err != nil {
 		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -57,7 +57,7 @@ func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -71,7 +71,7 @@ func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 }
 
 func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
-	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	wid, err := id.FromHex(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
@@ -81,7 +81,7 @@ func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -91,7 +91,7 @@ func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updated, err := h.workerService.Update(c.Request.Context(), id, userIDObj, &w)
+	updated, err := h.workerService.Update(c.Request.Context(), wid, userIDObj, &w)
 	if err != nil {
 		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -108,7 +108,7 @@ func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
 }
 
 func (h *WorkerHandler) ReEnableWorker(c *gin.Context) {
-	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	wid, err := id.FromHex(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
@@ -118,12 +118,12 @@ func (h *WorkerHandler) ReEnableWorker(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
-	existing, err := h.workerService.GetByID(c.Request.Context(), id)
+	existing, err := h.workerService.GetByID(c.Request.Context(), wid)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
 		return
@@ -136,16 +136,16 @@ func (h *WorkerHandler) ReEnableWorker(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "worker is not dead; only dead workers can be re-enabled"})
 		return
 	}
-	if err := h.workerService.UpdateStatus(c.Request.Context(), id, "pending"); err != nil {
+	if err := h.workerService.UpdateStatus(c.Request.Context(), wid, "pending"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	updated, _ := h.workerService.GetByID(c.Request.Context(), id)
+	updated, _ := h.workerService.GetByID(c.Request.Context(), wid)
 	c.JSON(http.StatusOK, updated)
 }
 
 func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
-	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	wid, err := id.FromHex(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 		return
@@ -155,7 +155,7 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -163,13 +163,13 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 
 	stopped := false
 	if h.connMgr != nil {
-		if conn := h.connMgr.Get(id.Hex()); conn != nil {
+		if conn := h.connMgr.Get(wid.Hex()); conn != nil {
 			conn.Shutdown()
 			stopped = true
 		}
 	}
 
-	if err := h.workerService.Delete(c.Request.Context(), id, userIDObj); err != nil {
+	if err := h.workerService.Delete(c.Request.Context(), wid, userIDObj); err != nil {
 		if err.Error() == "worker not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return

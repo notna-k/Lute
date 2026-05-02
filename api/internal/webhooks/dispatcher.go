@@ -18,8 +18,6 @@ import (
 	"net/http"
 	"time"
 
-	"go.mongodb.org/mongo-driver/mongo"
-
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 )
@@ -50,7 +48,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 	}
 	run, err := e.runs.GetByJobID(ctx, jobID)
 	if err != nil {
-		if !errors.Is(err, mongo.ErrNoDocuments) {
+		if !errors.Is(err, repos.ErrNotFound) {
 			log.Printf("webhooks: lookup run for %s: %v", jobID, err)
 		}
 		return
@@ -164,7 +162,7 @@ func (d *Dispatcher) send(ctx context.Context, del *models.WebhookDelivery) {
 
 func sign(secret string, ts int64, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	fmt.Fprintf(mac, "%d.", ts)
+	_, _ = fmt.Fprintf(mac, "%d.", ts)
 	mac.Write(body)
 	return hex.EncodeToString(mac.Sum(nil))
 }

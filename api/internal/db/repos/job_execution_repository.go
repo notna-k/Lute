@@ -2,79 +2,90 @@ package repos
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 )
 
 type JobExecutionRepository struct {
-	*Repository
+	db *sql.DB
 }
 
-func NewJobExecutionRepository(db *mongo.Database) *JobExecutionRepository {
-	return &JobExecutionRepository{
-		Repository: NewRepository(db, connection.CollectionJobExecutions),
-	}
+func NewJobExecutionRepository(db *sql.DB) *JobExecutionRepository {
+	return &JobExecutionRepository{db: db}
 }
 
-// Upsert creates or replaces the execution record for a given job_id.
-// The last result wins (e.g. after a retry the newer execution overwrites).
 func (r *JobExecutionRepository) Upsert(ctx context.Context, exec *models.JobExecution) error {
 	now := time.Now()
 	exec.UpdatedAt = now
 	if exec.CreatedAt.IsZero() {
 		exec.CreatedAt = now
 	}
-
-	filter := bson.M{"job_id": exec.JobID}
-	update := bson.M{"$set": exec}
-	opts := options.Update().SetUpsert(true)
-	_, err := r.Collection.UpdateOne(ctx, filter, update, opts)
+	if exec.ID.IsZero() {
+		exec.ID = id.New()
+	}
+	succ := 0
+	if exec.Success {
+		succ = 1
+	}
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO job_executions (
+			id, created_at, updated_at, job_id, worker_id, queue, type, success, error,
+			elapsed_ms, log_file, execution_log_file, finished_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(job_id) DO UPDATE SET
+			updated_at = excluded.updated_at,
+			worker_id = excluded.worker_id,
+			queue = excluded.queue,
+			type = excluded.type,
+			success = excluded.success,
+			error = excluded.error,
+			elapsed_ms = excluded.elapsed_ms,
+			log_file = excluded.log_file,
+			execution_log_file = excluded.execution_log_file,
+			finished_at = excluded.finished_at
+	`,
+		exec.ID.Hex(), timeMilli(exec.CreatedAt), timeMilli(exec.UpdatedAt), exec.JobID, exec.WorkerID,
+		exec.Queue, exec.Type, succ, exec.Error, exec.ElapsedMs, exec.LogFile, exec.ExecutionLogFile, timeMilli(exec.FinishedAt),
+	)
 	return err
 }
 
-// GetByJobID retrieves the execution record for a job.
 func (r *JobExecutionRepository) GetByJobID(ctx context.Context, jobID string) (*models.JobExecution, error) {
-	var exec models.JobExecution
-	err := r.Collection.FindOne(ctx, bson.M{"job_id": jobID}).Decode(&exec)
-	if err != nil {
-		return nil, err
-	}
-	return &exec, nil
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, created_at, updated_at, job_id, worker_id, queue, type, success, error,
+			elapsed_ms, log_file, execution_log_file, finished_at
+		FROM job_executions WHERE job_id = ?`, jobID)
+	return scanJobExecution(row)
 }
 
-// JobExecutionListFilter narrows the job_executions query.
+func scanJobExecution(row *sql.Row) (*models.JobExecution, error) {
+	var e models.JobExecution
+	var ca, ua, fin int64
+	var idStr string
+	var succ int
+	if err := row.Scan(&idStr, &ca, &ua, &e.JobID, &e.WorkerID, &e.Queue, &e.Type, &succ, &e.Error,
+		&e.ElapsedMs, &e.LogFile, &e.ExecutionLogFile, &fin); err != nil {
+		return nil, mapErr(err)
+	}
+	e.ID = id.ID(idStr)
+	e.CreatedAt = time.UnixMilli(ca).UTC()
+	e.UpdatedAt = time.UnixMilli(ua).UTC()
+	e.Success = succ != 0
+	e.FinishedAt = time.UnixMilli(fin).UTC()
+	return &e, nil
+}
+
 type JobExecutionListFilter struct {
 	Queue  string
 	Type   string
 	Status string // "", "success", or "failed"
 }
 
-func buildJobExecutionMatch(f JobExecutionListFilter) bson.M {
-	q := bson.M{}
-	if f.Queue != "" {
-		q["queue"] = f.Queue
-	}
-	if f.Type != "" {
-		q["type"] = f.Type
-	}
-	switch f.Status {
-	case "success":
-		q["success"] = true
-	case "failed":
-		q["success"] = false
-	}
-	return q
-}
-
-// List returns executions matching the filter, sorted by finished_at (descending if sortDesc).
 func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionListFilter, offset, limit int64, sortDesc bool) ([]models.JobExecution, int64, error) {
 	if limit <= 0 {
 		limit = 50
@@ -85,60 +96,109 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 	if offset < 0 {
 		offset = 0
 	}
-	match := buildJobExecutionMatch(filter)
 
-	total, err := r.Collection.CountDocuments(ctx, match)
-	if err != nil {
+	where, args := jobExecWhereArgs(filter)
+	countQ := `SELECT COUNT(*) FROM job_executions` + where
+	var total int64
+	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count job executions: %w", err)
 	}
 
-	order := 1
+	order := "ASC"
 	if sortDesc {
-		order = -1
+		order = "DESC"
 	}
-	opts := options.Find().
-		SetSort(bson.D{{Key: "finished_at", Value: order}}).
-		SetSkip(offset).
-		SetLimit(limit)
-
-	cur, err := r.Collection.Find(ctx, match, opts)
+	q := fmt.Sprintf(`
+		SELECT id, created_at, updated_at, job_id, worker_id, queue, type, success, error,
+			elapsed_ms, log_file, execution_log_file, finished_at
+		FROM job_executions%s ORDER BY finished_at %s LIMIT ? OFFSET ?`, where, order)
+	args = append(args, limit, offset)
+	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("find job executions: %w", err)
 	}
-	defer func() { _ = cur.Close(ctx) }()
+	defer func() { _ = rows.Close() }()
 
 	var out []models.JobExecution
-	if err := cur.All(ctx, &out); err != nil {
-		return nil, 0, err
+	for rows.Next() {
+		var e models.JobExecution
+		var ca, ua, fin int64
+		var idStr string
+		var succ int
+		if err := rows.Scan(&idStr, &ca, &ua, &e.JobID, &e.WorkerID, &e.Queue, &e.Type, &succ, &e.Error,
+			&e.ElapsedMs, &e.LogFile, &e.ExecutionLogFile, &fin); err != nil {
+			return nil, 0, err
+		}
+		e.ID = id.ID(idStr)
+		e.CreatedAt = time.UnixMilli(ca).UTC()
+		e.UpdatedAt = time.UnixMilli(ua).UTC()
+		e.Success = succ != 0
+		e.FinishedAt = time.UnixMilli(fin).UTC()
+		out = append(out, e)
 	}
 	if out == nil {
 		out = []models.JobExecution{}
 	}
-	return out, total, nil
+	return out, total, rows.Err()
 }
 
-// DistinctQueuesAndTypes returns sorted unique queue and type values for filter UI.
+func jobExecWhereArgs(f JobExecutionListFilter) (where string, args []any) {
+	var conds []string
+	if f.Queue != "" {
+		conds = append(conds, "queue = ?")
+		args = append(args, f.Queue)
+	}
+	if f.Type != "" {
+		conds = append(conds, "type = ?")
+		args = append(args, f.Type)
+	}
+	switch f.Status {
+	case "success":
+		conds = append(conds, "success = 1")
+	case "failed":
+		conds = append(conds, "success = 0")
+	}
+	if len(conds) == 0 {
+		return "", args
+	}
+	w := " WHERE "
+	for i, c := range conds {
+		if i > 0 {
+			w += " AND "
+		}
+		w += c
+	}
+	return w, args
+}
+
 func (r *JobExecutionRepository) DistinctQueuesAndTypes(ctx context.Context) (queues, types []string, err error) {
-	rawQ, err := r.Collection.Distinct(ctx, "queue", bson.M{})
+	rawQ, err := r.distinctCol(ctx, "queue")
 	if err != nil {
 		return nil, nil, err
 	}
-	rawT, err := r.Collection.Distinct(ctx, "type", bson.M{})
+	rawT, err := r.distinctCol(ctx, "type")
 	if err != nil {
 		return nil, nil, err
 	}
-	queues = distinctStrings(rawQ)
-	types = distinctStrings(rawT)
-	sort.Strings(queues)
-	sort.Strings(types)
-	return queues, types, nil
+	sort.Strings(rawQ)
+	sort.Strings(rawT)
+	return rawQ, rawT, nil
 }
 
-func distinctStrings(raw []interface{}) []string {
+func (r *JobExecutionRepository) distinctCol(ctx context.Context, col string) ([]string, error) {
+	q := fmt.Sprintf(`SELECT DISTINCT %s FROM job_executions`, col)
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
 	seen := make(map[string]struct{})
 	var out []string
-	for _, v := range raw {
-		s, _ := v.(string)
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
 		if s == "" {
 			continue
 		}
@@ -148,5 +208,5 @@ func distinctStrings(raw []interface{}) []string {
 		seen[s] = struct{}{}
 		out = append(out, s)
 	}
-	return out
+	return out, rows.Err()
 }

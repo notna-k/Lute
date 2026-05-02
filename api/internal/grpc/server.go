@@ -3,13 +3,12 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -17,14 +16,15 @@ import (
 
 	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/websocket"
 )
 
-func ParseWorkerID(hex string) (primitive.ObjectID, error) {
-	return primitive.ObjectIDFromHex(hex)
+func ParseWorkerID(hex string) (id.ID, error) {
+	return id.FromHex(hex)
 }
 
 // WebhookEmitter is the narrow interface the gRPC layer uses to fire run events.
@@ -111,7 +111,7 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 
 	w, err := s.workerRepo.GetByID(stream.Context(), wid)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, repos.ErrNotFound) {
 			return status.Errorf(codes.NotFound, "worker %s not found (it may have been deleted)", workerID)
 		}
 		return fmt.Errorf("connect: worker %s lookup failed: %w", workerID, err)

@@ -4,8 +4,8 @@ This directory contains Docker Compose configuration for local development.
 
 ## Services
 
-- **mongodb**: MongoDB 8.x database
-- **api**: Go backend (REST, WebSocket, gRPC) with the React UI embedded and served on the same HTTP port
+- **redis**: Redis 7.x (job queue and runtime state)
+- **api**: Go backend (REST, WebSocket, gRPC) with the React UI embedded and served on the same HTTP port; persists app data in **SQLite** (file path from `SQLITE_PATH`, default `/data/lute.db` in Compose via volume `sqlite_data`)
 
 ## Quick Start
 
@@ -70,38 +70,15 @@ This directory contains Docker Compose configuration for local development.
 
 - **App (UI + API)**: http://localhost:8080
 - **API Health**: http://localhost:8080/api/health
-- **MongoDB**: localhost:27017
+- **Redis**: localhost:6379
 - **gRPC**: localhost:50051
-
-## MongoDB Credentials
-
-- Username: `admin`
-- Password: `admin123`
-- Database: `lute`
-
-### Connecting with MongoDB Compass
-
-Use this connection string in MongoDB Compass:
-
-```
-mongodb://admin:admin123@localhost:27017/lute?authSource=admin
-```
-
-Or connect manually:
-- **Host**: `localhost`
-- **Port**: `27017`
-- **Authentication**: Username/Password
-- **Username**: `admin`
-- **Password**: `admin123`
-- **Authentication Database**: `admin`
-- **Default Database**: `lute`
 
 ## Environment Variables
 
 All environment variables are configured in the `.env` file. Copy `.env.example` to `.env` and modify as needed:
 
-- **MongoDB**: Credentials, database name, connection URI
-- **API**: Server ports, Gin mode, MongoDB connection
+- **SQLite**: `SQLITE_PATH` (default in Compose: `/data/lute.db` inside the API container; backed by the `sqlite_data` volume)
+- **API**: Server ports, Gin mode, SQLite path and busy timeout
 - **gRPC**: Port configuration
 - **WebSocket**: Buffer sizes and origin checking
 - **Firebase**: All `VITE_FIREBASE_*` variables (required for the embedded UI build inside the `api` image)
@@ -133,5 +110,5 @@ docker compose up -d --build api
 
 ## Volumes
 
-- `mongodb_data`: Persistent MongoDB data storage
-- `mongodb_config`: MongoDB configuration storage
+- `sqlite_data`: Persistent SQLite database directory (`/data` in the API container)
+- `redis_data`: Persistent Redis data

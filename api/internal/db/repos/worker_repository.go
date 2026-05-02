@@ -2,278 +2,305 @@ package repos
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 )
 
 type WorkerRepository struct {
-	*Repository
+	db *sql.DB
 }
 
-func NewWorkerRepository(db *mongo.Database) *WorkerRepository {
-	return &WorkerRepository{
-		Repository: NewRepository(db, connection.CollectionWorkers),
-	}
+func NewWorkerRepository(db *sql.DB) *WorkerRepository {
+	return &WorkerRepository{db: db}
 }
 
 func (r *WorkerRepository) Create(ctx context.Context, w *models.Worker) error {
 	w.BeforeCreate()
-	_, err := r.Collection.InsertOne(ctx, w)
+	meta, err := marshalIfaceMap(w.Metadata)
+	if err != nil {
+		return err
+	}
+	metrics, err := marshalIfaceMap(w.Metrics)
+	if err != nil {
+		return err
+	}
+	ls := sql.NullInt64{}
+	if !w.LastSeen.IsZero() {
+		ls = sql.NullInt64{Int64: timeMilli(w.LastSeen), Valid: true}
+	}
+	_, err = r.db.ExecContext(ctx, `INSERT INTO workers (
+		id, created_at, updated_at, user_id, name, description, status, metadata, agent_ip, agent_version, last_seen, metrics, heartbeat_retry
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		w.ID.Hex(), timeMilli(w.CreatedAt), timeMilli(w.UpdatedAt), idArg(w.UserID),
+		w.Name, w.Description, w.Status, meta, w.AgentIP, w.AgentVersion, ls, metrics, w.HeartbeatRetry,
+	)
 	return err
 }
 
-func (r *WorkerRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*models.Worker, error) {
+func (r *WorkerRepository) GetByID(ctx context.Context, uid id.ID) (*models.Worker, error) {
+	row := r.db.QueryRowContext(ctx, workerSelectBase+` WHERE id = ?`, uid.Hex())
+	return scanWorker(row)
+}
+
+const workerSelectBase = `SELECT id, created_at, updated_at, user_id, name, description, status, metadata, agent_ip, agent_version, last_seen, metrics, heartbeat_retry FROM workers`
+
+func scanWorker(row *sql.Row) (*models.Worker, error) {
 	var w models.Worker
-	err := r.Collection.FindOne(ctx, bson.M{"_id": id}).Decode(&w)
+	var ca, ua int64
+	var idStr string
+	var userID sql.NullString
+	var meta, metrics sql.NullString
+	var ls sql.NullInt64
+	if err := row.Scan(
+		&idStr, &ca, &ua, &userID, &w.Name, &w.Description, &w.Status,
+		&meta, &w.AgentIP, &w.AgentVersion, &ls, &metrics, &w.HeartbeatRetry,
+	); err != nil {
+		return nil, mapErr(err)
+	}
+	w.ID = id.ID(idStr)
+	w.CreatedAt = time.UnixMilli(ca).UTC()
+	w.UpdatedAt = time.UnixMilli(ua).UTC()
+	w.UserID = scanID(userID)
+	var err error
+	w.Metadata, err = unmarshalIfaceMap(meta)
 	if err != nil {
 		return nil, err
 	}
+	w.Metrics, err = unmarshalIfaceMap(metrics)
+	if err != nil {
+		return nil, err
+	}
+	w.LastSeen = readTime(ls)
 	return &w, nil
 }
 
-func (r *WorkerRepository) GetByUserID(ctx context.Context, userID primitive.ObjectID) ([]*models.Worker, error) {
-	filter := bson.M{
-		"$or": []bson.M{
-			{"user_id": userID},
-			{"user_id": primitive.NilObjectID},
-		},
-	}
-	cursor, err := r.Collection.Find(ctx, filter)
+func (r *WorkerRepository) GetByUserID(ctx context.Context, userID id.ID) ([]*models.Worker, error) {
+	rows, err := r.db.QueryContext(ctx, workerSelectBase+` WHERE user_id = ? OR user_id IS NULL ORDER BY created_at ASC`, userID.Hex())
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
+	defer func() { _ = rows.Close() }()
+	return scanWorkerRows(rows)
+}
 
+func scanWorkerRows(rows *sql.Rows) ([]*models.Worker, error) {
 	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
+	for rows.Next() {
+		var w models.Worker
+		var ca, ua int64
+		var idStr string
+		var userID sql.NullString
+		var meta, metrics sql.NullString
+		var ls sql.NullInt64
+		if err := rows.Scan(
+			&idStr, &ca, &ua, &userID, &w.Name, &w.Description, &w.Status,
+			&meta, &w.AgentIP, &w.AgentVersion, &ls, &metrics, &w.HeartbeatRetry,
+		); err != nil {
+			return nil, err
+		}
+		w.ID = id.ID(idStr)
+		w.CreatedAt = time.UnixMilli(ca).UTC()
+		w.UpdatedAt = time.UnixMilli(ua).UTC()
+		w.UserID = scanID(userID)
+		var err error
+		w.Metadata, err = unmarshalIfaceMap(meta)
+		if err != nil {
+			return nil, err
+		}
+		w.Metrics, err = unmarshalIfaceMap(metrics)
+		if err != nil {
+			return nil, err
+		}
+		w.LastSeen = readTime(ls)
+		out = append(out, &w)
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
-func (r *WorkerRepository) Update(ctx context.Context, id primitive.ObjectID, w *models.Worker) error {
+func (r *WorkerRepository) Update(ctx context.Context, uid id.ID, w *models.Worker) error {
 	w.BeforeUpdate()
-	update := bson.M{
-		"$set": w,
+	meta, err := marshalIfaceMap(w.Metadata)
+	if err != nil {
+		return err
 	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	metrics, err := marshalIfaceMap(w.Metrics)
+	if err != nil {
+		return err
+	}
+	ls := sql.NullInt64{}
+	if !w.LastSeen.IsZero() {
+		ls = sql.NullInt64{Int64: timeMilli(w.LastSeen), Valid: true}
+	}
+	_, err = r.db.ExecContext(ctx, `UPDATE workers SET
+		created_at = ?, updated_at = ?, user_id = ?, name = ?, description = ?, status = ?,
+		metadata = ?, agent_ip = ?, agent_version = ?, last_seen = ?, metrics = ?, heartbeat_retry = ?
+		WHERE id = ?`,
+		timeMilli(w.CreatedAt), timeMilli(w.UpdatedAt), idArg(w.UserID),
+		w.Name, w.Description, w.Status, meta, w.AgentIP, w.AgentVersion, ls, metrics, w.HeartbeatRetry, uid.Hex(),
+	)
 	return err
 }
 
-func (r *WorkerRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	_, err := r.Collection.DeleteOne(ctx, bson.M{"_id": id})
+func (r *WorkerRepository) Delete(ctx context.Context, uid id.ID) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM workers WHERE id = ?`, uid.Hex())
 	return err
 }
 
-func (r *WorkerRepository) UpdateStatus(ctx context.Context, id primitive.ObjectID, status string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     status,
-			"updated_at": time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+func (r *WorkerRepository) UpdateStatus(ctx context.Context, uid id.ID, status string) error {
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `UPDATE workers SET status = ?, updated_at = ? WHERE id = ?`, status, timeMilli(now), uid.Hex())
 	return err
 }
 
 func (r *WorkerRepository) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {
-	return nil, mongo.ErrNoDocuments
+	_ = agentID
+	return nil, ErrNotFound
 }
 
-// GetByUserIDAndIP returns all workers owned by userID whose agent_ip matches ip.
-// IP uniqueness is scoped per user because private-range addresses aren't globally unique.
-func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID primitive.ObjectID, ip string) ([]*models.Worker, error) {
+func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID id.ID, ip string) ([]*models.Worker, error) {
 	if ip == "" {
 		return nil, nil
 	}
-	cursor, err := r.Collection.Find(ctx, bson.M{
-		"user_id":  userID,
-		"agent_ip": ip,
-	})
+	rows, err := r.db.QueryContext(ctx, workerSelectBase+` WHERE user_id = ? AND agent_ip = ?`, userID.Hex(), ip)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	defer func() { _ = rows.Close() }()
+	return scanWorkerRows(rows)
 }
 
-func (r *WorkerRepository) List(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, filter, opts)
+func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID id.ID) error {
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `UPDATE workers SET last_seen = ?, updated_at = ? WHERE id = ?`,
+		timeMilli(now), timeMilli(now), workerID.Hex())
+	return err
+}
+
+func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID id.ID, metrics map[string]interface{}) error {
+	mj, err := marshalIfaceMap(metrics)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID primitive.ObjectID) error {
-	update := bson.M{
-		"$set": bson.M{
-			"last_seen":  time.Now(),
-			"updated_at": time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
+	now := time.Now()
+	_, err = r.db.ExecContext(ctx, `UPDATE workers SET metrics = ?, updated_at = ? WHERE id = ?`, mj, timeMilli(now), workerID.Hex())
 	return err
 }
 
-func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID primitive.ObjectID, metrics map[string]interface{}) error {
-	update := bson.M{
-		"$set": bson.M{
-			"metrics":    metrics,
-			"updated_at": time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
-	return err
-}
-
-func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID primitive.ObjectID, ipAddress string, version string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"agent_ip":      ipAddress,
-			"agent_version": version,
-			"last_seen":     time.Now(),
-			"updated_at":    time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
+func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, ipAddress, version string) error {
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, `UPDATE workers SET agent_ip = ?, agent_version = ?, last_seen = ?, updated_at = ? WHERE id = ?`,
+		ipAddress, version, timeMilli(now), timeMilli(now), workerID.Hex())
 	return err
 }
 
 func (r *WorkerRepository) ListByStatus(ctx context.Context, status string) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, bson.M{"status": status})
+	rows, err := r.db.QueryContext(ctx, workerSelectBase+` WHERE status = ?`, status)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	defer func() { _ = rows.Close() }()
+	return scanWorkerRows(rows)
 }
 
-func (r *WorkerRepository) UpdateStatusAndLastSeen(ctx context.Context, workerID primitive.ObjectID, status string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     status,
-			"last_seen":  time.Now(),
-			"updated_at": time.Now(),
-		},
-	}
-	result, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
-	if err != nil {
-		return err
-	}
-	if result.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
-}
-
-func (r *WorkerRepository) UpdateHeartbeat(ctx context.Context, workerID primitive.ObjectID, metrics map[string]interface{}) error {
+func (r *WorkerRepository) UpdateStatusAndLastSeen(ctx context.Context, workerID id.ID, status string) error {
 	now := time.Now()
-	set := bson.M{
-		"status":          "alive",
-		"heartbeat_retry": 0,
-		"last_seen":       now,
-		"updated_at":      now,
-	}
-	if len(metrics) > 0 {
-		set["metrics"] = metrics
-	}
-	result, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, bson.M{"$set": set})
+	res, err := r.db.ExecContext(ctx, `UPDATE workers SET status = ?, last_seen = ?, updated_at = ? WHERE id = ?`,
+		status, timeMilli(now), timeMilli(now), workerID.Hex())
 	if err != nil {
 		return err
 	}
-	if result.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
 
-func (r *WorkerRepository) IncrementHeartbeatRetry(ctx context.Context, workerID primitive.ObjectID) (int, error) {
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	var updated models.Worker
-	err := r.Collection.FindOneAndUpdate(
-		ctx,
-		bson.M{"_id": workerID},
-		bson.M{
-			"$inc": bson.M{"heartbeat_retry": 1},
-			"$set": bson.M{"updated_at": time.Now()},
-		},
-		opts,
-	).Decode(&updated)
-	if err != nil {
-		return 0, err
+func (r *WorkerRepository) UpdateHeartbeat(ctx context.Context, workerID id.ID, metrics map[string]interface{}) error {
+	now := time.Now()
+	setMetrics := len(metrics) > 0
+	var res sql.Result
+	var err error
+	if setMetrics {
+		mj, mErr := marshalIfaceMap(metrics)
+		if mErr != nil {
+			return mErr
+		}
+		res, err = r.db.ExecContext(ctx, `UPDATE workers SET status = ?, heartbeat_retry = 0, last_seen = ?, updated_at = ?, metrics = ? WHERE id = ?`,
+			"alive", timeMilli(now), timeMilli(now), mj, workerID.Hex())
+	} else {
+		res, err = r.db.ExecContext(ctx, `UPDATE workers SET status = ?, heartbeat_retry = 0, last_seen = ?, updated_at = ? WHERE id = ?`,
+			"alive", timeMilli(now), timeMilli(now), workerID.Hex())
 	}
-	return updated.HeartbeatRetry, nil
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
-// ListMonitored returns workers with status "alive" or "registered".
+func (r *WorkerRepository) IncrementHeartbeatRetry(ctx context.Context, workerID id.ID) (int, error) {
+	now := time.Now()
+	var retry int
+	err := r.db.QueryRowContext(ctx, `UPDATE workers SET heartbeat_retry = heartbeat_retry + 1, updated_at = ? WHERE id = ? RETURNING heartbeat_retry`,
+		timeMilli(now), workerID.Hex()).Scan(&retry)
+	if err != nil {
+		return 0, mapErr(err)
+	}
+	return retry, nil
+}
+
 func (r *WorkerRepository) ListMonitored(ctx context.Context) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, bson.M{
-		"status": bson.M{"$in": []string{"alive", "registered"}},
-	})
+	rows, err := r.db.QueryContext(ctx, workerSelectBase+` WHERE status IN ('alive', 'registered')`)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	defer func() { _ = rows.Close() }()
+	return scanWorkerRows(rows)
 }
 
 // CountByUserIDAndStatusResult is one row from AggregateCountsByUserID.
 type CountByUserIDAndStatusResult struct {
-	UserID primitive.ObjectID `bson:"_id"`
-	Alive  int                `bson:"alive"`
-	Dead   int                `bson:"dead"`
-	Total  int                `bson:"total"`
+	UserID id.ID
+	Alive  int
+	Dead   int
+	Total  int
 }
 
-// AggregateCountsByUserID groups workers by user_id (excluding nil user_id) and counts alive, dead, total.
 func (r *WorkerRepository) AggregateCountsByUserID(ctx context.Context) ([]CountByUserIDAndStatusResult, error) {
-	pipe := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"user_id": bson.M{"$ne": primitive.NilObjectID}}}},
-		{{Key: "$group", Value: bson.M{
-			"_id":   "$user_id",
-			"alive": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "alive"}}, 1, 0}}},
-			"dead":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "dead"}}, 1, 0}}},
-			"total": bson.M{"$sum": 1},
-		}}},
-	}
-	cursor, err := r.Collection.Aggregate(ctx, pipe)
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT user_id,
+			SUM(CASE WHEN status = 'alive' THEN 1 ELSE 0 END) AS alive,
+			SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead,
+			COUNT(*) AS total
+		FROM workers
+		WHERE user_id IS NOT NULL
+		GROUP BY user_id`)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
+	defer func() { _ = rows.Close() }()
 	var out []CountByUserIDAndStatusResult
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
+	for rows.Next() {
+		var row CountByUserIDAndStatusResult
+		var uid sql.NullString
+		if err := rows.Scan(&uid, &row.Alive, &row.Dead, &row.Total); err != nil {
+			return nil, err
+		}
+		row.UserID = scanID(uid)
+		out = append(out, row)
 	}
-	return out, nil
+	return out, rows.Err()
 }

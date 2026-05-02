@@ -37,7 +37,7 @@ type Server struct {
 // Deps aggregates the dependencies needed to construct a Server.
 type Deps struct {
 	Config             *config.Config
-	Database           *connection.MongoDB
+	Database           *connection.SQLite
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository
