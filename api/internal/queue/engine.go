@@ -2,14 +2,14 @@ package queue
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
-// Job represents a job stored in Redis.
+// Job represents a job stored in SQLite (queueSlots + serialized payload).
 type Job struct {
 	ID         string            `json:"id"`
 	Queue      string            `json:"queue"`
@@ -31,27 +31,24 @@ type Job struct {
 // EnqueueOpts are options when enqueuing a job.
 type EnqueueOpts struct {
 	Priority   float64       // higher = dequeued first (default 0)
-	Delay      time.Duration // run after delay (uses delayed ZSET)
+	Delay      time.Duration // run after delay (uses delayed lane)
 	MaxRetries int           // default 3
 	TimeoutSec int           // default 300 (5 min)
 }
 
-// Engine wraps Redis primitives for the job queue.
+// Engine persists the job queue in SQLite (same DB as API domain tables).
 type Engine struct {
-	rdb *redis.Client
+	db *sql.DB
 }
 
-func NewEngine(rdb *redis.Client) *Engine {
-	return &Engine{rdb: rdb}
+func NewEngine(db *sql.DB) *Engine {
+	return &Engine{db: db}
 }
 
-// Redis key helpers
-func queueKey(name string) string  { return "queue:" + name }
-func jobKey(id string) string      { return "job:" + id }
-func dlqKey(name string) string    { return "dlq:" + name }
-func delayedKey() string { return "delayed" }
+func nowMilli() int64 { return time.Now().UnixMilli() }
+func nowUnix() int64  { return time.Now().Unix() }
 
-// Enqueue adds a job to the queue (or delayed set if opts.Delay > 0).
+// Enqueue adds a job to the queue (or delayed lane if opts.Delay > 0).
 func (e *Engine) Enqueue(ctx context.Context, job *Job, opts EnqueueOpts) error {
 	if opts.MaxRetries == 0 {
 		opts.MaxRetries = 3
@@ -63,69 +60,106 @@ func (e *Engine) Enqueue(ctx context.Context, job *Job, opts EnqueueOpts) error 
 	job.Status = "pending"
 	job.MaxRetries = opts.MaxRetries
 	job.TimeoutSec = opts.TimeoutSec
-	job.EnqueuedAt = time.Now().Unix()
+	if job.EnqueuedAt == 0 {
+		job.EnqueuedAt = nowUnix()
+	}
 
 	data, err := json.Marshal(job)
 	if err != nil {
 		return fmt.Errorf("marshal job: %w", err)
 	}
 
-	pipe := e.rdb.TxPipeline()
-
-	pipe.HSet(ctx, jobKey(job.ID), "data", data)
-
+	lane := "ready"
+	releaseMs := int64(0)
 	if opts.Delay > 0 {
-		runAt := float64(time.Now().Add(opts.Delay).Unix())
-		pipe.ZAdd(ctx, delayedKey(), redis.Z{Score: runAt, Member: job.ID})
-	} else {
-		pipe.ZAdd(ctx, queueKey(job.Queue), redis.Z{Score: opts.Priority, Member: job.ID})
+		lane = "delayed"
+		releaseMs = time.Now().Add(opts.Delay).UnixMilli()
 	}
 
-	_, err = pipe.Exec(ctx)
-	return err
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM queue_dlq WHERE job_id = ?`, job.ID); err != nil {
+		return err
+	}
+
+	const upsert = `
+INSERT INTO queue_slots (job_id, queue_name, payload, lane, priority, release_at_ms, updated_at_ms)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(job_id) DO UPDATE SET
+	queue_name = excluded.queue_name,
+	payload = excluded.payload,
+	lane = excluded.lane,
+	priority = excluded.priority,
+	release_at_ms = excluded.release_at_ms,
+	updated_at_ms = excluded.updated_at_ms`
+
+	if _, err := tx.ExecContext(ctx, upsert,
+		job.ID, job.Queue, string(data), lane, opts.Priority, releaseMs, nowMilli()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Dequeue removes the highest-priority job from the given queue.
 // Returns nil, nil if the queue is empty.
 func (e *Engine) Dequeue(ctx context.Context, queueName string) (*Job, error) {
-	results, err := e.rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
-		Key:     queueKey(queueName),
-		Start:   "-inf",
-		Stop:    "+inf",
-		ByScore: true,
-		Rev:     true,
-		Offset:  0,
-		Count:   1,
-	}).Result()
-	if err != nil {
-		return nil, fmt.Errorf("zrevrangebyscore: %w", err)
-	}
-	if len(results) == 0 {
-		return nil, nil
-	}
-
-	jobID := results[0]
-	removed, err := e.rdb.ZRem(ctx, queueKey(queueName), jobID).Result()
-	if err != nil {
-		return nil, fmt.Errorf("zrem: %w", err)
-	}
-	if removed == 0 {
-		return nil, nil
-	}
-
-	job, err := e.GetJob(ctx, jobID)
+	tx, err := e.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	const sel = `
+SELECT job_id, payload FROM queue_slots
+WHERE queue_name = ? AND lane = 'ready'
+ORDER BY priority DESC, job_id ASC
+LIMIT 1`
+
+	var (
+		jobID   string
+		payload string
+	)
+	err = tx.QueryRowContext(ctx, sel, queueName).Scan(&jobID, &payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		_ = tx.Commit()
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var job Job
+	if err := json.Unmarshal([]byte(payload), &job); err != nil {
+		return nil, fmt.Errorf("unmarshal job %s: %w", jobID, err)
 	}
 
 	job.Status = "running"
-	job.StartedAt = time.Now().Unix()
+	job.StartedAt = nowUnix()
 	job.Attempts++
-	if err := e.saveJob(ctx, job); err != nil {
+
+	data, err := json.Marshal(&job)
+	if err != nil {
 		return nil, err
 	}
 
-	return job, nil
+	const upd = `UPDATE queue_slots SET lane = 'none', payload = ?, updated_at_ms = ? WHERE job_id = ? AND queue_name = ? AND lane = 'ready'`
+	res, err := tx.ExecContext(ctx, upd, string(data), nowMilli(), jobID, queueName)
+	if err != nil {
+		return nil, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		_ = tx.Commit()
+		return nil, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &job, nil
 }
 
 // Complete marks a job as done.
@@ -135,7 +169,7 @@ func (e *Engine) Complete(ctx context.Context, jobID string, elapsedMs int64) er
 		return err
 	}
 	job.Status = "done"
-	job.DoneAt = time.Now().Unix()
+	job.DoneAt = nowUnix()
 	return e.saveJob(ctx, job)
 }
 
@@ -145,41 +179,66 @@ func (e *Engine) Fail(ctx context.Context, jobID string, errMsg string) error {
 	if err != nil {
 		return err
 	}
-
 	job.Error = errMsg
 
 	if job.Attempts < job.MaxRetries {
-		backoff := time.Duration(1<<uint(job.Attempts)) * time.Second
 		job.Status = "pending"
-		runAt := float64(time.Now().Add(backoff).Unix())
+		backoff := time.Duration(1<<uint(job.Attempts)) * time.Second
+		releaseMs := time.Now().Add(backoff).UnixMilli()
 
-		pipe := e.rdb.TxPipeline()
-		data, _ := json.Marshal(job)
-		pipe.HSet(ctx, jobKey(job.ID), "data", data)
-		pipe.ZAdd(ctx, delayedKey(), redis.Z{Score: runAt, Member: job.ID})
-		_, err = pipe.Exec(ctx)
-		return err
+		data, err := json.Marshal(job)
+		if err != nil {
+			return err
+		}
+		tx, err := e.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		const q = `UPDATE queue_slots SET lane = 'delayed', priority = 0, release_at_ms = ?, payload = ?, updated_at_ms = ? WHERE job_id = ? AND lane = 'none'`
+		if _, err := tx.ExecContext(ctx, q, releaseMs, string(data), nowMilli(), jobID); err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 
 	job.Status = "dead"
-	job.DoneAt = time.Now().Unix()
+	job.DoneAt = nowUnix()
 
-	pipe := e.rdb.TxPipeline()
-	data, _ := json.Marshal(job)
-	pipe.HSet(ctx, jobKey(job.ID), "data", data)
-	pipe.RPush(ctx, dlqKey(job.Queue), job.ID)
-	_, err = pipe.Exec(ctx)
-	return err
+	data, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	const qSlot = `UPDATE queue_slots SET lane = 'none', payload = ?, release_at_ms = 0, updated_at_ms = ? WHERE job_id = ?`
+	if _, err := tx.ExecContext(ctx, qSlot, string(data), nowMilli(), jobID); err != nil {
+		return err
+	}
+	const qDlq = `INSERT INTO queue_dlq (queue_name, job_id) VALUES (?, ?)`
+	if _, err := tx.ExecContext(ctx, qDlq, job.Queue, jobID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // GetJob retrieves a job by ID.
 func (e *Engine) GetJob(ctx context.Context, jobID string) (*Job, error) {
-	data, err := e.rdb.HGet(ctx, jobKey(jobID), "data").Result()
-	if err != nil {
-		return nil, fmt.Errorf("get job %s: %w", jobID, err)
+	const q = `SELECT payload FROM queue_slots WHERE job_id = ?`
+	var payload string
+	if err := e.db.QueryRowContext(ctx, q, jobID).Scan(&payload); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
 	var job Job
-	if err := json.Unmarshal([]byte(data), &job); err != nil {
+	if err := json.Unmarshal([]byte(payload), &job); err != nil {
 		return nil, fmt.Errorf("unmarshal job %s: %w", jobID, err)
 	}
 	return &job, nil
@@ -195,23 +254,23 @@ func (e *Engine) SetWorkerID(ctx context.Context, jobID, workerID string) error 
 	return e.saveJob(ctx, job)
 }
 
-// DeleteJob removes a job from Redis.
+// DeleteJob removes a job from the store (including DLQ linkage).
 func (e *Engine) DeleteJob(ctx context.Context, jobID string) error {
-	job, err := e.GetJob(ctx, jobID)
+	tx, err := e.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-
-	pipe := e.rdb.TxPipeline()
-	pipe.Del(ctx, jobKey(jobID))
-	if job.Status == "pending" {
-		pipe.ZRem(ctx, queueKey(job.Queue), jobID)
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM queue_dlq WHERE job_id = ?`, jobID); err != nil {
+		return err
 	}
-	_, err = pipe.Exec(ctx)
-	return err
+	if _, err := tx.ExecContext(ctx, `DELETE FROM queue_slots WHERE job_id = ?`, jobID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-// CancelJob cancels a pending job by removing it from its queue.
+// CancelJob cancels a pending job by removing it from ready/delayed lanes.
 func (e *Engine) CancelJob(ctx context.Context, jobID string) error {
 	job, err := e.GetJob(ctx, jobID)
 	if err != nil {
@@ -220,76 +279,116 @@ func (e *Engine) CancelJob(ctx context.Context, jobID string) error {
 	if job.Status != "pending" {
 		return fmt.Errorf("can only cancel pending jobs, status is %s", job.Status)
 	}
-
-	pipe := e.rdb.TxPipeline()
-	pipe.ZRem(ctx, queueKey(job.Queue), jobID)
-	pipe.ZRem(ctx, delayedKey(), jobID)
 	job.Status = "dead"
 	job.Error = "cancelled"
-	job.DoneAt = time.Now().Unix()
-	data, _ := json.Marshal(job)
-	pipe.HSet(ctx, jobKey(job.ID), "data", data)
-	_, err = pipe.Exec(ctx)
-	return err
+	job.DoneAt = nowUnix()
+	data, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	const q = `UPDATE queue_slots SET lane = 'none', release_at_ms = 0, priority = 0, payload = ?, updated_at_ms = ? WHERE job_id = ? AND lane IN ('ready','delayed')`
+	res, err := e.db.ExecContext(ctx, q, string(data), nowMilli(), jobID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return fmt.Errorf("can only cancel pending jobs, status is %s", job.Status)
+	}
+	return nil
 }
 
-// QueueDepth returns the number of pending jobs in a queue.
+// QueueDepth returns the number of ready jobs waiting in a queue.
 func (e *Engine) QueueDepth(ctx context.Context, queueName string) (int64, error) {
-	return e.rdb.ZCard(ctx, queueKey(queueName)).Result()
+	const q = `SELECT COUNT(*) FROM queue_slots WHERE queue_name = ? AND lane = 'ready'`
+	var n int64
+	if err := e.db.QueryRowContext(ctx, q, queueName).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
-// ListQueues returns all known queue names by scanning queue:* keys.
+// ListQueues returns queue names that have ready, delayed entries, or DLQ rows.
 func (e *Engine) ListQueues(ctx context.Context) ([]string, error) {
-	var queues []string
-	var cursor uint64
-	for {
-		keys, next, err := e.rdb.Scan(ctx, cursor, "queue:*", 100).Result()
-		if err != nil {
+	const q = `
+SELECT queue_name FROM (
+	SELECT DISTINCT queue_name FROM queue_slots WHERE lane IN ('ready','delayed')
+	UNION
+	SELECT DISTINCT queue_name FROM queue_dlq
+) ORDER BY queue_name`
+
+	rows, err := e.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		for _, k := range keys {
-			queues = append(queues, k[len("queue:"):])
-		}
-		cursor = next
-		if cursor == 0 {
-			break
-		}
+		out = append(out, name)
 	}
-	return queues, nil
+	return out, rows.Err()
 }
 
-// ListQueueJobs returns paginated job IDs from a queue.
+// ListQueueJobs returns paginated job IDs from a queue (ready lane, priority order).
 func (e *Engine) ListQueueJobs(ctx context.Context, queueName string, offset, limit int64) ([]string, error) {
-	return e.rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
-		Key:   queueKey(queueName),
-		Start: offset,
-		Stop:  offset + limit - 1,
-		Rev:   true,
-	}).Result()
+	if limit <= 0 {
+		limit = 50
+	}
+	const q = `SELECT job_id FROM queue_slots WHERE queue_name = ? AND lane = 'ready' ORDER BY priority DESC, job_id ASC LIMIT ? OFFSET ?`
+	rows, err := e.db.QueryContext(ctx, q, queueName, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
-// DLQList returns job IDs from the dead letter queue.
+// DLQList returns job IDs from the dead letter queue for a queue name.
 func (e *Engine) DLQList(ctx context.Context, queueName string, offset, limit int64) ([]string, error) {
-	return e.rdb.LRange(ctx, dlqKey(queueName), offset, offset+limit-1).Result()
+	if limit <= 0 {
+		limit = 50
+	}
+	const q = `SELECT job_id FROM queue_dlq WHERE queue_name = ? ORDER BY id ASC LIMIT ? OFFSET ?`
+	rows, err := e.db.QueryContext(ctx, q, queueName, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // DLQRetryAll moves all jobs from DLQ back to their queue.
 func (e *Engine) DLQRetryAll(ctx context.Context, queueName string) (int, error) {
+	jobIDs, err := e.DLQList(ctx, queueName, 0, 100000)
+	if err != nil {
+		return 0, err
+	}
 	count := 0
-	for {
-		jobID, err := e.rdb.LPop(ctx, dlqKey(queueName)).Result()
-		if err == redis.Nil {
-			break
-		}
-		if err != nil {
-			return count, err
-		}
-
+	for _, jobID := range jobIDs {
 		job, err := e.GetJob(ctx, jobID)
 		if err != nil {
 			continue
 		}
-
 		job.Status = "pending"
 		job.Attempts = 0
 		job.Error = ""
@@ -302,20 +401,42 @@ func (e *Engine) DLQRetryAll(ctx context.Context, queueName string) (int, error)
 	return count, nil
 }
 
-// PurgeQueue removes all pending jobs from a queue.
+// PurgeQueue removes all ready jobs from a queue (drops slot rows entirely).
 func (e *Engine) PurgeQueue(ctx context.Context, queueName string) (int64, error) {
-	jobIDs, err := e.rdb.ZRange(ctx, queueKey(queueName), 0, -1).Result()
+	tx, err := e.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
+	defer func() { _ = tx.Rollback() }()
 
-	pipe := e.rdb.TxPipeline()
-	for _, id := range jobIDs {
-		pipe.Del(ctx, jobKey(id))
+	const sel = `SELECT job_id FROM queue_slots WHERE queue_name = ? AND lane = 'ready'`
+	rows, err := tx.QueryContext(ctx, sel, queueName)
+	if err != nil {
+		return 0, err
 	}
-	pipe.Del(ctx, queueKey(queueName))
-	_, err = pipe.Exec(ctx)
-	return int64(len(jobIDs)), err
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	_ = rows.Close()
+
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM queue_dlq WHERE job_id = ?`, id); err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM queue_slots WHERE job_id = ?`, id); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int64(len(ids)), nil
 }
 
 func (e *Engine) saveJob(ctx context.Context, job *Job) error {
@@ -323,43 +444,85 @@ func (e *Engine) saveJob(ctx context.Context, job *Job) error {
 	if err != nil {
 		return err
 	}
-	return e.rdb.HSet(ctx, jobKey(job.ID), "data", data).Err()
+	const q = `UPDATE queue_slots SET payload = ?, queue_name = ?, updated_at_ms = ? WHERE job_id = ?`
+	_, err = e.db.ExecContext(ctx, q, string(data), job.Queue, nowMilli(), job.ID)
+	return err
 }
 
-// PromoteDelayed moves delayed jobs whose run_at has passed back to their queues.
+// PromoteDelayed moves delayed jobs whose release time has passed back to ready.
 // Returns the number of jobs promoted and the distinct queue names that received work.
 func (e *Engine) PromoteDelayed(ctx context.Context) (int, []string, error) {
-	now := float64(time.Now().Unix())
-	jobIDs, err := e.rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
-		Key:     delayedKey(),
-		Start:   "-inf",
-		Stop:    fmt.Sprintf("%f", now),
-		ByScore: true,
-	}).Result()
+	ms := nowMilli()
+	tx, err := e.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, nil, err
 	}
+	defer func() { _ = tx.Rollback() }()
 
-	count := 0
-	queues := make(map[string]struct{})
-	for _, jobID := range jobIDs {
-		removed, err := e.rdb.ZRem(ctx, delayedKey(), jobID).Result()
-		if err != nil || removed == 0 {
-			continue
+	const qids = `
+SELECT job_id FROM queue_slots
+WHERE lane = 'delayed' AND release_at_ms > 0 AND release_at_ms <= ?`
+
+	rows, err := tx.QueryContext(ctx, qids, ms)
+	if err != nil {
+		return 0, nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return 0, nil, err
 		}
-		job, err := e.GetJob(ctx, jobID)
+		ids = append(ids, id)
+	}
+	_ = rows.Close()
+
+	queuesMap := map[string]struct{}{}
+	count := 0
+
+	for _, id := range ids {
+		var payload, lane string
+		var rel int64
+		var queueName string
+		err := tx.QueryRowContext(ctx,
+			`SELECT payload, lane, release_at_ms, queue_name FROM queue_slots WHERE job_id = ?`,
+			id).Scan(&payload, &lane, &rel, &queueName)
 		if err != nil {
 			continue
 		}
-		if err := e.rdb.ZAdd(ctx, queueKey(job.Queue), redis.Z{Score: 0, Member: job.ID}).Err(); err != nil {
+		if lane != "delayed" || rel > ms {
 			continue
 		}
-		queues[job.Queue] = struct{}{}
+		var job Job
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			continue
+		}
+		job.Status = "pending"
+		data, err := json.Marshal(&job)
+		if err != nil {
+			continue
+		}
+		res, err := tx.ExecContext(ctx,
+			`UPDATE queue_slots SET lane = 'ready', release_at_ms = 0, priority = 0, payload = ?, updated_at_ms = ? WHERE job_id = ? AND lane = 'delayed' AND release_at_ms = ?`,
+			string(data), nowMilli(), id, rel)
+		if err != nil {
+			continue
+		}
+		n, err := res.RowsAffected()
+		if err != nil || n == 0 {
+			continue
+		}
+		queuesMap[queueName] = struct{}{}
 		count++
 	}
-	out := make([]string, 0, len(queues))
-	for q := range queues {
+
+	out := make([]string, 0, len(queuesMap))
+	for q := range queuesMap {
 		out = append(out, q)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, nil, err
 	}
 	return count, out, nil
 }

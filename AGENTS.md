@@ -28,7 +28,7 @@ Lute/
 │   └── internal/
 ├── shared/proto/           # Go module github.com/lute/proto — protobuf/gRPC definitions & generated code (do not hand-edit generated files)
 ├── ui/                     # React + Vite + TypeScript SPA (Firebase Auth; TanStack Query)
-├── infrastructure/dev/     # Docker Compose, `.env` for local stack (SQLite, Redis, API image build)
+├── infrastructure/dev/     # Docker Compose, `.env` for local stack (SQLite + API image build)
 ├── docs/                   # OpenAPI / docs JSON / supplemental docs
 ├── Makefile                # Primary automation (compose, worker builds, lint, release-ish targets)
 ├── .golangci.yml           # golangci-lint v2; excludes generated proto tree
@@ -51,8 +51,7 @@ Lute/
 |------|-------------|
 | Go | **1.26** (`go 1.26.0` in `api/go.mod`, `worker/go.mod`, `shared/proto/go.mod`) |
 | Node | **25.x** — required for `ui/` (`engines`, `ui/.nvmrc`, repo `.nvmrc`); Docker UI stages use **`node:25-alpine`**. |
-| SQLite | **file-backed** in API (`modernc.org/sqlite`); default path `lute.db` or `SQLITE_PATH` |
-| Redis | **7.x** (`redis:7-alpine`) |
+| SQLite | **file-backed** in API (`modernc.org/sqlite`); persists domain data **and** the job queue (`SQLITE_PATH`, default `lute.db`) |
 
 Agents must **not** silently downgrade language versions or swap major framework versions without explicit instruction.
 
@@ -64,21 +63,21 @@ Agents must **not** silently downgrade language versions or swap major framework
 
 Documented in `infrastructure/dev/README.md`:
 
-1. Create `infrastructure/dev/.env` with Redis/API/SQLite/Vite Firebase variables as described there.
+1. Create `infrastructure/dev/.env` with API/SQLite/Vite Firebase variables as described there.
 2. From repo root: `make dev-up` (requires Docker BuildKit; `DOCKER_BUILDKIT=1` is set in `Makefile`).
 3. App + API: `http://localhost:8080`, health: `http://localhost:8080/api/health`.
 
 ### Native dev (no Compose)
 
-Requires **Redis** reachable at default unless overridden (`api/internal/config/config.go`):
+Requires only **SQLite** (embedded in-process via `modernc.org/sqlite`):
 
 - `SQLITE_PATH` default `lute.db` (working directory when running the API binary locally)
-- `REDIS_URL` default `redis://localhost:6379/0`
+- `SQLITE_BUSY_TIMEOUT` default `5s`
 
 Typical split:
 
 - **UI**: `cd ui && npm ci && npm run dev` (Node **25** — `.nvmrc` at repo root and in `ui/`; Vite dev server port **3000** per `vite.config.ts`).
-- **API**: run from `api/` with env vars matching deployment (Firebase, SQLite path, Redis, worker binary dir).
+- **API**: run from `api/` with env vars matching deployment (Firebase, SQLite path, worker binary dir).
 - **Worker**: `make worker-build` → binary under `worker/bin/`; configure API’s `WORKER_BINARY_DIR` when serving binaries locally.
 
 Firebase env vars are required for realistic auth flows (see infra README).
@@ -164,7 +163,7 @@ Run **`make go-lint`** before declaring Go work complete.
 Agents changing Dockerfile caching or Compose healthchecks should preserve:
 
 - BuildKit cache mounts for npm and Go (`GOMODCACHE`, `GOCACHE`).
-- Correct **`depends_on: condition: service_healthy`** semantics for Redis vs API.
+- Sensible Compose **`depends_on` / healthchecks** when optional backing services are added beside the API.
 
 ---
 

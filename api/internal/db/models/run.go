@@ -4,7 +4,7 @@ import "github.com/lute/api/internal/db/id"
 
 // Run is a user-owned record of a programmatic job submission made through the
 // public API. It stores ownership, webhook configuration, and idempotency keys
-// alongside the job id used by the Redis queue and worker protocol.
+// alongside the job id used by the SQLite-backed queue and worker protocol.
 type Run struct {
 	BaseModel
 	JobID          string   `json:"job_id"`

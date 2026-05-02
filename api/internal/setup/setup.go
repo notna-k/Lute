@@ -5,8 +5,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/repos"
@@ -18,7 +16,6 @@ import (
 type Dependencies struct {
 	Config             *config.Config
 	Database           *connection.SQLite
-	Redis              *redis.Client
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
 	StatsAggregator    *queue.StatsAggregator
@@ -49,21 +46,15 @@ func Initialize() (*Dependencies, error) {
 		return nil, err
 	}
 
-	rdb, err := connection.NewRedisClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	queueEngine := queue.NewEngine(rdb)
+	queueEngine := queue.NewEngine(db.DB)
 	queueScheduler := queue.NewScheduler(queueEngine, time.Second)
-	statsAgg := queue.NewStatsAggregator(rdb)
+	statsAgg := queue.NewStatsAggregator(db.DB)
 
 	reposInit := initializeRepositories(db)
 
 	return &Dependencies{
 		Config:             cfg,
 		Database:           db,
-		Redis:              rdb,
 		QueueEngine:        queueEngine,
 		QueueScheduler:     queueScheduler,
 		StatsAggregator:    statsAgg,
@@ -84,11 +75,6 @@ func (d *Dependencies) Close() {
 	if d.Database != nil {
 		if err := d.Database.Close(); err != nil {
 			log.Printf("Error closing SQLite: %v", err)
-		}
-	}
-	if d.Redis != nil {
-		if err := d.Redis.Close(); err != nil {
-			log.Printf("Error closing Redis connection: %v", err)
 		}
 	}
 }

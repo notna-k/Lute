@@ -9,7 +9,6 @@ import (
 type Config struct {
 	Server       ServerConfig
 	SQLite       SQLiteConfig
-	Redis        RedisConfig
 	GRPC         GRPCConfig
 	Heartbeat    HeartbeatConfig
 	WebSocket    WebSocketConfig
@@ -28,10 +27,6 @@ type HeartbeatConfig struct {
 	CheckInterval time.Duration
 	PingTimeout   time.Duration
 	MaxRetries    int
-}
-
-type RedisConfig struct {
-	URL string
 }
 
 type WorkerBinaryConfig struct {
@@ -85,9 +80,6 @@ func Load() (*Config, error) {
 		SQLite: SQLiteConfig{
 			Path:        getEnv("SQLITE_PATH", "lute.db"),
 			BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
-		},
-		Redis: RedisConfig{
-			URL: getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		},
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),

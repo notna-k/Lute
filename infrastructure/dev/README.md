@@ -4,8 +4,7 @@ This directory contains Docker Compose configuration for local development.
 
 ## Services
 
-- **redis**: Redis 7.x (job queue and runtime state)
-- **api**: Go backend (REST, WebSocket, gRPC) with the React UI embedded and served on the same HTTP port; persists app data in **SQLite** (file path from `SQLITE_PATH`, default `/data/lute.db` in Compose via volume `sqlite_data`)
+- **api**: Go backend (REST, WebSocket, gRPC) with the React UI embedded and served on the same HTTP port; persists **SQLite** at `SQLITE_PATH` (default `/data/lute.db` in Compose via volume `sqlite_data`) for domain data **and** the job queue/state
 
 ## Quick Start
 
@@ -70,7 +69,6 @@ This directory contains Docker Compose configuration for local development.
 
 - **App (UI + API)**: http://localhost:8080
 - **API Health**: http://localhost:8080/api/health
-- **Redis**: localhost:6379
 - **gRPC**: localhost:50051
 
 ## Environment Variables
@@ -110,5 +108,4 @@ docker compose up -d --build api
 
 ## Volumes
 
-- `sqlite_data`: Persistent SQLite database directory (`/data` in the API container)
-- `redis_data`: Persistent Redis data
+- `sqlite_data`: Persistent SQLite directory (`/data` in the API container)

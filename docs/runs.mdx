@@ -67,7 +67,7 @@ newest-first page of runs you own, with a total count for pagination.
 
 `POST /runs/{id}/retry` re-enqueues a previously finished or dead run with
 its original payload, resetting attempts to zero. You can only retry a run
-whose queue state Lute still has in Redis; once Lute has pruned the queue
+whose queue/job record Lute still has in its SQLite-backed queue store; once that record is gone
 record, retry returns `404` and you must create a new run.
 
 ## Cancel a pending run

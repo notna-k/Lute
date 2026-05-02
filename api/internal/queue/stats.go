@@ -2,57 +2,66 @@ package queue
 
 import (
 	"context"
-	"fmt"
-	"strconv"
+	"database/sql"
+	"errors"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
-// StatsAggregator records per-minute counters for each queue.
+// StatsAggregator records per-minute counters for each queue (SQLite).
 type StatsAggregator struct {
-	rdb *redis.Client
+	db *sql.DB
 }
 
-func NewStatsAggregator(rdb *redis.Client) *StatsAggregator {
-	return &StatsAggregator{rdb: rdb}
+func NewStatsAggregator(db *sql.DB) *StatsAggregator {
+	return &StatsAggregator{db: db}
 }
 
-func statsKey(queueName string, minute int64) string {
-	return fmt.Sprintf("stats:%s:%d", queueName, minute)
-}
-
-func currentMinute() int64 {
+func currentMinuteBucket() int64 {
 	return time.Now().Unix() / 60
+}
+
+func (s *StatsAggregator) pruneOldStats(ctx context.Context, keepMinutes int64) {
+	if keepMinutes <= 0 {
+		keepMinutes = 120
+	}
+	cutoff := currentMinuteBucket() - keepMinutes
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM queue_stats_minute WHERE minute_bucket < ?`, cutoff)
 }
 
 // RecordProcessed increments the processed counter for a queue.
 func (s *StatsAggregator) RecordProcessed(ctx context.Context, queueName string, latencyMs int64) {
-	key := statsKey(queueName, currentMinute())
-	pipe := s.rdb.Pipeline()
-	pipe.HIncrBy(ctx, key, "processed", 1)
-	pipe.HIncrBy(ctx, key, "latency_sum", latencyMs)
-	pipe.HIncrBy(ctx, key, "latency_count", 1)
-	pipe.Expire(ctx, key, 2*time.Hour)
-	pipe.Exec(ctx) //nolint:errcheck
+	s.pruneOldStats(ctx, 120)
+	b := currentMinuteBucket()
+	const q = `
+INSERT INTO queue_stats_minute (queue_name, minute_bucket, processed, latency_sum, latency_count)
+VALUES (?, ?, 1, ?, 1)
+ON CONFLICT(queue_name, minute_bucket) DO UPDATE SET
+	processed = processed + 1,
+	latency_sum = latency_sum + excluded.latency_sum,
+	latency_count = latency_count + excluded.latency_count`
+	_, _ = s.db.ExecContext(ctx, q, queueName, b, latencyMs)
 }
 
 // RecordFailed increments the failed counter for a queue.
 func (s *StatsAggregator) RecordFailed(ctx context.Context, queueName string) {
-	key := statsKey(queueName, currentMinute())
-	pipe := s.rdb.Pipeline()
-	pipe.HIncrBy(ctx, key, "failed", 1)
-	pipe.Expire(ctx, key, 2*time.Hour)
-	pipe.Exec(ctx) //nolint:errcheck
+	s.pruneOldStats(ctx, 120)
+	b := currentMinuteBucket()
+	const q = `
+INSERT INTO queue_stats_minute (queue_name, minute_bucket, failed)
+VALUES (?, ?, 1)
+ON CONFLICT(queue_name, minute_bucket) DO UPDATE SET failed = failed + 1`
+	_, _ = s.db.ExecContext(ctx, q, queueName, b)
 }
 
 // RecordEnqueued increments the enqueued counter for a queue.
 func (s *StatsAggregator) RecordEnqueued(ctx context.Context, queueName string) {
-	key := statsKey(queueName, currentMinute())
-	pipe := s.rdb.Pipeline()
-	pipe.HIncrBy(ctx, key, "enqueued", 1)
-	pipe.Expire(ctx, key, 2*time.Hour)
-	pipe.Exec(ctx) //nolint:errcheck
+	s.pruneOldStats(ctx, 120)
+	b := currentMinuteBucket()
+	const q = `
+INSERT INTO queue_stats_minute (queue_name, minute_bucket, enqueued)
+VALUES (?, ?, 1)
+ON CONFLICT(queue_name, minute_bucket) DO UPDATE SET enqueued = enqueued + 1`
+	_, _ = s.db.ExecContext(ctx, q, queueName, b)
 }
 
 // QueueStats holds per-minute stats for a queue.
@@ -66,34 +75,32 @@ type QueueStats struct {
 
 // GetTimeSeries returns per-minute stats for the last N minutes.
 func (s *StatsAggregator) GetTimeSeries(ctx context.Context, queueName string, minutes int) ([]QueueStats, error) {
-	now := currentMinute()
+	s.pruneOldStats(ctx, int64(minutes)+10)
+	now := currentMinuteBucket()
 	result := make([]QueueStats, 0, minutes)
 
+	const sel = `
+SELECT processed, failed, enqueued, latency_sum, latency_count
+FROM queue_stats_minute WHERE queue_name = ? AND minute_bucket = ?`
+
 	for i := minutes - 1; i >= 0; i-- {
-		minute := now - int64(i)
-		key := statsKey(queueName, minute)
-		vals, err := s.rdb.HGetAll(ctx, key).Result()
-		if err != nil {
+		bucket := now - int64(i)
+		var qs QueueStats
+		qs.Minute = bucket * 60
+		row := s.db.QueryRowContext(ctx, sel, queueName, bucket)
+		var latencySum, latencyCount sql.NullInt64
+		err := row.Scan(&qs.Processed, &qs.Failed, &qs.Enqueued, &latencySum, &latencyCount)
+		if errors.Is(err, sql.ErrNoRows) {
+			result = append(result, qs)
 			continue
 		}
-
-		qs := QueueStats{Minute: minute * 60}
-		qs.Processed = parseInt64(vals["processed"])
-		qs.Failed = parseInt64(vals["failed"])
-		qs.Enqueued = parseInt64(vals["enqueued"])
-
-		latencySum := parseInt64(vals["latency_sum"])
-		latencyCount := parseInt64(vals["latency_count"])
-		if latencyCount > 0 {
-			qs.AvgLatencyMs = float64(latencySum) / float64(latencyCount)
+		if err != nil {
+			return nil, err
 		}
-
+		if latencyCount.Valid && latencyCount.Int64 > 0 && latencySum.Valid {
+			qs.AvgLatencyMs = float64(latencySum.Int64) / float64(latencyCount.Int64)
+		}
 		result = append(result, qs)
 	}
 	return result, nil
-}
-
-func parseInt64(s string) int64 {
-	v, _ := strconv.ParseInt(s, 10, 64)
-	return v
 }

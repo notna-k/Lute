@@ -141,6 +141,36 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry ON webhook_deliveries(status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_job ON webhook_deliveries(job_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_user_created ON webhook_deliveries(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS queue_slots (
+	job_id TEXT PRIMARY KEY NOT NULL,
+	queue_name TEXT NOT NULL,
+	payload TEXT NOT NULL,
+	lane TEXT NOT NULL CHECK (lane IN ('ready','delayed','none')),
+	priority REAL NOT NULL DEFAULT 0,
+	release_at_ms INTEGER NOT NULL DEFAULT 0,
+	updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_queue_slots_ready ON queue_slots(queue_name, priority DESC, job_id ASC) WHERE lane = 'ready';
+CREATE INDEX IF NOT EXISTS idx_queue_slots_delayed ON queue_slots(release_at_ms, job_id) WHERE lane = 'delayed';
+
+CREATE TABLE IF NOT EXISTS queue_dlq (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	queue_name TEXT NOT NULL,
+	job_id TEXT NOT NULL UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_queue_dlq_queue_id ON queue_dlq(queue_name, id);
+
+CREATE TABLE IF NOT EXISTS queue_stats_minute (
+	queue_name TEXT NOT NULL,
+	minute_bucket INTEGER NOT NULL,
+	processed INTEGER NOT NULL DEFAULT 0,
+	failed INTEGER NOT NULL DEFAULT 0,
+	enqueued INTEGER NOT NULL DEFAULT 0,
+	latency_sum INTEGER NOT NULL DEFAULT 0,
+	latency_count INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (queue_name, minute_bucket)
+);
 `
 
 // Apply runs DDL statements one at a time.
