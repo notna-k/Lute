@@ -8,7 +8,7 @@ import (
 
 type Config struct {
 	Server       ServerConfig
-	SQLite       SQLiteConfig
+	Database     DatabaseConfig
 	GRPC         GRPCConfig
 	Heartbeat    HeartbeatConfig
 	WebSocket    WebSocketConfig
@@ -42,10 +42,22 @@ type ServerConfig struct {
 	Mode         string // "debug", "release", "test"
 }
 
-// SQLiteConfig stores the primary application database (file-backed).
+// SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
 type SQLiteConfig struct {
 	Path         string
 	BusyTimeout  time.Duration
+}
+
+// PostgresConfig holds libpq/pg connection parameters (when DB_DRIVER is postgres).
+type PostgresConfig struct {
+	DSN string
+}
+
+// DatabaseConfig selects SQLite or PostgreSQL and supplies driver-specific tuning.
+type DatabaseConfig struct {
+	Driver   string // sqlite (default) or postgres
+	SQLite   SQLiteConfig
+	Postgres PostgresConfig
 }
 
 type GRPCConfig struct {
@@ -77,9 +89,15 @@ func Load() (*Config, error) {
 			IdleTimeout:  getDurationEnv("SERVER_IDLE_TIMEOUT", 60*time.Second),
 			Mode:         getEnv("GIN_MODE", "debug"),
 		},
-		SQLite: SQLiteConfig{
-			Path:        getEnv("SQLITE_PATH", "lute.db"),
-			BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
+		Database: DatabaseConfig{
+			Driver: getEnv("DB_DRIVER", "sqlite"),
+			SQLite: SQLiteConfig{
+				Path:        getEnv("SQLITE_PATH", "lute.db"),
+				BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
+			},
+			Postgres: PostgresConfig{
+				DSN: getEnv("POSTGRES_DSN", ""),
+			},
 		},
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),

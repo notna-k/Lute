@@ -15,7 +15,7 @@ import (
 // Dependencies holds all initialized dependencies
 type Dependencies struct {
 	Config             *config.Config
-	Database           *connection.SQLite
+	Database           *connection.Database
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
 	StatsAggregator    *queue.StatsAggregator
@@ -45,10 +45,10 @@ func Initialize() (*Dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	queueEngine := queue.NewEngine(db.DB)
+	jobQ := repos.NewJobQueueRepository(db.DB)
+	queueEngine := queue.NewEngine(jobQ)
 	queueScheduler := queue.NewScheduler(queueEngine, time.Second)
-	statsAgg := queue.NewStatsAggregator(db.DB)
+	statsAgg := queue.NewStatsAggregator(repos.NewQueueStatsRepository(db.DB))
 
 	reposInit := initializeRepositories(db)
 
@@ -74,7 +74,7 @@ func Initialize() (*Dependencies, error) {
 func (d *Dependencies) Close() {
 	if d.Database != nil {
 		if err := d.Database.Close(); err != nil {
-			log.Printf("Error closing SQLite: %v", err)
+			log.Printf("Error closing database: %v", err)
 		}
 	}
 }
@@ -101,8 +101,8 @@ func initializeFirebase(cfg *config.Config) error {
 	return nil
 }
 
-func initializeDatabase(cfg *config.Config) (*connection.SQLite, error) {
-	return connection.NewSQLite(context.Background(), cfg)
+func initializeDatabase(cfg *config.Config) (*connection.Database, error) {
+	return connection.Open(context.Background(), cfg)
 }
 
 // Repositories holds all repository instances
@@ -118,7 +118,7 @@ type Repositories struct {
 	WebhookRepo        *repos.WebhookDeliveryRepository
 }
 
-func initializeRepositories(db *connection.SQLite) *Repositories {
+func initializeRepositories(db *connection.Database) *Repositories {
 	return &Repositories{
 		WorkerRepo:         repos.NewWorkerRepository(db.DB),
 		UserRepo:           repos.NewUserRepository(db.DB),

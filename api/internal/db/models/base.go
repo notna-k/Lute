@@ -3,27 +3,34 @@ package models
 import (
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/lute/api/internal/db/id"
+	"github.com/lute/api/internal/db/types"
 )
 
-// BaseModel contains common fields for all models
+// BaseModel embeds identifiers and timestamps for domain rows.
 type BaseModel struct {
-	ID        id.ID     `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        id.ID           `json:"id" gorm:"primaryKey;size:24"`
+	CreatedAt types.MilliTime `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt types.MilliTime `json:"updated_at" gorm:"column:updated_at"`
 }
 
-// BeforeCreate sets timestamps before creation
-func (b *BaseModel) BeforeCreate() {
-	now := time.Now()
+// BeforeCreate initializes id and timestamps before insert (GORM callback).
+func (b *BaseModel) BeforeCreate(_ *gorm.DB) error {
 	if b.ID.IsZero() {
 		b.ID = id.New()
 	}
-	b.CreatedAt = now
+	now := types.NewMilliTime(time.Now())
+	if b.CreatedAt.IsZero() {
+		b.CreatedAt = now
+	}
 	b.UpdatedAt = now
+	return nil
 }
 
-// BeforeUpdate sets updated timestamp
-func (b *BaseModel) BeforeUpdate() {
-	b.UpdatedAt = time.Now()
+// BeforeUpdate refreshes UpdatedAt before write (GORM callback).
+func (b *BaseModel) BeforeUpdate(_ *gorm.DB) error {
+	b.UpdatedAt = types.NewMilliTime(time.Now())
+	return nil
 }

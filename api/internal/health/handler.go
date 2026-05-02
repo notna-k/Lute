@@ -10,10 +10,10 @@ import (
 )
 
 type HealthHandler struct {
-	db *connection.SQLite
+	db *connection.Database
 }
 
-func NewHealthHandler(db *connection.SQLite) *HealthHandler {
+func NewHealthHandler(db *connection.Database) *HealthHandler {
 	return &HealthHandler{db: db}
 }
 

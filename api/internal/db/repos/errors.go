@@ -1,8 +1,9 @@
 package repos
 
 import (
-	"database/sql"
 	"errors"
+
+	"gorm.io/gorm"
 )
 
 // ErrNotFound is returned when a single-row lookup finds no matching record.
@@ -12,7 +13,7 @@ func mapErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrNotFound
 	}
 	return err

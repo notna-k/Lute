@@ -19,6 +19,7 @@ import (
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/db/types"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/websocket"
 )
@@ -211,7 +212,7 @@ func (s *Server) persistExecution(ctx context.Context, workerID string, result *
 		ElapsedMs:        result.ElapsedMs,
 		LogFile:          result.LogFile,
 		ExecutionLogFile: result.ExecutionLogFile,
-		FinishedAt:       time.Now(),
+		FinishedAt:       types.NewMilliTime(time.Now()),
 	}
 	if job != nil {
 		exec.Queue = job.Queue

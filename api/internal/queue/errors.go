@@ -1,6 +1,6 @@
 package queue
 
-import "errors"
+import "github.com/lute/api/internal/db/repos"
 
-// ErrNotFound is returned when a job id does not exist in the queue store.
-var ErrNotFound = errors.New("job not found")
+// ErrNotFound is returned when GetJob misses a persisted slot.
+var ErrNotFound = repos.ErrNotFound

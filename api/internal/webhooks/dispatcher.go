@@ -20,6 +20,7 @@ import (
 
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/db/types"
 )
 
 const (
@@ -86,7 +87,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 		Status:          "pending",
 		Attempts:        0,
 		MaxAttempts:     defaultMaxAttempts,
-		NextRetryAt:     time.Now(),
+		NextRetryAt:     types.NewMilliTime(time.Now()),
 	}
 	if err := e.deliveries.Create(ctx, d); err != nil {
 		log.Printf("webhooks: persist delivery %s/%s: %v", jobID, event, err)

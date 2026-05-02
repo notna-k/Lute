@@ -136,7 +136,7 @@ func buildChartPerWorker(snapshots []*models.WorkerSnapshot, periodStart, period
 		existing, ok := byBucket[b]
 		if !ok || s.At.After(existing.at) {
 			byBucket[b] = &bucketVal{
-				at:        s.At,
+				at:        s.At.Time,
 				cpu:       floatFrom(s.Metrics, "cpu_load"),
 				mem:       floatFrom(s.Metrics, "mem_usage_mb"),
 				diskUsed:  floatFrom(s.Metrics, "disk_used_gb"),

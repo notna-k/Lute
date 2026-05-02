@@ -19,6 +19,7 @@ import (
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/db/types"
 	luteGrpc "github.com/lute/api/internal/grpc"
 )
 
@@ -415,7 +416,8 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	w.Status = "registered"
 	w.AgentIP = ip
 	w.AgentVersion = req.Version
-	w.LastSeen = time.Now()
+	ls := types.NewMilliTime(time.Now())
+	w.LastSeen = &ls
 
 	if err := h.workerRepo.Update(ctx, w.ID, w); err != nil {
 		log.Printf("Failed to update worker with agent info: %v", err)

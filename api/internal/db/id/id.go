@@ -2,6 +2,7 @@ package id
 
 import (
 	"crypto/rand"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -35,3 +36,26 @@ func FromHex(s string) (ID, error) {
 func (i ID) Hex() string { return string(i) }
 
 func (i ID) IsZero() bool { return i == "" }
+
+func (i ID) Value() (driver.Value, error) {
+	if i.IsZero() {
+		return nil, nil
+	}
+	return string(i), nil
+}
+
+func (i *ID) Scan(value interface{}) error {
+	if value == nil {
+		*i = ""
+		return nil
+	}
+	switch v := value.(type) {
+	case string:
+		*i = ID(v)
+	case []byte:
+		*i = ID(v)
+	default:
+		return fmt.Errorf("id.Scan unsupported type %T", value)
+	}
+	return nil
+}

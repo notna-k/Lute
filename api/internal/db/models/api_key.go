@@ -1,20 +1,19 @@
 package models
 
 import (
-	"time"
-
 	"github.com/lute/api/internal/db/id"
+	"github.com/lute/api/internal/db/types"
 )
 
-// APIKey represents a programmatic access credential owned by a user.
-// The plaintext token is returned only once at creation time; only Prefix
-// (for lookup) and Hash (for comparison) are persisted.
+// APIKey is a programmatic credential (prefix + hash only at rest).
 type APIKey struct {
 	BaseModel
-	UserID     id.ID      `json:"user_id"`
-	Name       string     `json:"name"`
-	Prefix     string     `json:"prefix"`
-	Hash       string     `json:"-"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	UserID     id.ID          `json:"user_id" gorm:"size:24;not null;index:idx_api_keys_user_created,priority:1"`
+	Name       string         `json:"name"`
+	Prefix     string         `json:"prefix" gorm:"uniqueIndex"`
+	Hash       string         `json:"-"`
+	LastUsedAt *types.MilliTime `json:"last_used_at,omitempty" gorm:"column:last_used_at"`
+	RevokedAt  *types.MilliTime `json:"revoked_at,omitempty" gorm:"column:revoked_at"`
 }
+
+func (*APIKey) TableName() string { return "api_keys" }

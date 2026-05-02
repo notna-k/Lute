@@ -2,81 +2,55 @@ package repos
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sort"
 	"time"
 
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"github.com/lute/api/internal/db/types"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type JobExecutionRepository struct {
-	db *sql.DB
+	g *gorm.DB
 }
 
-func NewJobExecutionRepository(db *sql.DB) *JobExecutionRepository {
-	return &JobExecutionRepository{db: db}
+func NewJobExecutionRepository(db *gorm.DB) *JobExecutionRepository {
+	return &JobExecutionRepository{g: db}
+}
+
+func (r *JobExecutionRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
 }
 
 func (r *JobExecutionRepository) Upsert(ctx context.Context, exec *models.JobExecution) error {
-	now := time.Now()
-	exec.UpdatedAt = now
+	now := time.Now().UTC()
 	if exec.CreatedAt.IsZero() {
-		exec.CreatedAt = now
+		exec.CreatedAt = types.NewMilliTime(now)
 	}
+	exec.UpdatedAt = types.NewMilliTime(now)
 	if exec.ID.IsZero() {
 		exec.ID = id.New()
 	}
-	succ := 0
-	if exec.Success {
-		succ = 1
+	if exec.FinishedAt.IsZero() {
+		exec.FinishedAt = types.NewMilliTime(now)
 	}
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO job_executions (
-			id, created_at, updated_at, job_id, worker_id, queue, type, success, error,
-			elapsed_ms, log_file, execution_log_file, finished_at
-		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(job_id) DO UPDATE SET
-			updated_at = excluded.updated_at,
-			worker_id = excluded.worker_id,
-			queue = excluded.queue,
-			type = excluded.type,
-			success = excluded.success,
-			error = excluded.error,
-			elapsed_ms = excluded.elapsed_ms,
-			log_file = excluded.log_file,
-			execution_log_file = excluded.execution_log_file,
-			finished_at = excluded.finished_at
-	`,
-		exec.ID.Hex(), timeMilli(exec.CreatedAt), timeMilli(exec.UpdatedAt), exec.JobID, exec.WorkerID,
-		exec.Queue, exec.Type, succ, exec.Error, exec.ElapsedMs, exec.LogFile, exec.ExecutionLogFile, timeMilli(exec.FinishedAt),
-	)
-	return err
+	return r.q(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "job_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"updated_at", "worker_id", "queue", "type", "success",
+			"error", "elapsed_ms", "log_file", "execution_log_file", "finished_at",
+		}),
+	}).Create(exec).Error
 }
 
 func (r *JobExecutionRepository) GetByJobID(ctx context.Context, jobID string) (*models.JobExecution, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, created_at, updated_at, job_id, worker_id, queue, type, success, error,
-			elapsed_ms, log_file, execution_log_file, finished_at
-		FROM job_executions WHERE job_id = ?`, jobID)
-	return scanJobExecution(row)
-}
-
-func scanJobExecution(row *sql.Row) (*models.JobExecution, error) {
 	var e models.JobExecution
-	var ca, ua, fin int64
-	var idStr string
-	var succ int
-	if err := row.Scan(&idStr, &ca, &ua, &e.JobID, &e.WorkerID, &e.Queue, &e.Type, &succ, &e.Error,
-		&e.ElapsedMs, &e.LogFile, &e.ExecutionLogFile, &fin); err != nil {
+	if err := r.q(ctx).Where("job_id = ?", jobID).First(&e).Error; err != nil {
 		return nil, mapErr(err)
 	}
-	e.ID = id.ID(idStr)
-	e.CreatedAt = time.UnixMilli(ca).UTC()
-	e.UpdatedAt = time.UnixMilli(ua).UTC()
-	e.Success = succ != 0
-	e.FinishedAt = time.UnixMilli(fin).UTC()
 	return &e, nil
 }
 
@@ -97,81 +71,42 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 		offset = 0
 	}
 
-	where, args := jobExecWhereArgs(filter)
-	countQ := `SELECT COUNT(*) FROM job_executions` + where
+	q := r.q(ctx).Model(&models.JobExecution{})
+	if filter.Queue != "" {
+		q = q.Where("queue = ?", filter.Queue)
+	}
+	if filter.Type != "" {
+		q = q.Where("type = ?", filter.Type)
+	}
+	switch filter.Status {
+	case "success":
+		q = q.Where("success = ?", true)
+	case "failed":
+		q = q.Where("success = ?", false)
+	}
+
 	var total int64
-	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count job executions: %w", err)
 	}
 
-	order := "ASC"
+	order := "finished_at ASC"
 	if sortDesc {
-		order = "DESC"
+		order = "finished_at DESC"
 	}
-	q := fmt.Sprintf(`
-		SELECT id, created_at, updated_at, job_id, worker_id, queue, type, success, error,
-			elapsed_ms, log_file, execution_log_file, finished_at
-		FROM job_executions%s ORDER BY finished_at %s LIMIT ? OFFSET ?`, where, order)
-	args = append(args, limit, offset)
-	rows, err := r.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("find job executions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
 
 	var out []models.JobExecution
-	for rows.Next() {
-		var e models.JobExecution
-		var ca, ua, fin int64
-		var idStr string
-		var succ int
-		if err := rows.Scan(&idStr, &ca, &ua, &e.JobID, &e.WorkerID, &e.Queue, &e.Type, &succ, &e.Error,
-			&e.ElapsedMs, &e.LogFile, &e.ExecutionLogFile, &fin); err != nil {
-			return nil, 0, err
-		}
-		e.ID = id.ID(idStr)
-		e.CreatedAt = time.UnixMilli(ca).UTC()
-		e.UpdatedAt = time.UnixMilli(ua).UTC()
-		e.Success = succ != 0
-		e.FinishedAt = time.UnixMilli(fin).UTC()
-		out = append(out, e)
+	err := q.Order(order).Limit(int(limit)).Offset(int(offset)).Find(&out).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("find job executions: %w", err)
 	}
 	if out == nil {
 		out = []models.JobExecution{}
 	}
-	return out, total, rows.Err()
+	return out, total, nil
 }
 
-func jobExecWhereArgs(f JobExecutionListFilter) (where string, args []any) {
-	var conds []string
-	if f.Queue != "" {
-		conds = append(conds, "queue = ?")
-		args = append(args, f.Queue)
-	}
-	if f.Type != "" {
-		conds = append(conds, "type = ?")
-		args = append(args, f.Type)
-	}
-	switch f.Status {
-	case "success":
-		conds = append(conds, "success = 1")
-	case "failed":
-		conds = append(conds, "success = 0")
-	}
-	if len(conds) == 0 {
-		return "", args
-	}
-	w := " WHERE "
-	for i, c := range conds {
-		if i > 0 {
-			w += " AND "
-		}
-		w += c
-	}
-	return w, args
-}
-
-func (r *JobExecutionRepository) DistinctQueuesAndTypes(ctx context.Context) (queues, types []string, err error) {
+func (r *JobExecutionRepository) DistinctQueuesAndTypes(ctx context.Context) (queues, typesCol []string, err error) {
 	rawQ, err := r.distinctCol(ctx, "queue")
 	if err != nil {
 		return nil, nil, err
@@ -186,19 +121,16 @@ func (r *JobExecutionRepository) DistinctQueuesAndTypes(ctx context.Context) (qu
 }
 
 func (r *JobExecutionRepository) distinctCol(ctx context.Context, col string) ([]string, error) {
-	q := fmt.Sprintf(`SELECT DISTINCT %s FROM job_executions`, col)
-	rows, err := r.db.QueryContext(ctx, q)
-	if err != nil {
+	if col != "queue" && col != "type" {
+		return nil, fmt.Errorf("unsupported column %q", col)
+	}
+	var raw []string
+	if err := r.q(ctx).Model(&models.JobExecution{}).Distinct(col).Pluck(col, &raw).Error; err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	seen := make(map[string]struct{})
 	var out []string
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, err
-		}
+	for _, s := range raw {
 		if s == "" {
 			continue
 		}
@@ -208,5 +140,5 @@ func (r *JobExecutionRepository) distinctCol(ctx context.Context, col string) ([
 		seen[s] = struct{}{}
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	return out, nil
 }
