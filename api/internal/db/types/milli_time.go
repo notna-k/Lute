@@ -20,8 +20,8 @@ func NewMilliTime(t time.Time) MilliTime {
 	return MilliTime{Time: t.UTC()}
 }
 
-func (m *MilliTime) Value() (driver.Value, error) {
-	if m == nil || m.Time.IsZero() {
+func (m MilliTime) Value() (driver.Value, error) {
+	if m.Time.IsZero() {
 		return nil, nil
 	}
 	return m.UTC().UnixMilli(), nil
@@ -40,20 +40,28 @@ func (m *MilliTime) Scan(value interface{}) error {
 		m.Time = time.UnixMilli(v).UTC()
 	case int:
 		m.Time = time.UnixMilli(int64(v)).UTC()
-	case []byte:
-		var n int64
-		if _, err := fmt.Sscan(string(v), &n); err != nil {
-			return fmt.Errorf("scan MilliTime from []byte: %w", err)
+	case time.Time:
+		m.Time = v.UTC()
+	case string:
+		n, err := parseMilliOrTime(v)
+		if err != nil {
+			return err
 		}
-		m.Time = time.UnixMilli(n).UTC()
+		m.Time = n
+	case []byte:
+		n, err := parseMilliOrTime(string(v))
+		if err != nil {
+			return err
+		}
+		m.Time = n
 	default:
 		return fmt.Errorf("cannot scan MilliTime from %T", value)
 	}
 	return nil
 }
 
-func (m *MilliTime) MarshalJSON() ([]byte, error) {
-	if m == nil || m.Time.IsZero() {
+func (m MilliTime) MarshalJSON() ([]byte, error) {
+	if m.Time.IsZero() {
 		return []byte("null"), nil
 	}
 	return json.Marshal(m.UTC().Format(time.RFC3339Nano))
@@ -84,6 +92,23 @@ func (m *MilliTime) UnmarshalJSON(data []byte) error {
 
 func (m MilliTime) GormDataType(_ string) string {
 	return "bigint"
+}
+
+// parseMilliOrTime accepts either a numeric unix-millis string or an RFC3339 /
+// SQLite datetime string and returns a UTC time.Time. Lets us tolerate legacy
+// rows written before MilliTime stored as bigint.
+func parseMilliOrTime(s string) (time.Time, error) {
+	var n int64
+	if _, err := fmt.Sscan(s, &n); err == nil {
+		return time.UnixMilli(n).UTC(), nil
+	}
+	layouts := []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.999999999 -0700 MST", "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05"}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse MilliTime from %q", s)
 }
 
 func (m MilliTime) IsZero() bool {

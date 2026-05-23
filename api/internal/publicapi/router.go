@@ -31,7 +31,7 @@ func SetupPublicRoutes(r *gin.RouterGroup, keyRepo *repos.APIKeyRepository, runs
 }
 
 // SetupAPIKeyRoutes registers key management endpoints on an already
-// Firebase-authenticated group (e.g. /api/v1/api-keys).
+// JWT-authenticated group (e.g. /api/v1/api-keys).
 func SetupAPIKeyRoutes(r *gin.RouterGroup, keys *APIKeysHandler) {
 	g := r.Group("/api-keys")
 	{

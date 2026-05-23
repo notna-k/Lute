@@ -10,6 +10,7 @@ import (
 func RegisteredModels() []any {
 	return []any{
 		&models.User{},
+		&models.RefreshToken{},
 		&models.Worker{},
 		&models.Command{},
 		&models.UptimeSnapshot{},

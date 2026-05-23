@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/lute/api/internal/auth"
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/dashboard"
 	"github.com/lute/api/internal/db/connection"
@@ -35,6 +36,8 @@ type SetupRouterDeps struct {
 	QueueEngine        *queue.Engine
 	StatsAgg           *queue.StatsAggregator
 	GRPCServer         *luteGrpc.Server
+	TokenService       *auth.TokenService
+	AuthService        *auth.Service
 }
 
 // SetupRouter builds the gin.Engine with global middleware and all domain routes.
@@ -65,13 +68,17 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	queueHandler := jobs.NewQueueHandler(d.QueueEngine, d.StatsAgg)
 	dlqHandler := jobs.NewDLQHandler(d.QueueEngine, d.GRPCServer)
 
+	authedMW := middleware.JWTAuthMiddleware(d.TokenService)
+	authHandler := auth.NewHandler(d.AuthService, d.UserRepo, auth.DefaultCookieConfig(d.Config.Auth.CookieSecure))
+
 	v1 := api.Group("/v1")
 	{
-		worker.SetupRoutes(v1, workerHandler, d.UserRepo)
-		dashboard.SetupRoutes(v1, dashboardHandler, d.UserRepo)
+		auth.SetupRoutes(v1, authHandler, authedMW)
+		worker.SetupRoutes(v1, workerHandler, authedMW)
+		dashboard.SetupRoutes(v1, dashboardHandler, authedMW)
 
 		authed := v1.Group("")
-		authed.Use(middleware.AuthMiddleware(d.UserRepo))
+		authed.Use(authedMW)
 		{
 			jobs.SetupRoutes(authed, jobHandler, queueHandler, dlqHandler, executionsHandler)
 			publicapi.SetupAPIKeyRoutes(authed, apiKeysHandler)

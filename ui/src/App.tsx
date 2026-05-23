@@ -6,7 +6,7 @@ import {
   Routes,
   useLocation,
 } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, AuthBridgeUpdater } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppShell } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -81,6 +81,7 @@ function App() {
     <ThemeProvider>
       <ErrorBoundary>
         <AuthProvider>
+          <AuthBridgeUpdater />
           <BrowserRouter>
             <AppRoutes />
           </BrowserRouter>

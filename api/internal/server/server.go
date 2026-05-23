@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/lute/api/internal/auth"
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/repos"
@@ -50,6 +51,8 @@ type Deps struct {
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
 	StatsAgg           *queue.StatsAggregator
+	TokenService       *auth.TokenService
+	AuthService        *auth.Service
 }
 
 func New(d Deps) *Server {
@@ -76,6 +79,8 @@ func New(d Deps) *Server {
 		QueueEngine:        d.QueueEngine,
 		StatsAgg:           d.StatsAgg,
 		GRPCServer:         grpcServer,
+		TokenService:       d.TokenService,
+		AuthService:        d.AuthService,
 	})
 
 	httpServer := &http.Server{

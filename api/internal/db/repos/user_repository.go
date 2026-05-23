@@ -32,14 +32,6 @@ func (r *UserRepository) GetByID(ctx context.Context, uid id.ID) (*models.User, 
 	return &u, nil
 }
 
-func (r *UserRepository) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*models.User, error) {
-	var u models.User
-	if err := r.q(ctx).Where("firebase_uid = ?", firebaseUID).First(&u).Error; err != nil {
-		return nil, mapErr(err)
-	}
-	return &u, nil
-}
-
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	var u models.User
 	if err := r.q(ctx).Where("email = ?", email).First(&u).Error; err != nil {

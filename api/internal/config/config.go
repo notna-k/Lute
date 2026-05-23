@@ -12,7 +12,7 @@ type Config struct {
 	GRPC         GRPCConfig
 	Heartbeat    HeartbeatConfig
 	WebSocket    WebSocketConfig
-	Firebase     FirebaseConfig
+	Auth         AuthConfig
 	WorkerBinary WorkerBinaryConfig
 	Metrics      MetricsConfig
 }
@@ -74,9 +74,15 @@ type WebSocketConfig struct {
 	WriteWait       time.Duration
 }
 
-type FirebaseConfig struct {
-	ProjectID       string
-	CredentialsJSON string
+// AuthConfig governs JWT signing and the seeded bootstrap admin user.
+type AuthConfig struct {
+	JWTSecret     string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+	Issuer        string
+	CookieSecure  bool
+	AdminEmail    string
+	AdminPassword string
 }
 
 func Load() (*Config, error) {
@@ -116,9 +122,14 @@ func Load() (*Config, error) {
 			PongWait:        getDurationEnv("WS_PONG_WAIT", 60*time.Second),
 			WriteWait:       getDurationEnv("WS_WRITE_WAIT", 10*time.Second),
 		},
-		Firebase: FirebaseConfig{
-			ProjectID:       getEnv("FIREBASE_PROJECT_ID", ""),
-			CredentialsJSON: getEnv("FIREBASE_CREDENTIALS_JSON", ""),
+		Auth: AuthConfig{
+			JWTSecret:     getEnv("JWT_SECRET", ""),
+			AccessTTL:     getDurationEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
+			RefreshTTL:    getDurationEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
+			Issuer:        getEnv("JWT_ISSUER", "lute"),
+			CookieSecure:  getBoolEnv("AUTH_COOKIE_SECURE", false),
+			AdminEmail:    getEnv("ADMIN_EMAIL", ""),
+			AdminPassword: getEnv("ADMIN_PASSWORD", ""),
 		},
 		WorkerBinary: WorkerBinaryConfig{
 			Dir: getEnv("WORKER_BINARY_DIR", "/opt/lute/worker-binaries"),

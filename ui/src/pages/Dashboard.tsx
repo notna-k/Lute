@@ -114,7 +114,7 @@ const Dashboard = () => {
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${user?.displayName || user?.email?.split('@')[0] || 'there'}`}
+        title={`Welcome back, ${user?.display_name || user?.email?.split('@')[0] || 'there'}`}
         description="Here's an overview of your distributed compute fleet."
       />
 

@@ -34,6 +34,8 @@ func main() {
 		QueueEngine:        deps.QueueEngine,
 		QueueScheduler:     deps.QueueScheduler,
 		StatsAgg:           deps.StatsAggregator,
+		TokenService:       deps.TokenService,
+		AuthService:        deps.AuthService,
 	})
 
 	if err := srv.Start(); err != nil {

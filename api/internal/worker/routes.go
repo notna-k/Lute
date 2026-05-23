@@ -2,9 +2,6 @@ package worker
 
 import (
 	"github.com/gin-gonic/gin"
-
-	"github.com/lute/api/internal/db/repos"
-	"github.com/lute/api/internal/middleware"
 )
 
 // MountWorkerBootstrap registers unauthenticated /workers/bootstrap/* under parent
@@ -21,11 +18,11 @@ func MountWorkerBootstrap(parent *gin.RouterGroup, h *WorkerHandler) {
 	}
 }
 
-// MountWorkerJWTAPI registers Firebase-authenticated worker routes under parent.
-func MountWorkerJWTAPI(parent *gin.RouterGroup, h *WorkerHandler, userRepo *repos.UserRepository) {
+// MountWorkerJWTAPI registers JWT-authenticated worker routes under parent.
+func MountWorkerJWTAPI(parent *gin.RouterGroup, h *WorkerHandler, authedMW gin.HandlerFunc) {
 	w := parent.Group("/workers")
 	authd := w.Group("")
-	authd.Use(middleware.AuthMiddleware(userRepo))
+	authd.Use(authedMW)
 	mountWorkerAuthenticated(authd, h)
 }
 

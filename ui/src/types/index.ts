@@ -1,8 +1,7 @@
 export interface User {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
+  id: string;
+  email: string;
+  display_name: string;
 }
 
 // Worker row from API (registered agent / compute node).
