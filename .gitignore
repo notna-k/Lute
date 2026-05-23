@@ -143,3 +143,5 @@ worker/bin/
 
 # Vite hashed assets copied into api/internal/ui/web (see make ui-build); placeholder index.html is tracked
 api/internal/ui/web/assets/
+
+.gocache

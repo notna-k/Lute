@@ -2,106 +2,76 @@ package repos
 
 import (
 	"context"
-	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/enums"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"gorm.io/gorm"
 )
 
 type CommandRepository struct {
-	*Repository
+	g *gorm.DB
 }
 
-func NewCommandRepository(db *mongo.Database) *CommandRepository {
-	return &CommandRepository{
-		Repository: NewRepository(db, connection.CollectionCommands),
-	}
+func NewCommandRepository(db *gorm.DB) *CommandRepository {
+	return &CommandRepository{g: db}
+}
+
+func (r *CommandRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
 }
 
 func (r *CommandRepository) Create(ctx context.Context, cmd *models.Command) error {
-	cmd.BeforeCreate()
 	if cmd.Status == "" {
-		cmd.Status = "pending"
+		cmd.Status = enums.CommandPending
 	}
-	_, err := r.Collection.InsertOne(ctx, cmd)
-	return err
+	return mapErr(r.q(ctx).Create(cmd).Error)
 }
 
-func (r *CommandRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*models.Command, error) {
-	var cmd models.Command
-	err := r.Collection.FindOne(ctx, bson.M{"_id": id}).Decode(&cmd)
-	if err != nil {
-		return nil, err
+func (r *CommandRepository) GetByID(ctx context.Context, cid id.ID) (*models.Command, error) {
+	var c models.Command
+	if err := r.q(ctx).Where("id = ?", cid.Hex()).First(&c).Error; err != nil {
+		return nil, mapErr(err)
 	}
-	return &cmd, nil
+	return &c, nil
 }
 
-// GetPendingByWorkerID returns all pending commands for a worker, ordered by creation time
-func (r *CommandRepository) GetPendingByWorkerID(ctx context.Context, workerID primitive.ObjectID) ([]*models.Command, error) {
-	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
-	cursor, err := r.Collection.Find(ctx, bson.M{
-		"worker_id": workerID,
-		"status":    "pending",
-	}, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var commands []*models.Command
-	if err := cursor.All(ctx, &commands); err != nil {
-		return nil, err
-	}
-	return commands, nil
+func (r *CommandRepository) GetPendingByWorkerID(ctx context.Context, workerID id.ID) ([]*models.Command, error) {
+	var out []*models.Command
+	err := r.q(ctx).
+		Where("worker_id = ? AND status = ?", workerID.Hex(), enums.CommandPending).
+		Order("created_at ASC").
+		Find(&out).Error
+	return out, err
 }
 
-// GetByWorkerID returns all commands for a worker, ordered by creation time (newest first)
-func (r *CommandRepository) GetByWorkerID(ctx context.Context, workerID primitive.ObjectID, limit int64) ([]*models.Command, error) {
-	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
+func (r *CommandRepository) GetByWorkerID(ctx context.Context, workerID id.ID, limit int64) ([]*models.Command, error) {
+	q := r.q(ctx).Where("worker_id = ?", workerID.Hex()).Order("created_at DESC")
 	if limit > 0 {
-		opts.SetLimit(limit)
+		q = q.Limit(int(limit))
 	}
-	cursor, err := r.Collection.Find(ctx, bson.M{"worker_id": workerID}, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var commands []*models.Command
-	if err := cursor.All(ctx, &commands); err != nil {
-		return nil, err
-	}
-	return commands, nil
+	var out []*models.Command
+	err := q.Find(&out).Error
+	return out, err
 }
 
-// UpdateResult updates the status and optionally the output/error of a command
-func (r *CommandRepository) UpdateResult(ctx context.Context, id primitive.ObjectID, status string, output string, exitCode int, errMsg string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     status,
-			"output":     output,
-			"exit_code":  exitCode,
-			"error":      errMsg,
-			"updated_at": time.Now(),
-		},
+func (r *CommandRepository) UpdateResult(ctx context.Context, cid id.ID, status, output string, exitCode int, errMsg string) error {
+	var c models.Command
+	if err := r.q(ctx).Where("id = ?", cid.Hex()).First(&c).Error; err != nil {
+		return mapErr(err)
 	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)
-	return err
+	c.Status = enums.CommandStatus(status)
+	c.Output = output
+	c.ExitCode = exitCode
+	c.Error = errMsg
+	return mapErr(r.q(ctx).Save(&c).Error)
 }
 
-// MarkRunning marks a command as running
-func (r *CommandRepository) MarkRunning(ctx context.Context, id primitive.ObjectID) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     "running",
-			"updated_at": time.Now(),
-		},
+func (r *CommandRepository) MarkRunning(ctx context.Context, cid id.ID) error {
+	var c models.Command
+	if err := r.q(ctx).Where("id = ?", cid.Hex()).First(&c).Error; err != nil {
+		return mapErr(err)
 	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)
-	return err
+	c.Status = enums.CommandRunning
+	return mapErr(r.q(ctx).Save(&c).Error)
 }

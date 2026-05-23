@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 )
@@ -19,7 +17,7 @@ func NewWorkerService(workerRepo *repos.WorkerRepository) *WorkerService {
 	return &WorkerService{workerRepo: workerRepo}
 }
 
-func (s *WorkerService) Create(ctx context.Context, userID primitive.ObjectID, w *models.Worker) (*models.Worker, error) {
+func (s *WorkerService) Create(ctx context.Context, userID id.ID, w *models.Worker) (*models.Worker, error) {
 	w.UserID = userID
 	if w.Status == "" {
 		w.Status = "pending"
@@ -30,10 +28,10 @@ func (s *WorkerService) Create(ctx context.Context, userID primitive.ObjectID, w
 	return w, nil
 }
 
-func (s *WorkerService) GetByID(ctx context.Context, id primitive.ObjectID) (*models.Worker, error) {
-	w, err := s.workerRepo.GetByID(ctx, id)
+func (s *WorkerService) GetByID(ctx context.Context, wid id.ID) (*models.Worker, error) {
+	w, err := s.workerRepo.GetByID(ctx, wid)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, repos.ErrNotFound) {
 			return nil, errors.New("worker not found")
 		}
 		return nil, err
@@ -41,14 +39,14 @@ func (s *WorkerService) GetByID(ctx context.Context, id primitive.ObjectID) (*mo
 	return w, nil
 }
 
-func (s *WorkerService) GetByUserID(ctx context.Context, userID primitive.ObjectID) ([]*models.Worker, error) {
+func (s *WorkerService) GetByUserID(ctx context.Context, userID id.ID) ([]*models.Worker, error) {
 	return s.workerRepo.GetByUserID(ctx, userID)
 }
 
-func (s *WorkerService) Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, w *models.Worker) (*models.Worker, error) {
-	existing, err := s.workerRepo.GetByID(ctx, id)
+func (s *WorkerService) Update(ctx context.Context, wid id.ID, userID id.ID, w *models.Worker) (*models.Worker, error) {
+	existing, err := s.workerRepo.GetByID(ctx, wid)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, repos.ErrNotFound) {
 			return nil, errors.New("worker not found")
 		}
 		return nil, err
@@ -58,16 +56,16 @@ func (s *WorkerService) Update(ctx context.Context, id primitive.ObjectID, userI
 	}
 	w.UserID = existing.UserID
 	w.ID = existing.ID
-	if err := s.workerRepo.Update(ctx, id, w); err != nil {
+	if err := s.workerRepo.Update(ctx, wid, w); err != nil {
 		return nil, err
 	}
-	return s.workerRepo.GetByID(ctx, id)
+	return s.workerRepo.GetByID(ctx, wid)
 }
 
-func (s *WorkerService) Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error {
-	existing, err := s.workerRepo.GetByID(ctx, id)
+func (s *WorkerService) Delete(ctx context.Context, wid id.ID, userID id.ID) error {
+	existing, err := s.workerRepo.GetByID(ctx, wid)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, repos.ErrNotFound) {
 			return errors.New("worker not found")
 		}
 		return err
@@ -75,11 +73,11 @@ func (s *WorkerService) Delete(ctx context.Context, id primitive.ObjectID, userI
 	if existing.UserID != userID {
 		return errors.New("unauthorized: worker does not belong to user")
 	}
-	return s.workerRepo.Delete(ctx, id)
+	return s.workerRepo.Delete(ctx, wid)
 }
 
-func (s *WorkerService) UpdateStatus(ctx context.Context, id primitive.ObjectID, status string) error {
-	return s.workerRepo.UpdateStatus(ctx, id, status)
+func (s *WorkerService) UpdateStatus(ctx context.Context, wid id.ID, status string) error {
+	return s.workerRepo.UpdateStatus(ctx, wid, status)
 }
 
 func (s *WorkerService) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {

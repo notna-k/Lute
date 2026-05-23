@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"go.mongodb.org/mongo-driver/mongo"
 
 	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/db/repos"
@@ -239,7 +238,7 @@ func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (stri
 
 	exec, err := h.jobExecRepo.GetByJobID(ctx, job.ID)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
+		if errors.Is(err, repos.ErrNotFound) {
 			return "", errors.New("no execution record for this job; logs are only available after a run or while running on a worker")
 		}
 		return "", err

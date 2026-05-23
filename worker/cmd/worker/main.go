@@ -86,14 +86,14 @@ func main() {
 			legacyMain(os.Args[1:])
 			return
 		}
-		fmt.Fprintf(os.Stderr, "unknown command: %q\n\n", cmd)
+		_, _ = fmt.Fprintf(os.Stderr, "unknown command: %q\n\n", cmd)
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintf(w, `lute-worker %s — Lute compute agent
+	_, _ = fmt.Fprintf(w, `lute-worker %s — Lute compute agent
 
 Usage:
   lute-worker <command> [flags]
@@ -133,7 +133,7 @@ func cmdRun(args []string) {
 	fs.IntVar(&f.concurrency, "concurrency", defaultConcurrency, "Maximum concurrent jobs")
 	fs.StringVar(&f.jobLogsDir, "job-logs-dir", defaultJobLogsDir, "Directory for per-job log files")
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "Usage: lute-worker run [flags]")
+		_, _ = fmt.Fprintln(fs.Output(), "Usage: lute-worker run [flags]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
@@ -154,7 +154,7 @@ func cmdSetup(args []string) {
 	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API origin (scheme+host; registration POSTs to /api/public/v1/workers/bootstrap/register)")
 	fs.StringVar(&f.claimCode, "claim-code", "", "Claim code from the Add Worker dialog in the Lute UI (required)")
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "Usage: lute-worker setup --claim-code <CODE> [--api URL]")
+		_, _ = fmt.Fprintln(fs.Output(), "Usage: lute-worker setup --claim-code <CODE> [--api URL]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
@@ -178,8 +178,8 @@ func cmdLogs(args []string) {
 	fs.BoolVar(&follow, "f", false, "Alias for -follow")
 	fs.IntVar(&n, "n", 100, "Number of lines to show from the end of the file")
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "Usage: lute-worker logs [-n N] [-f]")
-		fmt.Fprintf(fs.Output(), "Reads %s — the same file `lute-worker setup` attaches the background worker's stdout/stderr to.\n", setup.DaemonLogPath())
+		_, _ = fmt.Fprintln(fs.Output(), "Usage: lute-worker logs [-n N] [-f]")
+		_, _ = fmt.Fprintf(fs.Output(), "Reads %s — the same file `lute-worker setup` attaches the background worker's stdout/stderr to.\n", setup.DaemonLogPath())
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)

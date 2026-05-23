@@ -3,56 +3,49 @@ package repos
 import (
 	"context"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"gorm.io/gorm"
 )
 
 type RunRepository struct {
-	*Repository
+	g *gorm.DB
 }
 
-func NewRunRepository(db *mongo.Database) *RunRepository {
-	return &RunRepository{Repository: NewRepository(db, connection.CollectionRuns)}
+func NewRunRepository(db *gorm.DB) *RunRepository {
+	return &RunRepository{g: db}
+}
+
+func (r *RunRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
 }
 
 func (r *RunRepository) Create(ctx context.Context, run *models.Run) error {
-	run.BeforeCreate()
-	_, err := r.Collection.InsertOne(ctx, run)
-	return err
+	return mapErr(r.q(ctx).Create(run).Error)
 }
 
-// GetByJobID returns the ownership record for a given queue job id.
 func (r *RunRepository) GetByJobID(ctx context.Context, jobID string) (*models.Run, error) {
-	var run models.Run
-	if err := r.Collection.FindOne(ctx, bson.M{"job_id": jobID}).Decode(&run); err != nil {
-		return nil, err
+	var row models.Run
+	if err := r.q(ctx).Where("job_id = ?", jobID).First(&row).Error; err != nil {
+		return nil, mapErr(err)
 	}
-	return &run, nil
+	return &row, nil
 }
 
-// GetByIdempotency returns an existing run for (userID, idempotencyKey) or ErrNoDocuments.
-func (r *RunRepository) GetByIdempotency(ctx context.Context, userID primitive.ObjectID, key string) (*models.Run, error) {
-	var run models.Run
-	filter := bson.M{"user_id": userID, "idempotency_key": key}
-	if err := r.Collection.FindOne(ctx, filter).Decode(&run); err != nil {
-		return nil, err
+func (r *RunRepository) GetByIdempotency(ctx context.Context, userID id.ID, key string) (*models.Run, error) {
+	var row models.Run
+	if err := r.q(ctx).Where("user_id = ? AND idempotency_key = ?", userID.Hex(), key).First(&row).Error; err != nil {
+		return nil, mapErr(err)
 	}
-	return &run, nil
+	return &row, nil
 }
 
-// RunListFilter narrows the user-scoped run list.
 type RunListFilter struct {
-	UserID primitive.ObjectID
+	UserID id.ID
 	Queue  string
 	Type   string
 }
 
-// List returns the user's runs newest-first with total count for pagination.
 func (r *RunRepository) List(ctx context.Context, f RunListFilter, offset, limit int64) ([]models.Run, int64, error) {
 	if limit <= 0 {
 		limit = 50
@@ -64,36 +57,25 @@ func (r *RunRepository) List(ctx context.Context, f RunListFilter, offset, limit
 		offset = 0
 	}
 
-	match := bson.M{"user_id": f.UserID}
+	q := r.q(ctx).Model(&models.Run{}).Where("user_id = ?", f.UserID.Hex())
 	if f.Queue != "" {
-		match["queue"] = f.Queue
+		q = q.Where("queue = ?", f.Queue)
 	}
 	if f.Type != "" {
-		match["type"] = f.Type
+		q = q.Where("type = ?", f.Type)
 	}
 
-	total, err := r.Collection.CountDocuments(ctx, match)
-	if err != nil {
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	opts := options.Find().
-		SetSort(bson.D{{Key: "created_at", Value: -1}}).
-		SetSkip(offset).
-		SetLimit(limit)
-
-	cur, err := r.Collection.Find(ctx, match, opts)
-	if err != nil {
+	var rows []models.Run
+	if err := q.Order("created_at DESC").Limit(int(limit)).Offset(int(offset)).Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
-	defer func() { _ = cur.Close(ctx) }()
-
-	var runs []models.Run
-	if err := cur.All(ctx, &runs); err != nil {
-		return nil, 0, err
+	if rows == nil {
+		rows = []models.Run{}
 	}
-	if runs == nil {
-		runs = []models.Run{}
-	}
-	return runs, total, nil
+	return rows, total, nil
 }

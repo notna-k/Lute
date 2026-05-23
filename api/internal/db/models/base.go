@@ -3,27 +3,34 @@ package models
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"gorm.io/gorm"
+
+	"github.com/lute/api/internal/db/id"
+	"github.com/lute/api/internal/db/types"
 )
 
-// BaseModel contains common fields for all models
+// BaseModel embeds identifiers and timestamps for domain rows.
 type BaseModel struct {
-	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	CreatedAt time.Time          `json:"created_at" bson:"created_at"`
-	UpdatedAt time.Time          `json:"updated_at" bson:"updated_at"`
+	ID        id.ID           `json:"id" gorm:"primaryKey;size:24"`
+	CreatedAt types.MilliTime `json:"created_at" gorm:"column:created_at;default:0"`
+	UpdatedAt types.MilliTime `json:"updated_at" gorm:"column:updated_at;default:0"`
 }
 
-// BeforeCreate sets timestamps before creation
-func (b *BaseModel) BeforeCreate() {
-	now := time.Now()
+// BeforeCreate initializes id and timestamps before insert (GORM callback).
+func (b *BaseModel) BeforeCreate(_ *gorm.DB) error {
 	if b.ID.IsZero() {
-		b.ID = primitive.NewObjectID()
+		b.ID = id.New()
 	}
-	b.CreatedAt = now
+	now := types.NewMilliTime(time.Now())
+	if b.CreatedAt.IsZero() {
+		b.CreatedAt = now
+	}
 	b.UpdatedAt = now
+	return nil
 }
 
-// BeforeUpdate sets updated timestamp
-func (b *BaseModel) BeforeUpdate() {
-	b.UpdatedAt = time.Now()
+// BeforeUpdate refreshes UpdatedAt before write (GORM callback).
+func (b *BaseModel) BeforeUpdate(_ *gorm.DB) error {
+	b.UpdatedAt = types.NewMilliTime(time.Now())
+	return nil
 }

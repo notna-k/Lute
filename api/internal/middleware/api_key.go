@@ -3,12 +3,12 @@ package middleware
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/lute/api/internal/apikey"
 	"github.com/lute/api/internal/db/repos"
@@ -35,7 +35,7 @@ func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		k, err := keyRepo.GetByPrefix(ctx, prefix)
 		if err != nil {
-			if err == mongo.ErrNoDocuments {
+			if errors.Is(err, repos.ErrNotFound) {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 			} else {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "auth lookup failed"})

@@ -42,6 +42,10 @@ func (j *UptimeSnapshotJob) Run(ctx context.Context) {
 }
 
 func (j *UptimeSnapshotJob) runOnce(ctx context.Context) {
+	cutoff := time.Now().Add(-30 * 24 * time.Hour)
+	if err := j.snapshotRepo.PruneOlderThan(ctx, cutoff); err != nil {
+		log.Printf("uptime snapshot: prune failed: %v", err)
+	}
 	rows, err := j.workerRepo.AggregateCountsByUserID(ctx)
 	if err != nil {
 		log.Printf("uptime snapshot: aggregate failed: %v", err)

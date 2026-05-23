@@ -4,56 +4,91 @@ import (
 	"context"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"github.com/lute/api/internal/db/types"
+	"gorm.io/gorm"
 )
 
-// UptimeSnapshotRepository handles uptime_snapshots collection.
 type UptimeSnapshotRepository struct {
-	*Repository
+	g *gorm.DB
 }
 
-// NewUptimeSnapshotRepository creates a new UptimeSnapshotRepository.
-func NewUptimeSnapshotRepository(db *mongo.Database) *UptimeSnapshotRepository {
-	return &UptimeSnapshotRepository{
-		Repository: NewRepository(db, connection.CollectionUptimeSnapshots),
-	}
+func NewUptimeSnapshotRepository(db *gorm.DB) *UptimeSnapshotRepository {
+	return &UptimeSnapshotRepository{g: db}
 }
 
-// Insert inserts one snapshot for a user at the given time.
-func (r *UptimeSnapshotRepository) Insert(ctx context.Context, userID primitive.ObjectID, at time.Time, alive, dead, total int) error {
-	doc := &models.UptimeSnapshot{
+func (r *UptimeSnapshotRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
+}
+
+func (r *UptimeSnapshotRepository) Insert(ctx context.Context, userID id.ID, at time.Time, alive, dead, total int) error {
+	row := &models.UptimeSnapshot{
 		UserID: userID,
-		At:     at,
+		At:     types.NewMilliTime(at),
 		Alive:  alive,
 		Dead:   dead,
 		Total:  total,
 	}
-	_, err := r.Collection.InsertOne(ctx, doc)
-	return err
+	return r.q(ctx).Create(row).Error
 }
 
-// GetByUserID returns all snapshots for the user since the given time, ordered by at ascending.
-func (r *UptimeSnapshotRepository) GetByUserID(ctx context.Context, userID primitive.ObjectID, since time.Time) ([]*models.UptimeSnapshot, error) {
-	filter := bson.M{
-		"user_id": userID,
-		"at":      bson.M{"$gte": since},
-	}
-	opts := options.Find().SetSort(bson.M{"at": 1})
-	cursor, err := r.Collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
+func (r *UptimeSnapshotRepository) GetByUserID(ctx context.Context, userID id.ID, since time.Time) ([]*models.UptimeSnapshot, error) {
 	var out []*models.UptimeSnapshot
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
+	err := r.q(ctx).
+		Where("user_id = ? AND at >= ?", userID.Hex(), since.UnixMilli()).
+		Order("at ASC").
+		Find(&out).Error
+	return out, err
+}
+
+// PruneOlderThan deletes uptime snapshots with timestamp before cutoff (retention).
+func (r *UptimeSnapshotRepository) PruneOlderThan(ctx context.Context, cutoff time.Time) error {
+	return r.q(ctx).Where("at < ?", cutoff.UnixMilli()).Delete(&models.UptimeSnapshot{}).Error
+}
+
+type WorkerSnapshotRepository struct {
+	g *gorm.DB
+}
+
+func NewWorkerSnapshotRepository(db *gorm.DB) *WorkerSnapshotRepository {
+	return &WorkerSnapshotRepository{g: db}
+}
+
+func (r *WorkerSnapshotRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
+}
+
+func (r *WorkerSnapshotRepository) Insert(ctx context.Context, workerID id.ID, at time.Time, metrics map[string]interface{}) error {
+	row := &models.WorkerSnapshot{
+		WorkerID: workerID,
+		At:       types.NewMilliTime(at),
+		Metrics:  metrics,
 	}
-	return out, nil
+	return r.q(ctx).Create(row).Error
+}
+
+func (r *WorkerSnapshotRepository) GetByWorkerID(ctx context.Context, workerID id.ID, since time.Time) ([]*models.WorkerSnapshot, error) {
+	return r.GetByWorkerIDs(ctx, []id.ID{workerID}, since)
+}
+
+func (r *WorkerSnapshotRepository) GetByWorkerIDs(ctx context.Context, workerIDs []id.ID, since time.Time) ([]*models.WorkerSnapshot, error) {
+	if len(workerIDs) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(workerIDs))
+	for i, w := range workerIDs {
+		ids[i] = w.Hex()
+	}
+	var out []*models.WorkerSnapshot
+	err := r.q(ctx).
+		Where("worker_id IN ? AND at >= ?", ids, since.UnixMilli()).
+		Order("at ASC").
+		Find(&out).Error
+	return out, err
+}
+
+// PruneOlderThan deletes worker snapshots with timestamp before cutoff (retention).
+func (r *WorkerSnapshotRepository) PruneOlderThan(ctx context.Context, cutoff time.Time) error {
+	return r.q(ctx).Where("at < ?", cutoff.UnixMilli()).Delete(&models.WorkerSnapshot{}).Error
 }

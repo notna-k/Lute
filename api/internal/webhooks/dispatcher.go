@@ -18,10 +18,9 @@ import (
 	"net/http"
 	"time"
 
-	"go.mongodb.org/mongo-driver/mongo"
-
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/db/types"
 )
 
 const (
@@ -50,7 +49,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 	}
 	run, err := e.runs.GetByJobID(ctx, jobID)
 	if err != nil {
-		if !errors.Is(err, mongo.ErrNoDocuments) {
+		if !errors.Is(err, repos.ErrNotFound) {
 			log.Printf("webhooks: lookup run for %s: %v", jobID, err)
 		}
 		return
@@ -88,7 +87,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 		Status:          "pending",
 		Attempts:        0,
 		MaxAttempts:     defaultMaxAttempts,
-		NextRetryAt:     time.Now(),
+		NextRetryAt:     types.NewMilliTime(time.Now()),
 	}
 	if err := e.deliveries.Create(ctx, d); err != nil {
 		log.Printf("webhooks: persist delivery %s/%s: %v", jobID, event, err)
@@ -164,7 +163,7 @@ func (d *Dispatcher) send(ctx context.Context, del *models.WebhookDelivery) {
 
 func sign(secret string, ts int64, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	fmt.Fprintf(mac, "%d.", ts)
+	_, _ = fmt.Fprintf(mac, "%d.", ts)
 	mac.Write(body)
 	return hex.EncodeToString(mac.Sum(nil))
 }

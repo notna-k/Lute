@@ -8,8 +8,7 @@ import (
 
 type Config struct {
 	Server       ServerConfig
-	MongoDB      MongoDBConfig
-	Redis        RedisConfig
+	Database     DatabaseConfig
 	GRPC         GRPCConfig
 	Heartbeat    HeartbeatConfig
 	WebSocket    WebSocketConfig
@@ -30,10 +29,6 @@ type HeartbeatConfig struct {
 	MaxRetries    int
 }
 
-type RedisConfig struct {
-	URL string
-}
-
 type WorkerBinaryConfig struct {
 	Dir string // directory containing compiled worker binaries
 }
@@ -47,11 +42,22 @@ type ServerConfig struct {
 	Mode         string // "debug", "release", "test"
 }
 
-type MongoDBConfig struct {
-	URI            string
-	Database       string
-	ConnectTimeout time.Duration
-	MaxPoolSize    uint64
+// SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
+type SQLiteConfig struct {
+	Path         string
+	BusyTimeout  time.Duration
+}
+
+// PostgresConfig holds libpq/pg connection parameters (when DB_DRIVER is postgres).
+type PostgresConfig struct {
+	DSN string
+}
+
+// DatabaseConfig selects SQLite or PostgreSQL and supplies driver-specific tuning.
+type DatabaseConfig struct {
+	Driver   string // sqlite (default) or postgres
+	SQLite   SQLiteConfig
+	Postgres PostgresConfig
 }
 
 type GRPCConfig struct {
@@ -83,14 +89,15 @@ func Load() (*Config, error) {
 			IdleTimeout:  getDurationEnv("SERVER_IDLE_TIMEOUT", 60*time.Second),
 			Mode:         getEnv("GIN_MODE", "debug"),
 		},
-		MongoDB: MongoDBConfig{
-			URI:            getEnv("MONGODB_URI", "mongodb://localhost:27017"),
-			Database:       getEnv("MONGODB_DATABASE", "lute"),
-			ConnectTimeout: getDurationEnv("MONGODB_CONNECT_TIMEOUT", 10*time.Second),
-			MaxPoolSize:    getUint64Env("MONGODB_MAX_POOL_SIZE", 100),
-		},
-		Redis: RedisConfig{
-			URL: getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		Database: DatabaseConfig{
+			Driver: getEnv("DB_DRIVER", "sqlite"),
+			SQLite: SQLiteConfig{
+				Path:        getEnv("SQLITE_PATH", "lute.db"),
+				BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
+			},
+			Postgres: PostgresConfig{
+				DSN: getEnv("POSTGRES_DSN", ""),
+			},
 		},
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),
@@ -135,15 +142,6 @@ func getIntEnv(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
-		}
-	}
-	return defaultValue
-}
-
-func getUint64Env(key string, defaultValue uint64) uint64 {
-	if value := os.Getenv(key); value != "" {
-		if uintValue, err := strconv.ParseUint(value, 10, 64); err == nil {
-			return uintValue
 		}
 	}
 	return defaultValue

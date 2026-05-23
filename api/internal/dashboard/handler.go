@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	wsvc "github.com/lute/api/internal/worker"
@@ -46,7 +46,7 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -136,7 +136,7 @@ func buildChartPerWorker(snapshots []*models.WorkerSnapshot, periodStart, period
 		existing, ok := byBucket[b]
 		if !ok || s.At.After(existing.at) {
 			byBucket[b] = &bucketVal{
-				at:        s.At,
+				at:        s.At.Time,
 				cpu:       floatFrom(s.Metrics, "cpu_load"),
 				mem:       floatFrom(s.Metrics, "mem_usage_mb"),
 				diskUsed:  floatFrom(s.Metrics, "disk_used_gb"),
@@ -218,7 +218,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	userIDObj, err := primitive.ObjectIDFromHex(userID.(string))
+	userIDObj, err := id.FromHex(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
@@ -248,7 +248,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	ctx := c.Request.Context()
 	workerIDHex := c.Query("worker_id")
 	if workerIDHex != "" {
-		workerOID, err := primitive.ObjectIDFromHex(workerIDHex)
+		workerOID, err := id.FromHex(workerIDHex)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 			return
@@ -294,7 +294,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 		})
 		return
 	}
-	workerOIDs := make([]primitive.ObjectID, 0, len(workersList))
+	workerOIDs := make([]id.ID, 0, len(workersList))
 	for _, w := range workersList {
 		workerOIDs = append(workerOIDs, w.ID)
 	}

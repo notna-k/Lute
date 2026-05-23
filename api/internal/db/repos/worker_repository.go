@@ -4,276 +4,202 @@ import (
 	"context"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/enums"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"github.com/lute/api/internal/db/types"
+	"gorm.io/gorm"
 )
 
 type WorkerRepository struct {
-	*Repository
+	g *gorm.DB
 }
 
-func NewWorkerRepository(db *mongo.Database) *WorkerRepository {
-	return &WorkerRepository{
-		Repository: NewRepository(db, connection.CollectionWorkers),
-	}
+func NewWorkerRepository(db *gorm.DB) *WorkerRepository {
+	return &WorkerRepository{g: db}
+}
+
+func (r *WorkerRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
 }
 
 func (r *WorkerRepository) Create(ctx context.Context, w *models.Worker) error {
-	w.BeforeCreate()
-	_, err := r.Collection.InsertOne(ctx, w)
-	return err
+	return mapErr(r.q(ctx).Create(w).Error)
 }
 
-func (r *WorkerRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*models.Worker, error) {
+func (r *WorkerRepository) GetByID(ctx context.Context, uid id.ID) (*models.Worker, error) {
 	var w models.Worker
-	err := r.Collection.FindOne(ctx, bson.M{"_id": id}).Decode(&w)
-	if err != nil {
-		return nil, err
+	if err := r.q(ctx).Where("id = ?", uid.Hex()).First(&w).Error; err != nil {
+		return nil, mapErr(err)
 	}
 	return &w, nil
 }
 
-func (r *WorkerRepository) GetByUserID(ctx context.Context, userID primitive.ObjectID) ([]*models.Worker, error) {
-	filter := bson.M{
-		"$or": []bson.M{
-			{"user_id": userID},
-			{"user_id": primitive.NilObjectID},
-		},
-	}
-	cursor, err := r.Collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
+func (r *WorkerRepository) GetByUserID(ctx context.Context, userID id.ID) ([]*models.Worker, error) {
 	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
+	err := r.q(ctx).
+		Where("user_id = ? OR user_id IS NULL", userID.Hex()).
+		Order("created_at ASC").
+		Find(&out).Error
+	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (r *WorkerRepository) Update(ctx context.Context, id primitive.ObjectID, w *models.Worker) error {
-	w.BeforeUpdate()
-	update := bson.M{
-		"$set": w,
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)
-	return err
+func (r *WorkerRepository) Update(ctx context.Context, uid id.ID, w *models.Worker) error {
+	w.ID = uid
+	return mapErr(r.q(ctx).Save(w).Error)
 }
 
-func (r *WorkerRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
-	_, err := r.Collection.DeleteOne(ctx, bson.M{"_id": id})
-	return err
+func (r *WorkerRepository) Delete(ctx context.Context, uid id.ID) error {
+	return mapErr(r.q(ctx).Where("id = ?", uid.Hex()).Delete(&models.Worker{}).Error)
 }
 
-func (r *WorkerRepository) UpdateStatus(ctx context.Context, id primitive.ObjectID, status string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     status,
-			"updated_at": time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": id}, update)
-	return err
+func (r *WorkerRepository) UpdateStatus(ctx context.Context, uid id.ID, status enums.WorkerStatus) error {
+	nowMs := time.Now().UTC().UnixMilli()
+	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", uid.Hex()).Updates(map[string]interface{}{
+		"status":     status,
+		"updated_at": nowMs,
+	}).Error)
 }
 
 func (r *WorkerRepository) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {
-	return nil, mongo.ErrNoDocuments
+	_ = agentID
+	return nil, ErrNotFound
 }
 
-// GetByUserIDAndIP returns all workers owned by userID whose agent_ip matches ip.
-// IP uniqueness is scoped per user because private-range addresses aren't globally unique.
-func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID primitive.ObjectID, ip string) ([]*models.Worker, error) {
+func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID id.ID, ip string) ([]*models.Worker, error) {
 	if ip == "" {
 		return nil, nil
 	}
-	cursor, err := r.Collection.Find(ctx, bson.M{
-		"user_id":  userID,
-		"agent_ip": ip,
+	var out []*models.Worker
+	err := r.q(ctx).Where("user_id = ? AND agent_ip = ?", userID.Hex(), ip).Find(&out).Error
+	return out, err
+}
+
+func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID id.ID) error {
+	nowMs := time.Now().UTC().UnixMilli()
+	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
+		"last_seen":  nowMs,
+		"updated_at": nowMs,
+	}).Error)
+}
+
+func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID id.ID, metrics map[string]interface{}) error {
+	var w models.Worker
+	if err := r.q(ctx).Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
+		return mapErr(err)
+	}
+	w.Metrics = metrics
+	return mapErr(r.q(ctx).Save(&w).Error)
+}
+
+func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, ipAddress, version string) error {
+	nowMs := time.Now().UTC().UnixMilli()
+	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
+		"agent_ip":       ipAddress,
+		"agent_version":  version,
+		"last_seen":      nowMs,
+		"updated_at":     nowMs,
+	}).Error)
+}
+
+func (r *WorkerRepository) ListByStatus(ctx context.Context, status enums.WorkerStatus) ([]*models.Worker, error) {
+	var out []*models.Worker
+	err := r.q(ctx).Where("status = ?", status).Find(&out).Error
+	return out, err
+}
+
+func (r *WorkerRepository) UpdateStatusAndLastSeen(ctx context.Context, workerID id.ID, status enums.WorkerStatus) error {
+	nowMs := time.Now().UTC().UnixMilli()
+	res := r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
+		"status":     status,
+		"last_seen":  nowMs,
+		"updated_at": nowMs,
 	})
-	if err != nil {
-		return nil, err
+	if res.Error != nil {
+		return res.Error
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *WorkerRepository) List(ctx context.Context, filter bson.M, opts *options.FindOptions) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID primitive.ObjectID) error {
-	update := bson.M{
-		"$set": bson.M{
-			"last_seen":  time.Now(),
-			"updated_at": time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
-	return err
-}
-
-func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID primitive.ObjectID, metrics map[string]interface{}) error {
-	update := bson.M{
-		"$set": bson.M{
-			"metrics":    metrics,
-			"updated_at": time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
-	return err
-}
-
-func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID primitive.ObjectID, ipAddress string, version string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"agent_ip":      ipAddress,
-			"agent_version": version,
-			"last_seen":     time.Now(),
-			"updated_at":    time.Now(),
-		},
-	}
-	_, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
-	return err
-}
-
-func (r *WorkerRepository) ListByStatus(ctx context.Context, status string) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, bson.M{"status": status})
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *WorkerRepository) UpdateStatusAndLastSeen(ctx context.Context, workerID primitive.ObjectID, status string) error {
-	update := bson.M{
-		"$set": bson.M{
-			"status":     status,
-			"last_seen":  time.Now(),
-			"updated_at": time.Now(),
-		},
-	}
-	result, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, update)
-	if err != nil {
-		return err
-	}
-	if result.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
+	if res.RowsAffected == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
 
-func (r *WorkerRepository) UpdateHeartbeat(ctx context.Context, workerID primitive.ObjectID, metrics map[string]interface{}) error {
-	now := time.Now()
-	set := bson.M{
-		"status":          "alive",
-		"heartbeat_retry": 0,
-		"last_seen":       now,
-		"updated_at":      now,
+func (r *WorkerRepository) UpdateHeartbeat(ctx context.Context, workerID id.ID, metrics map[string]interface{}) error {
+	var w models.Worker
+	if err := r.q(ctx).Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
+		return mapErr(err)
 	}
+	w.Status = enums.WorkerAlive
+	w.HeartbeatRetry = 0
+	ls := types.NewMilliTime(time.Now())
+	w.LastSeen = &ls
 	if len(metrics) > 0 {
-		set["metrics"] = metrics
+		w.Metrics = metrics
 	}
-	result, err := r.Collection.UpdateOne(ctx, bson.M{"_id": workerID}, bson.M{"$set": set})
-	if err != nil {
-		return err
-	}
-	if result.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
+	return mapErr(r.q(ctx).Save(&w).Error)
 }
 
-func (r *WorkerRepository) IncrementHeartbeatRetry(ctx context.Context, workerID primitive.ObjectID) (int, error) {
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	var updated models.Worker
-	err := r.Collection.FindOneAndUpdate(
-		ctx,
-		bson.M{"_id": workerID},
-		bson.M{
-			"$inc": bson.M{"heartbeat_retry": 1},
-			"$set": bson.M{"updated_at": time.Now()},
-		},
-		opts,
-	).Decode(&updated)
-	if err != nil {
-		return 0, err
-	}
-	return updated.HeartbeatRetry, nil
-}
-
-// ListMonitored returns workers with status "alive" or "registered".
-func (r *WorkerRepository) ListMonitored(ctx context.Context) ([]*models.Worker, error) {
-	cursor, err := r.Collection.Find(ctx, bson.M{
-		"status": bson.M{"$in": []string{"alive", "registered"}},
+func (r *WorkerRepository) IncrementHeartbeatRetry(ctx context.Context, workerID id.ID) (int, error) {
+	nowMs := time.Now().UTC().UnixMilli()
+	res := r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
+		"heartbeat_retry": gorm.Expr("heartbeat_retry + ?", 1),
+		"updated_at":      nowMs,
 	})
-	if err != nil {
-		return nil, err
+	if res.Error != nil {
+		return 0, res.Error
 	}
-	defer func() { _ = cursor.Close(ctx) }()
+	if res.RowsAffected == 0 {
+		return 0, ErrNotFound
+	}
+	var w models.Worker
+	if err := r.q(ctx).Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
+		return 0, mapErr(err)
+	}
+	return w.HeartbeatRetry, nil
+}
 
+func (r *WorkerRepository) ListMonitored(ctx context.Context) ([]*models.Worker, error) {
 	var out []*models.Worker
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	err := r.q(ctx).Where("status IN ?", []enums.WorkerStatus{enums.WorkerAlive, enums.WorkerRegistered}).Find(&out).Error
+	return out, err
 }
 
 // CountByUserIDAndStatusResult is one row from AggregateCountsByUserID.
 type CountByUserIDAndStatusResult struct {
-	UserID primitive.ObjectID `bson:"_id"`
-	Alive  int                `bson:"alive"`
-	Dead   int                `bson:"dead"`
-	Total  int                `bson:"total"`
+	UserID id.ID
+	Alive  int
+	Dead   int
+	Total  int
 }
 
-// AggregateCountsByUserID groups workers by user_id (excluding nil user_id) and counts alive, dead, total.
 func (r *WorkerRepository) AggregateCountsByUserID(ctx context.Context) ([]CountByUserIDAndStatusResult, error) {
-	pipe := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"user_id": bson.M{"$ne": primitive.NilObjectID}}}},
-		{{Key: "$group", Value: bson.M{
-			"_id":   "$user_id",
-			"alive": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "alive"}}, 1, 0}}},
-			"dead":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "dead"}}, 1, 0}}},
-			"total": bson.M{"$sum": 1},
-		}}},
+	type row struct {
+		UserIDStr string `gorm:"column:user_id"`
+		Alive     int64  `gorm:"column:alive"`
+		Dead      int64  `gorm:"column:dead"`
+		Total     int64  `gorm:"column:total"`
 	}
-	cursor, err := r.Collection.Aggregate(ctx, pipe)
-	if err != nil {
+	var raw []row
+	tx := r.q(ctx).Model(&models.Worker{}).
+		Select(`user_id, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS alive,
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS dead,
+			COUNT(*) AS total`, enums.WorkerAlive, enums.WorkerDead).
+		Where("user_id IS NOT NULL AND user_id <> ''").
+		Group("user_id")
+	if err := tx.Scan(&raw).Error; err != nil {
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(ctx) }()
-
-	var out []CountByUserIDAndStatusResult
-	if err := cursor.All(ctx, &out); err != nil {
-		return nil, err
+	out := make([]CountByUserIDAndStatusResult, 0, len(raw))
+	for _, rw := range raw {
+		out = append(out, CountByUserIDAndStatusResult{
+			UserID: id.ID(rw.UserIDStr),
+			Alive:  int(rw.Alive),
+			Dead:   int(rw.Dead),
+			Total:  int(rw.Total),
+		})
 	}
 	return out, nil
 }

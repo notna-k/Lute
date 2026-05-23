@@ -5,8 +5,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/repos"
@@ -17,8 +15,7 @@ import (
 // Dependencies holds all initialized dependencies
 type Dependencies struct {
 	Config             *config.Config
-	Database           *connection.MongoDB
-	Redis              *redis.Client
+	Database           *connection.Database
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
 	StatsAggregator    *queue.StatsAggregator
@@ -48,22 +45,16 @@ func Initialize() (*Dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	rdb, err := connection.NewRedisClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	queueEngine := queue.NewEngine(rdb)
+	jobQ := repos.NewJobQueueRepository(db.DB)
+	queueEngine := queue.NewEngine(jobQ)
 	queueScheduler := queue.NewScheduler(queueEngine, time.Second)
-	statsAgg := queue.NewStatsAggregator(rdb)
+	statsAgg := queue.NewStatsAggregator(repos.NewQueueStatsRepository(db.DB))
 
 	reposInit := initializeRepositories(db)
 
 	return &Dependencies{
 		Config:             cfg,
 		Database:           db,
-		Redis:              rdb,
 		QueueEngine:        queueEngine,
 		QueueScheduler:     queueScheduler,
 		StatsAggregator:    statsAgg,
@@ -81,14 +72,9 @@ func Initialize() (*Dependencies, error) {
 
 // Close gracefully closes all dependencies
 func (d *Dependencies) Close() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := d.Database.Close(ctx); err != nil {
-		log.Printf("Error closing MongoDB connection: %v", err)
-	}
-	if d.Redis != nil {
-		if err := d.Redis.Close(); err != nil {
-			log.Printf("Error closing Redis connection: %v", err)
+	if d.Database != nil {
+		if err := d.Database.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
 		}
 	}
 }
@@ -115,12 +101,8 @@ func initializeFirebase(cfg *config.Config) error {
 	return nil
 }
 
-func initializeDatabase(cfg *config.Config) (*connection.MongoDB, error) {
-	db, err := connection.NewMongoDB(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
+func initializeDatabase(cfg *config.Config) (*connection.Database, error) {
+	return connection.Open(context.Background(), cfg)
 }
 
 // Repositories holds all repository instances
@@ -136,16 +118,16 @@ type Repositories struct {
 	WebhookRepo        *repos.WebhookDeliveryRepository
 }
 
-func initializeRepositories(db *connection.MongoDB) *Repositories {
+func initializeRepositories(db *connection.Database) *Repositories {
 	return &Repositories{
-		WorkerRepo:         repos.NewWorkerRepository(db.Database),
-		UserRepo:           repos.NewUserRepository(db.Database),
-		CommandRepo:        repos.NewCommandRepository(db.Database),
-		UptimeSnapshotRepo: repos.NewUptimeSnapshotRepository(db.Database),
-		WorkerSnapshotRepo: repos.NewWorkerSnapshotRepository(db.Database),
-		JobExecutionRepo:   repos.NewJobExecutionRepository(db.Database),
-		APIKeyRepo:         repos.NewAPIKeyRepository(db.Database),
-		RunRepo:            repos.NewRunRepository(db.Database),
-		WebhookRepo:        repos.NewWebhookDeliveryRepository(db.Database),
+		WorkerRepo:         repos.NewWorkerRepository(db.DB),
+		UserRepo:           repos.NewUserRepository(db.DB),
+		CommandRepo:        repos.NewCommandRepository(db.DB),
+		UptimeSnapshotRepo: repos.NewUptimeSnapshotRepository(db.DB),
+		WorkerSnapshotRepo: repos.NewWorkerSnapshotRepository(db.DB),
+		JobExecutionRepo:   repos.NewJobExecutionRepository(db.DB),
+		APIKeyRepo:         repos.NewAPIKeyRepository(db.DB),
+		RunRepo:            repos.NewRunRepository(db.DB),
+		WebhookRepo:        repos.NewWebhookDeliveryRepository(db.DB),
 	}
 }

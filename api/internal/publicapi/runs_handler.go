@@ -11,10 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 
 	pb "github.com/lute/proto"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
@@ -46,10 +45,10 @@ func (h *RunsHandler) Create(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var apiKeyID primitive.ObjectID
+	var apiKeyID id.ID
 	if v, exists := c.Get("api_key_id"); exists {
-		if id, err := primitive.ObjectIDFromHex(v.(string)); err == nil {
-			apiKeyID = id
+		if ak, err := id.FromHex(v.(string)); err == nil {
+			apiKeyID = ak
 		}
 	}
 
@@ -71,7 +70,7 @@ func (h *RunsHandler) Create(c *gin.Context) {
 			resp := h.buildRunResponse(ctx, existing)
 			c.JSON(http.StatusOK, CreateRunResponse{RunResponse: resp})
 			return
-		} else if !errors.Is(err, mongo.ErrNoDocuments) {
+		} else if !errors.Is(err, repos.ErrNotFound) {
 			writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
@@ -299,11 +298,11 @@ func (h *RunsHandler) Logs(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-func (h *RunsHandler) loadOwnedRun(c *gin.Context, userID primitive.ObjectID) (*models.Run, int) {
+func (h *RunsHandler) loadOwnedRun(c *gin.Context, userID id.ID) (*models.Run, int) {
 	jobID := c.Param("id")
 	run, err := h.runs.GetByJobID(c.Request.Context(), jobID)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
+		if errors.Is(err, repos.ErrNotFound) {
 			writeError(c, http.StatusNotFound, "not_found", "run not found")
 			return nil, http.StatusNotFound
 		}
@@ -358,18 +357,18 @@ func (h *RunsHandler) buildRunResponse(ctx context.Context, run *models.Run) Run
 	return resp
 }
 
-func requireUserID(c *gin.Context) (primitive.ObjectID, bool) {
+func requireUserID(c *gin.Context) (id.ID, bool) {
 	raw, exists := c.Get("user_id")
 	if !exists {
 		writeError(c, http.StatusUnauthorized, "unauthorized", "authentication required")
-		return primitive.NilObjectID, false
+		return id.ID(""), false
 	}
-	id, err := primitive.ObjectIDFromHex(raw.(string))
+	uid, err := id.FromHex(raw.(string))
 	if err != nil {
 		writeError(c, http.StatusUnauthorized, "unauthorized", "invalid user context")
-		return primitive.NilObjectID, false
+		return id.ID(""), false
 	}
-	return id, true
+	return uid, true
 }
 
 func writeError(c *gin.Context, status int, code, message string) {

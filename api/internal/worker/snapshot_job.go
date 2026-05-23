@@ -43,6 +43,10 @@ func (j *WorkerSnapshotJob) Run(ctx context.Context) {
 
 func (j *WorkerSnapshotJob) runOnce(ctx context.Context) {
 	now := time.Now()
+	cutoff := now.Add(-30 * 24 * time.Hour)
+	if err := j.snapshotRepo.PruneOlderThan(ctx, cutoff); err != nil {
+		log.Printf("worker snapshot: prune failed: %v", err)
+	}
 	list, err := j.workerRepo.ListByStatus(ctx, "alive")
 	if err != nil {
 		log.Printf("worker snapshot: list workers failed: %v", err)

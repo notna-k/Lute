@@ -1,16 +1,18 @@
 package models
 
 import (
-	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/lute/api/internal/db/id"
+	"github.com/lute/api/internal/db/types"
 )
 
-// UptimeSnapshot is a per-user snapshot of machine counts at a point in time (for dashboard uptime graph).
+// UptimeSnapshot is persisted time-series rollup for dashboard uptime.
 type UptimeSnapshot struct {
-	UserID primitive.ObjectID `json:"user_id" bson:"user_id"`
-	At     time.Time          `json:"at" bson:"at"`
-	Alive  int                `json:"alive" bson:"alive"`
-	Dead   int                `json:"dead" bson:"dead"`
-	Total  int                `json:"total" bson:"total"`
+	ID     uint64 `json:"-" gorm:"primaryKey;autoIncrement"`
+	UserID id.ID  `json:"user_id" gorm:"column:user_id;size:24"`
+	At     types.MilliTime `json:"at" gorm:"column:at"`
+	Alive  int    `json:"alive"`
+	Dead   int    `json:"dead"`
+	Total  int    `json:"total"`
 }
+
+func (*UptimeSnapshot) TableName() string { return "uptime_snapshots" }

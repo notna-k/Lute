@@ -1,15 +1,16 @@
 package models
 
 import (
-	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/lute/api/internal/db/id"
+	"github.com/lute/api/internal/db/types"
 )
 
-// WorkerSnapshot is a per-worker point-in-time snapshot (canonical metrics, same keys as Worker.Metrics).
-// Only written when the worker is alive; gaps in the time-series represent downtime.
+// WorkerSnapshot is a sampled metrics series for workers.
 type WorkerSnapshot struct {
-	WorkerID primitive.ObjectID     `json:"worker_id" bson:"worker_id"`
-	At       time.Time              `json:"at" bson:"at"`
-	Metrics  map[string]interface{} `json:"metrics,omitempty" bson:"metrics,omitempty"` // cpu_load, mem_usage_mb, disk_used_gb, disk_total_gb
+	ID       uint64                 `json:"-" gorm:"primaryKey;autoIncrement"`
+	WorkerID id.ID                  `json:"worker_id" gorm:"column:worker_id;size:24"`
+	At       types.MilliTime        `json:"at" gorm:"column:at"`
+	Metrics  map[string]interface{} `json:"metrics,omitempty" gorm:"serializer:json"`
 }
+
+func (*WorkerSnapshot) TableName() string { return "worker_snapshots" }

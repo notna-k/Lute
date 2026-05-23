@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,7 +11,6 @@ import (
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/api/option"
 
 	"github.com/lute/api/internal/db/models"
@@ -106,10 +106,10 @@ func AuthMiddleware(userRepo *repos.UserRepository) gin.HandlerFunc {
 			return
 		}
 
-		// Look up or create user in MongoDB
+		// Look up or create user
 		user, err := userRepo.GetByFirebaseUID(ctx, firebaseUID)
 		if err != nil {
-			if err == mongo.ErrNoDocuments {
+			if errors.Is(err, repos.ErrNotFound) {
 				// Create new user if doesn't exist
 				user = &models.User{
 					FirebaseUID: firebaseUID,
@@ -134,7 +134,7 @@ func AuthMiddleware(userRepo *repos.UserRepository) gin.HandlerFunc {
 			}
 		}
 
-		// Set user ID in context (MongoDB ObjectID as hex string)
+		// Set user ID in context (hex string)
 		c.Set("user_id", user.ID.Hex())
 		c.Set("firebase_uid", firebaseUID)
 		c.Set("token", token)

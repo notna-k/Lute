@@ -14,11 +14,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/db/types"
 	luteGrpc "github.com/lute/api/internal/grpc"
 )
 
@@ -345,7 +346,7 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 		})
 		return
 	}
-	userID, err := primitive.ObjectIDFromHex(uidStr)
+	userID, err := id.FromHex(uidStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "invalid claim code format. Use the exact command from the Add Worker dialog in the Lute UI.",
@@ -415,7 +416,8 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	w.Status = "registered"
 	w.AgentIP = ip
 	w.AgentVersion = req.Version
-	w.LastSeen = time.Now()
+	ls := types.NewMilliTime(time.Now())
+	w.LastSeen = &ls
 
 	if err := h.workerRepo.Update(ctx, w.ID, w); err != nil {
 		log.Printf("Failed to update worker with agent info: %v", err)
@@ -515,7 +517,7 @@ type SendCommandRequest struct {
 
 func (h *WorkerHandler) SendCommand(c *gin.Context) {
 	workerIDStr := c.Param("id")
-	workerID, err := primitive.ObjectIDFromHex(workerIDStr)
+	workerID, err := id.FromHex(workerIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
 		return
@@ -563,7 +565,7 @@ func (h *WorkerHandler) SendCommand(c *gin.Context) {
 
 func (h *WorkerHandler) ListCommands(c *gin.Context) {
 	workerIDStr := c.Param("id")
-	workerID, err := primitive.ObjectIDFromHex(workerIDStr)
+	workerID, err := id.FromHex(workerIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
 		return
@@ -585,7 +587,7 @@ func (h *WorkerHandler) ListCommands(c *gin.Context) {
 
 func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
 	workerIDStr := c.Param("id")
-	workerOID, err := primitive.ObjectIDFromHex(workerIDStr)
+	workerOID, err := id.FromHex(workerIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
 		return
@@ -617,7 +619,7 @@ func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
 
 func (h *WorkerHandler) GetCommandResult(c *gin.Context) {
 	cmdIDStr := c.Param("commandId")
-	cmdID, err := primitive.ObjectIDFromHex(cmdIDStr)
+	cmdID, err := id.FromHex(cmdIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid command_id"})
 		return

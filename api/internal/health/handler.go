@@ -10,10 +10,10 @@ import (
 )
 
 type HealthHandler struct {
-	db *connection.MongoDB
+	db *connection.Database
 }
 
-func NewHealthHandler(db *connection.MongoDB) *HealthHandler {
+func NewHealthHandler(db *connection.Database) *HealthHandler {
 	return &HealthHandler{db: db}
 }
 

@@ -1,45 +1,6 @@
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:8.2.5
-    container_name: lute-mongodb
-    restart: unless-stopped
-    ports:
-      - "${MONGODB_PORT:-27017}:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
-    volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
-    networks:
-      - lute-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 2s
-      timeout: 3s
-      retries: 15
-      start_period: 30s
-
-  redis:
-    image: redis:7-alpine
-    container_name: lute-redis
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - lute-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 1s
-      timeout: 2s
-      retries: 10
-      start_period: 5s
-
   api:
     build:
       context: ../..
@@ -64,9 +25,9 @@ services:
       SERVER_PORT: ${SERVER_PORT}
       SERVER_HOST: ${SERVER_HOST}
       GIN_MODE: ${GIN_MODE}
-      # MongoDB
-      MONGODB_URI: ${MONGODB_URI}
-      MONGODB_DATABASE: ${MONGODB_DATABASE}
+      # SQLite (persistent app data + job queue)
+      SQLITE_PATH: ${SQLITE_PATH:-/data/lute.db}
+      SQLITE_BUSY_TIMEOUT: ${SQLITE_BUSY_TIMEOUT:-5s}
       # gRPC
       GRPC_PORT: ${GRPC_PORT}
       GRPC_HOST: ${GRPC_HOST}
@@ -83,13 +44,8 @@ services:
       METRICS_SNAPSHOT_INTERVAL: ${METRICS_SNAPSHOT_INTERVAL:-5s}
       # How often we ping workers for status + metrics. Should be <= METRICS_SNAPSHOT_INTERVAL so each snapshot has fresh metrics.
       HEARTBEAT_CHECK_INTERVAL: ${HEARTBEAT_CHECK_INTERVAL:-5s}
-      # Redis
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    volumes:
+      - sqlite_data:/data
     networks:
       - lute-network
     healthcheck:
@@ -103,6 +59,4 @@ networks:
     driver: bridge
 
 volumes:
-  mongodb_data:
-  mongodb_config:
-  redis_data:
+  sqlite_data:

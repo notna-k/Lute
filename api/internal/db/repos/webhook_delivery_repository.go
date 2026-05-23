@@ -4,143 +4,113 @@ import (
 	"context"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/enums"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"gorm.io/gorm"
 )
 
 type WebhookDeliveryRepository struct {
-	*Repository
+	g *gorm.DB
 }
 
-func NewWebhookDeliveryRepository(db *mongo.Database) *WebhookDeliveryRepository {
-	return &WebhookDeliveryRepository{Repository: NewRepository(db, connection.CollectionWebhookDeliveries)}
+func NewWebhookDeliveryRepository(db *gorm.DB) *WebhookDeliveryRepository {
+	return &WebhookDeliveryRepository{g: db}
+}
+
+func (r *WebhookDeliveryRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
 }
 
 func (r *WebhookDeliveryRepository) Create(ctx context.Context, d *models.WebhookDelivery) error {
-	d.BeforeCreate()
-	_, err := r.Collection.InsertOne(ctx, d)
-	return err
+	return mapErr(r.q(ctx).Create(d).Error)
 }
 
-// ClaimDue atomically selects up to `limit` pending deliveries whose retry time has come,
-// flipping them to "in_flight" so concurrent dispatchers do not pick the same row.
 func (r *WebhookDeliveryRepository) ClaimDue(ctx context.Context, limit int64) ([]models.WebhookDelivery, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	now := time.Now()
-
-	filter := bson.M{
-		"status":        "pending",
-		"next_retry_at": bson.M{"$lte": now},
-	}
-	opts := options.Find().
-		SetSort(bson.D{{Key: "next_retry_at", Value: 1}}).
-		SetLimit(limit)
-
-	cur, err := r.Collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cur.Close(ctx) }()
-
+	nowMs := time.Now().UTC().UnixMilli()
 	var candidates []models.WebhookDelivery
-	if err := cur.All(ctx, &candidates); err != nil {
+	if err := r.q(ctx).
+		Where("status = ? AND next_retry_at <= ?", enums.WebhookDeliveryPending, nowMs).
+		Order("next_retry_at ASC").
+		Limit(int(limit)).
+		Find(&candidates).Error; err != nil {
 		return nil, err
 	}
 
 	claimed := make([]models.WebhookDelivery, 0, len(candidates))
 	for _, d := range candidates {
-		res, err := r.Collection.UpdateOne(
-			ctx,
-			bson.M{"_id": d.ID, "status": "pending"},
-			bson.M{"$set": bson.M{"status": "in_flight", "updated_at": now}},
-		)
-		if err != nil || res.MatchedCount == 0 {
+		res := r.q(ctx).Model(&models.WebhookDelivery{}).
+			Where("id = ? AND status = ?", d.ID.Hex(), enums.WebhookDeliveryPending).
+			Updates(map[string]interface{}{
+				"status":     enums.WebhookDeliveryInFlight,
+				"updated_at": nowMs,
+			})
+		if res.Error != nil {
 			continue
 		}
-		d.Status = "in_flight"
+		if res.RowsAffected == 0 {
+			continue
+		}
+		d.Status = enums.WebhookDeliveryInFlight
 		claimed = append(claimed, d)
 	}
 	return claimed, nil
 }
 
-// MarkDelivered records a successful webhook delivery.
-func (r *WebhookDeliveryRepository) MarkDelivered(ctx context.Context, id primitive.ObjectID, attempts, status int) error {
-	now := time.Now()
-	_, err := r.Collection.UpdateOne(
-		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": bson.M{
-			"status":          "delivered",
+func (r *WebhookDeliveryRepository) MarkDelivered(ctx context.Context, delID id.ID, attempts, status int) error {
+	nowMs := time.Now().UTC().UnixMilli()
+	return mapErr(r.q(ctx).Model(&models.WebhookDelivery{}).Where("id = ?", delID.Hex()).
+		Updates(map[string]interface{}{
+			"status":          enums.WebhookDeliveryDelivered,
 			"attempts":        attempts,
 			"response_status": status,
-			"delivered_at":    now,
-			"updated_at":      now,
-		}},
-	)
-	return err
+			"delivered_at":    nowMs,
+			"updated_at":      nowMs,
+		}).Error)
 }
 
-// MarkRetry reschedules a delivery with exponential backoff up to MaxAttempts,
-// or marks it "failed" when attempts are exhausted.
 func (r *WebhookDeliveryRepository) MarkRetry(
 	ctx context.Context,
-	id primitive.ObjectID,
-	attempts int,
-	maxAttempts int,
+	delID id.ID,
+	attempts, maxAttempts int,
 	lastErr string,
 	responseStatus int,
 ) error {
-	now := time.Now()
+	now := time.Now().UTC()
+	nowMs := now.UnixMilli()
 	if attempts >= maxAttempts {
-		_, err := r.Collection.UpdateOne(
-			ctx,
-			bson.M{"_id": id},
-			bson.M{"$set": bson.M{
-				"status":          "failed",
+		return mapErr(r.q(ctx).Model(&models.WebhookDelivery{}).Where("id = ?", delID.Hex()).
+			Updates(map[string]interface{}{
+				"status":          enums.WebhookDeliveryFailed,
 				"attempts":        attempts,
 				"response_status": responseStatus,
 				"last_error":      lastErr,
-				"updated_at":      now,
-			}},
-		)
-		return err
+				"updated_at":      nowMs,
+			}).Error)
 	}
 	delay := time.Duration(1<<uint(attempts)) * 30 * time.Second
 	if delay > 30*time.Minute {
 		delay = 30 * time.Minute
 	}
-	_, err := r.Collection.UpdateOne(
-		ctx,
-		bson.M{"_id": id},
-		bson.M{"$set": bson.M{
-			"status":          "pending",
+	nextMs := now.Add(delay).UnixMilli()
+	return mapErr(r.q(ctx).Model(&models.WebhookDelivery{}).Where("id = ?", delID.Hex()).
+		Updates(map[string]interface{}{
+			"status":          enums.WebhookDeliveryPending,
 			"attempts":        attempts,
 			"response_status": responseStatus,
 			"last_error":      lastErr,
-			"next_retry_at":   now.Add(delay),
-			"updated_at":      now,
-		}},
-	)
-	return err
+			"next_retry_at":   nextMs,
+			"updated_at":      nowMs,
+		}).Error)
 }
 
-// ListByJobID returns deliveries tied to a job (for debugging / run details).
 func (r *WebhookDeliveryRepository) ListByJobID(ctx context.Context, jobID string) ([]models.WebhookDelivery, error) {
-	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
-	cur, err := r.Collection.Find(ctx, bson.M{"job_id": jobID}, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = cur.Close(ctx) }()
 	var out []models.WebhookDelivery
-	if err := cur.All(ctx, &out); err != nil {
+	err := r.q(ctx).Where("job_id = ?", jobID).Order("created_at DESC").Find(&out).Error
+	if err != nil {
 		return nil, err
 	}
 	if out == nil {

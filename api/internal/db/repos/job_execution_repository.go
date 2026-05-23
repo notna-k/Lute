@@ -6,75 +6,60 @@ import (
 	"sort"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
+	"github.com/lute/api/internal/db/types"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type JobExecutionRepository struct {
-	*Repository
+	g *gorm.DB
 }
 
-func NewJobExecutionRepository(db *mongo.Database) *JobExecutionRepository {
-	return &JobExecutionRepository{
-		Repository: NewRepository(db, connection.CollectionJobExecutions),
-	}
+func NewJobExecutionRepository(db *gorm.DB) *JobExecutionRepository {
+	return &JobExecutionRepository{g: db}
 }
 
-// Upsert creates or replaces the execution record for a given job_id.
-// The last result wins (e.g. after a retry the newer execution overwrites).
+func (r *JobExecutionRepository) q(ctx context.Context) *gorm.DB {
+	return r.g.WithContext(ctx)
+}
+
 func (r *JobExecutionRepository) Upsert(ctx context.Context, exec *models.JobExecution) error {
-	now := time.Now()
-	exec.UpdatedAt = now
+	now := time.Now().UTC()
 	if exec.CreatedAt.IsZero() {
-		exec.CreatedAt = now
+		exec.CreatedAt = types.NewMilliTime(now)
 	}
-
-	filter := bson.M{"job_id": exec.JobID}
-	update := bson.M{"$set": exec}
-	opts := options.Update().SetUpsert(true)
-	_, err := r.Collection.UpdateOne(ctx, filter, update, opts)
-	return err
+	exec.UpdatedAt = types.NewMilliTime(now)
+	if exec.ID.IsZero() {
+		exec.ID = id.New()
+	}
+	if exec.FinishedAt.IsZero() {
+		exec.FinishedAt = types.NewMilliTime(now)
+	}
+	return r.q(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "job_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"updated_at", "worker_id", "queue", "type", "success",
+			"error", "elapsed_ms", "log_file", "execution_log_file", "finished_at",
+		}),
+	}).Create(exec).Error
 }
 
-// GetByJobID retrieves the execution record for a job.
 func (r *JobExecutionRepository) GetByJobID(ctx context.Context, jobID string) (*models.JobExecution, error) {
-	var exec models.JobExecution
-	err := r.Collection.FindOne(ctx, bson.M{"job_id": jobID}).Decode(&exec)
-	if err != nil {
-		return nil, err
+	var e models.JobExecution
+	if err := r.q(ctx).Where("job_id = ?", jobID).First(&e).Error; err != nil {
+		return nil, mapErr(err)
 	}
-	return &exec, nil
+	return &e, nil
 }
 
-// JobExecutionListFilter narrows the job_executions query.
 type JobExecutionListFilter struct {
 	Queue  string
 	Type   string
 	Status string // "", "success", or "failed"
 }
 
-func buildJobExecutionMatch(f JobExecutionListFilter) bson.M {
-	q := bson.M{}
-	if f.Queue != "" {
-		q["queue"] = f.Queue
-	}
-	if f.Type != "" {
-		q["type"] = f.Type
-	}
-	switch f.Status {
-	case "success":
-		q["success"] = true
-	case "failed":
-		q["success"] = false
-	}
-	return q
-}
-
-// List returns executions matching the filter, sorted by finished_at (descending if sortDesc).
 func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionListFilter, offset, limit int64, sortDesc bool) ([]models.JobExecution, int64, error) {
 	if limit <= 0 {
 		limit = 50
@@ -85,31 +70,35 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 	if offset < 0 {
 		offset = 0
 	}
-	match := buildJobExecutionMatch(filter)
 
-	total, err := r.Collection.CountDocuments(ctx, match)
-	if err != nil {
+	q := r.q(ctx).Model(&models.JobExecution{})
+	if filter.Queue != "" {
+		q = q.Where("queue = ?", filter.Queue)
+	}
+	if filter.Type != "" {
+		q = q.Where("type = ?", filter.Type)
+	}
+	switch filter.Status {
+	case "success":
+		q = q.Where("success = ?", true)
+	case "failed":
+		q = q.Where("success = ?", false)
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count job executions: %w", err)
 	}
 
-	order := 1
+	order := "finished_at ASC"
 	if sortDesc {
-		order = -1
+		order = "finished_at DESC"
 	}
-	opts := options.Find().
-		SetSort(bson.D{{Key: "finished_at", Value: order}}).
-		SetSkip(offset).
-		SetLimit(limit)
-
-	cur, err := r.Collection.Find(ctx, match, opts)
-	if err != nil {
-		return nil, 0, fmt.Errorf("find job executions: %w", err)
-	}
-	defer func() { _ = cur.Close(ctx) }()
 
 	var out []models.JobExecution
-	if err := cur.All(ctx, &out); err != nil {
-		return nil, 0, err
+	err := q.Order(order).Limit(int(limit)).Offset(int(offset)).Find(&out).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("find job executions: %w", err)
 	}
 	if out == nil {
 		out = []models.JobExecution{}
@@ -117,28 +106,31 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 	return out, total, nil
 }
 
-// DistinctQueuesAndTypes returns sorted unique queue and type values for filter UI.
-func (r *JobExecutionRepository) DistinctQueuesAndTypes(ctx context.Context) (queues, types []string, err error) {
-	rawQ, err := r.Collection.Distinct(ctx, "queue", bson.M{})
+func (r *JobExecutionRepository) DistinctQueuesAndTypes(ctx context.Context) (queues, typesCol []string, err error) {
+	rawQ, err := r.distinctCol(ctx, "queue")
 	if err != nil {
 		return nil, nil, err
 	}
-	rawT, err := r.Collection.Distinct(ctx, "type", bson.M{})
+	rawT, err := r.distinctCol(ctx, "type")
 	if err != nil {
 		return nil, nil, err
 	}
-	queues = distinctStrings(rawQ)
-	types = distinctStrings(rawT)
-	sort.Strings(queues)
-	sort.Strings(types)
-	return queues, types, nil
+	sort.Strings(rawQ)
+	sort.Strings(rawT)
+	return rawQ, rawT, nil
 }
 
-func distinctStrings(raw []interface{}) []string {
+func (r *JobExecutionRepository) distinctCol(ctx context.Context, col string) ([]string, error) {
+	if col != "queue" && col != "type" {
+		return nil, fmt.Errorf("unsupported column %q", col)
+	}
+	var raw []string
+	if err := r.q(ctx).Model(&models.JobExecution{}).Distinct(col).Pluck(col, &raw).Error; err != nil {
+		return nil, err
+	}
 	seen := make(map[string]struct{})
 	var out []string
-	for _, v := range raw {
-		s, _ := v.(string)
+	for _, s := range raw {
 		if s == "" {
 			continue
 		}
@@ -148,5 +140,5 @@ func distinctStrings(raw []interface{}) []string {
 		seen[s] = struct{}{}
 		out = append(out, s)
 	}
-	return out
+	return out, nil
 }
