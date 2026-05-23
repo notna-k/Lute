@@ -7,6 +7,7 @@ import "gorm.io/gorm"
 // DDL lives here—not in repositories—because GORM struct tags cannot express every partial UNIQUE.
 func ApplySecondaryIndexes(db *gorm.DB) error {
 	stmts := []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid_nonempty ON users(firebase_uid) WHERE firebase_uid IS NOT NULL AND firebase_uid != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_workers_user_id ON workers(user_id)`,
 		// workers: one logical agent per IP per user when IP is set
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_user_agent_ip ON workers(user_id, agent_ip) WHERE agent_ip IS NOT NULL AND agent_ip != ''`,

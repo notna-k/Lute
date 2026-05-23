@@ -12,8 +12,8 @@ import (
 // BaseModel embeds identifiers and timestamps for domain rows.
 type BaseModel struct {
 	ID        id.ID           `json:"id" gorm:"primaryKey;size:24"`
-	CreatedAt types.MilliTime `json:"created_at" gorm:"column:created_at"`
-	UpdatedAt types.MilliTime `json:"updated_at" gorm:"column:updated_at"`
+	CreatedAt types.MilliTime `json:"created_at" gorm:"column:created_at;default:0"`
+	UpdatedAt types.MilliTime `json:"updated_at" gorm:"column:updated_at;default:0"`
 }
 
 // BeforeCreate initializes id and timestamps before insert (GORM callback).
