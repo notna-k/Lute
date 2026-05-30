@@ -20,6 +20,7 @@ type Worker struct {
 	AgentVersion     string                 `json:"agent_version,omitempty"`
 	LastSeen         *types.MilliTime       `json:"last_seen,omitempty" gorm:"column:last_seen"`
 	Metrics          map[string]interface{} `json:"metrics,omitempty" gorm:"serializer:json"`
+	Labels           map[string]string      `json:"labels,omitempty" gorm:"serializer:json"`
 	HeartbeatRetry   int                    `json:"-" gorm:"column:heartbeat_retry;default:0"`
 }
 

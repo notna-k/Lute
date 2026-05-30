@@ -59,7 +59,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	api.GET("/ws", middleware.OptionalAuthMiddleware(), wsHandler.HandleWebSocket)
 
 	workerService := worker.NewWorkerService(d.WorkerRepo)
-	workerHandler := worker.NewWorkerHandler(d.Config.WorkerBinary.Dir, d.Config, d.WorkerRepo, d.CommandRepo, d.GRPCServer.ConnMgr)
+	workerHandler := worker.NewWorkerHandler(d.Config.WorkerBinary.Dir, d.Config, d.WorkerRepo, d.CommandRepo, d.GRPCServer.ConnMgr, d.GRPCServer)
 	dashboardHandler := dashboard.NewDashboardHandler(d.Config, workerService, d.WorkerSnapshotRepo)
 	apiKeysHandler := publicapi.NewAPIKeysHandler(d.APIKeyRepo)
 

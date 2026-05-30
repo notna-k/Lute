@@ -25,6 +25,7 @@ export interface EnqueueRequest {
     delay_ms?: number;
     max_retries?: number;
     timeout_sec?: number;
+    selector?: Record<string, string>;
 }
 
 export interface EnqueueResponse {

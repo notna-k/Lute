@@ -42,6 +42,7 @@ type WorkerConnection struct {
 	Queues      []string
 	Concurrency int32
 	ActiveJobs  int32
+	Labels      map[string]string // loaded from DB at registration; updated via ConnectionManager.UpdateWorkerLabels
 
 	stream   pb.WorkerService_ConnectServer
 	pingCh   chan pingRequest
@@ -355,9 +356,10 @@ func (cm *ConnectionManager) ConnectedWorkerIDs() []string {
 	return ids
 }
 
-// FindAvailableWorker returns a connected worker that handles the given queue
-// and has capacity for another job.
-func (cm *ConnectionManager) FindAvailableWorker(queueName string) *WorkerConnection {
+// FindAvailableWorker returns a connected worker that handles the given queue,
+// has capacity for another job, and whose labels are a superset of selector.
+// An empty or nil selector matches any worker.
+func (cm *ConnectionManager) FindAvailableWorker(queueName string, selector map[string]string) *WorkerConnection {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
@@ -368,16 +370,17 @@ func (cm *ConnectionManager) FindAvailableWorker(queueName string) *WorkerConnec
 		draining := wc.draining
 		active := wc.ActiveJobs
 		limit := wc.Concurrency
-		var match bool
+		var queueMatch bool
 		for _, q := range wc.Queues {
 			if q == queueName {
-				match = true
+				queueMatch = true
 				break
 			}
 		}
+		labelMatch := workerMatchesSelector(wc.Labels, selector)
 		wc.mu.Unlock()
 
-		if draining || !match || active >= limit {
+		if draining || !queueMatch || !labelMatch || active >= limit {
 			continue
 		}
 		if best == nil || active < bestLoad {
@@ -386,6 +389,30 @@ func (cm *ConnectionManager) FindAvailableWorker(queueName string) *WorkerConnec
 		}
 	}
 	return best
+}
+
+// workerMatchesSelector returns true if workerLabels contains every key-value pair in selector.
+func workerMatchesSelector(workerLabels, selector map[string]string) bool {
+	for k, v := range selector {
+		if workerLabels[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// UpdateWorkerLabels atomically replaces the in-memory label set for a connected worker.
+// Called after a REST label update to keep dispatch state current.
+func (cm *ConnectionManager) UpdateWorkerLabels(workerID string, labels map[string]string) {
+	cm.mu.RLock()
+	wc := cm.conns[workerID]
+	cm.mu.RUnlock()
+	if wc == nil {
+		return
+	}
+	wc.mu.Lock()
+	wc.Labels = labels
+	wc.mu.Unlock()
 }
 
 // ActiveWorkers returns info about all connected workers.

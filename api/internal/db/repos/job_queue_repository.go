@@ -81,6 +81,26 @@ func (r *JobQueueRepository) Enqueue(ctx context.Context, job *queuejob.Job, opt
 	})
 }
 
+// PeekNextReadyJob reads the highest-priority ready job without dequeuing it.
+// Returns nil if the queue is empty. Used by the dispatcher to inspect the selector before
+// committing to a dequeue.
+func (r *JobQueueRepository) PeekNextReadyJob(ctx context.Context, queueName string) (*queuejob.Job, error) {
+	var slot models.QueueSlot
+	err := r.q(ctx).Where("queue_name = ? AND lane = ?", queueName, enums.QueueLaneReady).
+		Order("priority DESC, job_id ASC").First(&slot).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var job queuejob.Job
+	if err := json.Unmarshal([]byte(slot.Payload), &job); err != nil {
+		return nil, fmt.Errorf("peek job %s: %w", slot.JobID, err)
+	}
+	return &job, nil
+}
+
 // Dequeue assigns the highest-priority ready job to lane "none" and returns it, or nil if empty.
 func (r *JobQueueRepository) Dequeue(ctx context.Context, queueName string) (*queuejob.Job, error) {
 	var out *queuejob.Job

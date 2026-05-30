@@ -47,6 +47,32 @@ func (r *WorkerRepository) GetByUserID(ctx context.Context, userID id.ID) ([]*mo
 	return out, nil
 }
 
+// GetByUserIDAndLabels returns workers owned by userID whose labels contain all filter pairs.
+// An empty filter behaves identically to GetByUserID.
+func (r *WorkerRepository) GetByUserIDAndLabels(ctx context.Context, userID id.ID, filter map[string]string) ([]*models.Worker, error) {
+	workers, err := r.GetByUserID(ctx, userID)
+	if err != nil || len(filter) == 0 {
+		return workers, err
+	}
+	out := workers[:0]
+	for _, w := range workers {
+		if workerLabelsMatch(w.Labels, filter) {
+			out = append(out, w)
+		}
+	}
+	return out, nil
+}
+
+// workerLabelsMatch returns true if labels contains every key-value pair in filter.
+func workerLabelsMatch(labels, filter map[string]string) bool {
+	for k, v := range filter {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *WorkerRepository) Update(ctx context.Context, uid id.ID, w *models.Worker) error {
 	w.ID = uid
 	return mapErr(r.q(ctx).Save(w).Error)

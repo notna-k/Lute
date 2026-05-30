@@ -71,6 +71,7 @@ type WorkerHandler struct {
 	commandRepo   *repos.CommandRepository
 	workerService *WorkerService
 	connMgr       *luteGrpc.ConnectionManager
+	grpcSrv       *luteGrpc.Server
 }
 
 // NewWorkerHandler creates a handler that serves worker binaries from binaryDir.
@@ -80,6 +81,7 @@ func NewWorkerHandler(
 	workerRepo *repos.WorkerRepository,
 	commandRepo *repos.CommandRepository,
 	connMgr *luteGrpc.ConnectionManager,
+	grpcSrv *luteGrpc.Server,
 ) *WorkerHandler {
 	h := &WorkerHandler{
 		binaryDir:     binaryDir,
@@ -90,6 +92,7 @@ func NewWorkerHandler(
 		commandRepo:   commandRepo,
 		workerService: NewWorkerService(workerRepo),
 		connMgr:       connMgr,
+		grpcSrv:       grpcSrv,
 	}
 	h.refreshCache()
 	return h

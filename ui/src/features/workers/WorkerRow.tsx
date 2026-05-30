@@ -40,6 +40,18 @@ export function WorkerRow({
           <p className='truncate text-xs text-fg-muted'>
             {w.description || 'No description'}
           </p>
+          {w.labels && Object.keys(w.labels).length > 0 && (
+            <div className='mt-1 flex flex-wrap gap-1'>
+              {Object.entries(w.labels).map(([k, v]) => (
+                <span
+                  key={k}
+                  className='inline-flex items-center rounded px-1.5 py-0.5 text-xs font-mono bg-primary-subtle text-info-fg border border-border'
+                >
+                  {k}={v}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </Link>
 

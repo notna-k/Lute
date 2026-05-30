@@ -39,4 +39,8 @@ export const workerService = {
     deleteWorker: async (id: string): Promise<void> => {
         return apiClient.delete<void>(`/api/v1/workers/${id}`);
     },
+
+    updateLabels: async (id: string, labels: Record<string, string>): Promise<Worker> => {
+        return apiClient.patch<Worker>(`/api/v1/workers/${id}/labels`, { labels });
+    },
 };

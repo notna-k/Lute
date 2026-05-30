@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Power } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReEnableWorker, useWorker } from '@/hooks/useWorkers';
 import { useDashboardUptime } from '@/hooks/useDashboard';
 import type { ChartPoint, DashboardUptimePeriod } from '@/services/dashboardService';
@@ -8,6 +9,7 @@ import {
   Alert,
   Badge,
   Button,
+  Card,
   PageHeader,
   Skeleton,
   Tabs,
@@ -16,7 +18,9 @@ import {
   MetricsChart,
   type MetricKey,
 } from '@/features/workers/MetricsChart';
+import { LabelEditor } from '@/features/workers/LabelEditor';
 import { statusTone } from '@/features/workers/utils';
+import { workerService } from '@/services/workerService';
 
 const PERIOD_ITEMS: { value: DashboardUptimePeriod; label: string }[] = [
   { value: '10m', label: '10 min' },
@@ -55,6 +59,12 @@ const WorkerDetail = () => {
     id ?? undefined
   );
   const reEnable = useReEnableWorker();
+  const queryClient = useQueryClient();
+  const updateLabels = useMutation({
+    mutationFn: (labels: Record<string, string>) =>
+      workerService.updateLabels(id!, labels),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['worker', id] }),
+  });
 
   if (!id) {
     return (
@@ -144,6 +154,30 @@ const WorkerDetail = () => {
           Re-enable to allow the agent to connect again.
         </Alert>
       )}
+
+      <Card className='mb-6'>
+        <div className='px-4 py-3 border-b border-border'>
+          <h3 className='text-sm font-semibold text-fg'>Labels</h3>
+          <p className='text-xs text-fg-muted mt-0.5'>
+            Key-value labels used for job routing. Jobs with a matching selector will be routed to this worker.
+          </p>
+        </div>
+        <div className='px-4 py-3'>
+          <LabelEditor
+            initialLabels={worker.labels}
+            onSave={(labels) => updateLabels.mutate(labels)}
+            saving={updateLabels.isPending}
+          />
+          {updateLabels.isError && (
+            <p className='mt-2 text-sm text-danger'>
+              Failed to save labels. Please try again.
+            </p>
+          )}
+          {updateLabels.isSuccess && (
+            <p className='mt-2 text-sm text-success'>Labels saved.</p>
+          )}
+        </div>
+      </Card>
 
       <div className='mb-4'>
         <Tabs<DashboardUptimePeriod>

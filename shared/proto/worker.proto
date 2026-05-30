@@ -74,6 +74,7 @@ message HeartbeatPong {
 message WorkerRegistration {
   repeated string queues = 1;
   int32 concurrency = 2;
+  map<string, string> labels = 3; // reserved for future worker self-registration; populated server-side from DB
 }
 
 message JobAssignment {

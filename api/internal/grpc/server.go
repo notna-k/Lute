@@ -132,6 +132,7 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	log.Printf("Connect: worker %s connected", workerID)
 
 	conn := s.ConnMgr.Register(workerID, stream)
+	conn.Labels = w.Labels // seed in-memory labels from DB at connect time
 	if s.OnConnectionRegistered != nil {
 		s.OnConnectionRegistered()
 	}
@@ -240,9 +241,23 @@ func (s *Server) DispatchQueue(ctx context.Context, queueName string) {
 }
 
 // DispatchJob attempts to assign a pending job to an available worker.
+// It peeks the next job first to read its selector, then finds a matching worker,
+// and only dequeues once a match is confirmed.
 func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
-	worker := s.ConnMgr.FindAvailableWorker(queueName)
+	peeked, err := s.queueEngine.PeekNextReadyJob(ctx, queueName)
+	if err != nil {
+		log.Printf("DispatchJob queue=%s: peek error: %v", queueName, err)
+		return false
+	}
+	if peeked == nil {
+		return false
+	}
+
+	worker := s.ConnMgr.FindAvailableWorker(queueName, peeked.Selector)
 	if worker == nil {
+		if len(peeked.Selector) > 0 {
+			log.Printf("DispatchJob queue=%s selector=%v: no eligible worker", queueName, peeked.Selector)
+		}
 		return false
 	}
 

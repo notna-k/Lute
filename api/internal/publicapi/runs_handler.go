@@ -102,11 +102,12 @@ func (h *RunsHandler) Create(c *gin.Context) {
 	}
 
 	job := &queue.Job{
-		ID:      run.JobID,
-		Queue:   req.Queue,
-		Type:    req.Type,
-		Payload: req.Payload,
-		Meta:    map[string]string{"user_id": userID.Hex(), "run_id": run.ID.Hex()},
+		ID:       run.JobID,
+		Queue:    req.Queue,
+		Type:     req.Type,
+		Payload:  req.Payload,
+		Meta:     map[string]string{"user_id": userID.Hex(), "run_id": run.ID.Hex()},
+		Selector: req.Selector,
 	}
 	opts := queue.EnqueueOpts{
 		Priority:   req.Priority,

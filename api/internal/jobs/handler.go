@@ -29,13 +29,14 @@ func NewJobHandler(engine *queue.Engine, stats *queue.StatsAggregator, grpcSrv *
 }
 
 type EnqueueRequest struct {
-	Queue      string          `json:"queue" binding:"required"`
-	Type       string          `json:"type" binding:"required"`
-	Payload    json.RawMessage `json:"payload"`
-	Priority   float64         `json:"priority"`
-	DelayMs    int64           `json:"delay_ms"`
-	MaxRetries int             `json:"max_retries"`
-	TimeoutSec int             `json:"timeout_sec"`
+	Queue      string            `json:"queue" binding:"required"`
+	Type       string            `json:"type" binding:"required"`
+	Payload    json.RawMessage   `json:"payload"`
+	Priority   float64           `json:"priority"`
+	DelayMs    int64             `json:"delay_ms"`
+	MaxRetries int               `json:"max_retries"`
+	TimeoutSec int               `json:"timeout_sec"`
+	Selector   map[string]string `json:"selector,omitempty"`
 }
 
 func (h *JobHandler) Enqueue(c *gin.Context) {
@@ -46,10 +47,11 @@ func (h *JobHandler) Enqueue(c *gin.Context) {
 	}
 
 	job := &queue.Job{
-		ID:      uuid.New().String(),
-		Queue:   req.Queue,
-		Type:    req.Type,
-		Payload: req.Payload,
+		ID:       uuid.New().String(),
+		Queue:    req.Queue,
+		Type:     req.Type,
+		Payload:  req.Payload,
+		Selector: req.Selector,
 	}
 
 	opts := queue.EnqueueOpts{
