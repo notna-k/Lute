@@ -22,6 +22,7 @@ type Job struct {
 	StartedAt  int64             `json:"started_at,omitempty"`
 	DoneAt     int64             `json:"done_at,omitempty"`
 	Meta       map[string]string `json:"meta,omitempty"`
+	Selector   map[string]string `json:"selector,omitempty"`
 }
 
 // EnqueueOpts are options when enqueuing a job.
