@@ -1,6 +1,6 @@
 # AGENTS.md — guidance for coding agents
 This document helps automated coding agents (and humans) work safely and consistently in **Lute**. Read it before making non-trivial changes.
-
+Read the constitution in .specify/memory/constitution as well
 ---
 
 ## Purpose & product goal
