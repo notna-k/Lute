@@ -7,15 +7,16 @@ import (
 
 // CreateRunRequest is the JSON body accepted by POST /runs.
 type CreateRunRequest struct {
-	Queue          string          `json:"queue" binding:"required"`
-	Type           string          `json:"type" binding:"required"`
-	Payload        json.RawMessage `json:"payload"`
-	Priority       float64         `json:"priority"`
-	DelayMs        int64           `json:"delay_ms"`
-	MaxRetries     int             `json:"max_retries"`
-	TimeoutSec     int             `json:"timeout_sec"`
-	IdempotencyKey string          `json:"idempotency_key,omitempty"`
-	Webhook        *WebhookConfig  `json:"webhook,omitempty"`
+	Queue          string            `json:"queue" binding:"required"`
+	Type           string            `json:"type" binding:"required"`
+	Payload        json.RawMessage   `json:"payload"`
+	Priority       float64           `json:"priority"`
+	DelayMs        int64             `json:"delay_ms"`
+	MaxRetries     int               `json:"max_retries"`
+	TimeoutSec     int               `json:"timeout_sec"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	Webhook        *WebhookConfig    `json:"webhook,omitempty"`
+	Selector       map[string]string `json:"selector,omitempty"`
 }
 
 // WebhookConfig selects events and where to deliver them. When Secret is empty

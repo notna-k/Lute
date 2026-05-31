@@ -145,3 +145,7 @@ worker/bin/
 api/internal/ui/web/assets/
 
 .gocache
+
+.idea
+.vscode
+.zed

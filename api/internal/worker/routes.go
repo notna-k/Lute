@@ -46,6 +46,8 @@ func mountWorkerAuthenticated(g *gin.RouterGroup, h *WorkerHandler) {
 	g.GET("/:id/status", h.GetWorkerLiveStatus)
 	g.GET("/:id", h.GetWorker)
 	g.PUT("/:id", h.UpdateWorker)
+	g.GET("/:id/labels", h.GetLabels)
+	g.PATCH("/:id/labels", h.PatchLabels)
 	g.POST("/:id/re-enable", h.ReEnableWorker)
 	g.DELETE("/:id", h.DeleteWorker)
 }

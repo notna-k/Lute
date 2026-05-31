@@ -45,7 +45,7 @@ class ApiClient {
         headers: this.buildHeaders(token, options),
       });
 
-    let token = authBridge.getAccessToken();
+    const token = authBridge.getAccessToken();
     let response = await send(token);
 
     if (response.status === 401 && endpoint !== '/api/v1/auth/refresh') {
@@ -79,6 +79,13 @@ class ApiClient {
   async put<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async patch<T>(endpoint: string, data?: unknown): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
     });
   }

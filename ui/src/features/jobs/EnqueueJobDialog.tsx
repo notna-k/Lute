@@ -63,6 +63,7 @@ export function EnqueueJobDialog({
   const [runtime, setRuntime] = useState('python:3.12');
   const [command, setCommand] = useState('');
   const [paramsRows, setParamsRows] = useState<ParamRow[]>([makeRow()]);
+  const [selectorRows, setSelectorRows] = useState<ParamRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -73,6 +74,7 @@ export function EnqueueJobDialog({
     setRuntime('python:3.12');
     setCommand('');
     setParamsRows([makeRow()]);
+    setSelectorRows([]);
     setSubmitError(null);
   }, [open, defaultQueue]);
 
@@ -83,6 +85,22 @@ export function EnqueueJobDialog({
     setParamsRows((r) =>
       r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row))
     );
+
+  const addSelectorRow = () => setSelectorRows((r) => [...r, makeRow()]);
+  const removeSelectorRow = (i: number) =>
+    setSelectorRows((r) => r.filter((_, idx) => idx !== i));
+  const updateSelectorRow = (i: number, field: 'key' | 'value', value: string) =>
+    setSelectorRows((r) =>
+      r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row))
+    );
+
+  const buildSelector = (): Record<string, string> | undefined => {
+    const sel: Record<string, string> = {};
+    selectorRows.forEach(({ key, value }) => {
+      if (key.trim()) sel[key.trim()] = value;
+    });
+    return Object.keys(sel).length > 0 ? sel : undefined;
+  };
 
   const buildPayload = (): unknown => {
     if (form.type === 'noop') return {};
@@ -103,7 +121,7 @@ export function EnqueueJobDialog({
     setSubmitError(null);
     try {
       const payload = form.type === 'noop' ? {} : buildPayload();
-      const res = await jobService.enqueueJob({ ...form, payload });
+      const res = await jobService.enqueueJob({ ...form, payload, selector: buildSelector() });
       onClose();
       onEnqueued(res.job_id);
     } catch (e) {
@@ -237,6 +255,50 @@ export function EnqueueJobDialog({
             </div>
           </>
         )}
+
+        <div>
+          <p className='mb-1 text-sm font-medium text-fg'>
+            Worker selector{' '}
+            <span className='font-normal text-fg-muted'>(optional — route to labelled workers only)</span>
+          </p>
+          {selectorRows.length > 0 && (
+            <div className='mb-2 flex flex-col gap-2'>
+              {selectorRows.map((row, i) => (
+                <div key={i} className='flex items-center gap-2'>
+                  <Input
+                    placeholder='Label key'
+                    value={row.key}
+                    onChange={(e) => updateSelectorRow(i, 'key', e.target.value)}
+                    className='flex-1'
+                  />
+                  <Input
+                    placeholder='Label value'
+                    value={row.value}
+                    onChange={(e) => updateSelectorRow(i, 'value', e.target.value)}
+                    className='flex-1'
+                  />
+                  <IconButton
+                    label='Remove selector'
+                    variant='ghost'
+                    onClick={() => removeSelectorRow(i)}
+                    className='text-danger hover:bg-danger/10'
+                  >
+                    <Trash2 className='h-4 w-4' />
+                  </IconButton>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button
+            type='button'
+            variant='ghost'
+            size='sm'
+            leftIcon={<Plus className='h-4 w-4' />}
+            onClick={addSelectorRow}
+          >
+            Add selector
+          </Button>
+        </div>
 
         <div className='grid gap-4 sm:grid-cols-2'>
           <Field label='Timeout (sec)' htmlFor='to'>
