@@ -101,14 +101,14 @@ func (h *WorkerHandler) PatchLabels(c *gin.Context) {
 	}
 
 	// Keep in-memory dispatch state current and re-evaluate pending selector jobs.
-	if h.connMgr != nil {
-		h.connMgr.UpdateWorkerLabels(wid.Hex(), req.Labels)
+	if h.connectionMgr != nil {
+		h.connectionMgr.UpdateWorkerLabels(wid.Hex(), req.Labels)
 	}
-	if h.grpcSrv != nil {
-		conn := h.connMgr.Get(wid.Hex())
+	if h.grpcServer != nil {
+		conn := h.connectionMgr.Get(wid.Hex())
 		if conn != nil {
 			for _, q := range conn.Queues {
-				h.grpcSrv.DispatchQueue(context.Background(), q)
+				h.grpcServer.DispatchQueue(context.Background(), q)
 			}
 		}
 	}
@@ -278,8 +278,8 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 	}
 
 	stopped := false
-	if h.connMgr != nil {
-		if conn := h.connMgr.Get(wid.Hex()); conn != nil {
+	if h.connectionMgr != nil {
+		if conn := h.connectionMgr.Get(wid.Hex()); conn != nil {
 			conn.Shutdown()
 			stopped = true
 		}
