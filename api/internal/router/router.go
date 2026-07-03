@@ -1,6 +1,8 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/lute/api/internal/auth"
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/dashboard"
@@ -54,6 +56,11 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	{
 		health.SetupRoutes(api, healthHandler)
 	}
+
+	// ping is a lightweight liveness probe used to smoke-test routing.
+	api.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "pong"})
+	})
 
 	wsHandler := websocket.NewWebSocketHandler(d.Hub, d.Config)
 	api.GET("/ws", middleware.OptionalAuthMiddleware(), wsHandler.HandleWebSocket)
