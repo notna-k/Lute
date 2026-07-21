@@ -9,7 +9,7 @@ Read the constitution in .specify/memory/constitution as well
 
 Agents should preserve:
 
-- Correct auth boundaries (Firebase-backed users vs API keys vs public endpoints).
+- Correct auth boundaries (JWT-authenticated users vs API keys vs public endpoints).
 - Stability of worker ↔ API contracts (HTTP + WebSocket + gRPC where applicable).
 - Clear separation between **API server**, **worker binary**, **shared protobuf**, and **web UI**.
 
@@ -26,7 +26,7 @@ Lute/
 │   ├── cmd/worker/
 │   └── internal/
 ├── shared/proto/           # Go module github.com/lute/proto — protobuf/gRPC definitions & generated code (do not hand-edit generated files)
-├── ui/                     # React + Vite + TypeScript SPA (Firebase Auth; TanStack Query)
+├── ui/                     # React + Vite + TypeScript SPA (JWT auth against the API; TanStack Query)
 ├── infrastructure/dev/     # Docker Compose, `.env` for local stack (SQLite + API image build)
 ├── docs/                   # OpenAPI / docs JSON / supplemental docs
 ├── Makefile                # Primary automation (compose, worker builds, lint, release-ish targets)
@@ -38,7 +38,8 @@ Lute/
 **Routing overview (API)** (`api/internal/router/router.go`):
 
 - `/api` — health and WS (`GET /api/ws`).
-- `/api/v1/...` — authenticated dashboard/worker UX APIs (Firebase middleware on sensitive groups).
+- `/api/v1/auth/...` — login, refresh, logout, `me` (issues the JWTs everything else consumes).
+- `/api/v1/...` — authenticated dashboard/worker UX APIs (JWT middleware on sensitive groups).
 - `/api/public/v1/...` — public API surfaces (API-key oriented handlers).
 - Static SPA registration via `internal/ui` after API routes.
 
@@ -62,7 +63,7 @@ Agents must **not** silently downgrade language versions or swap major framework
 
 Documented in `infrastructure/dev/README.md`:
 
-1. Create `infrastructure/dev/.env` with API/SQLite/Vite Firebase variables as described there.
+1. Copy `infrastructure/dev/.env.example` to `.env` and set `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` as described there.
 2. From repo root: `make dev-up` (requires Docker BuildKit; `DOCKER_BUILDKIT=1` is set in `Makefile`).
 3. App + API: `http://localhost:8080`, health: `http://localhost:8080/api/health`.
 
@@ -76,10 +77,10 @@ Requires only **SQLite** (embedded in-process via `modernc.org/sqlite`):
 Typical split:
 
 - **UI**: `cd ui && npm ci && npm run dev` (Node **25** — `.nvmrc` at repo root and in `ui/`; Vite dev server port **3000** per `vite.config.ts`).
-- **API**: run from `api/` with env vars matching deployment (Firebase, SQLite path, worker binary dir).
+- **API**: run from `api/` with env vars matching deployment (JWT secret, seeded admin, SQLite path, worker binary dir).
 - **Worker**: `make worker-build` → binary under `worker/bin/`; configure API’s `WORKER_BINARY_DIR` when serving binaries locally.
 
-Firebase env vars are required for realistic auth flows (see infra README).
+`JWT_SECRET` (≥ 32 bytes) plus `ADMIN_EMAIL`/`ADMIN_PASSWORD` are required for realistic auth flows — the admin user is seeded on first startup (see infra README).
 
 ---
 
@@ -120,7 +121,7 @@ When adding cross-cutting types, prefer **proto** or **small shared packages** r
 5. **HTTP**: Gin routers grouped by domain (`internal/*/router.go`, `routes.go`). New endpoints belong next to their domain handler, wired through `internal/router/router.go`.
 6. **Data access**: SQL repositories live under `api/internal/db/repos`; models under `api/internal/db/models`.
 7. **Concurrency**: Respect existing queue (`internal/queue`), scheduler, heartbeat, and snapshot jobs — avoid blocking the HTTP goroutine with long synchronous work without a documented reason.
-8. **Security**: Never log secrets or full Firebase JSON keys; validate auth middleware placement before adding authenticated routes.
+8. **Security**: Never log secrets, JWT signing keys, raw refresh tokens, or password hashes; validate auth middleware placement before adding authenticated routes.
 9. **Performance**: Worker depends on heavy deps (e.g. Docker client); avoid redundant imports or rebuilding unrelated binaries in Docker layers unnecessarily.
 
 Run **`make go-lint`** before declaring Go work complete.
@@ -210,7 +211,7 @@ Write commits and PR descriptions as:
 ## Further reading
 
 - `infrastructure/dev/README.md` — Compose env vars and ports.
-- `ui/README.md` / `ui/FIREBASE_SETUP.md` — Frontend setup details.
+- `ui/README.md` — Frontend setup details.
 - `worker/README.md` — Worker module layout.
 - `docs/openapi.yaml` — HTTP surface documentation where applicable.
 

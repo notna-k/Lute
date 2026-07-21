@@ -1,13 +1,15 @@
-# Lute UI - VM Management Platform
+# Lute UI — Worker Management Dashboard
 
-A modern React application for managing virtual machines, built with Vite, TypeScript, and Firebase Authentication.
+A React application for operating workers, queues, and jobs, built with Vite, TypeScript, and the
+Lute API's JWT authentication.
 
 ## Features
 
-- 🔐 Firebase Authentication with Google Sign-in/Sign-up
-- 📊 Dashboard with VM statistics
-- 🖥️ User Machines page for managing personal VMs
-- 🌐 Public Machines page for browsing shared VMs
+- 🔐 Email/password authentication against the Lute API (JWT access + refresh tokens)
+- 📊 Dashboard with fleet statistics and metric snapshots
+- 🖥️ Worker list and detail views, including label editing
+- ⚙️ Job enqueueing with optional label selectors
+- 🔑 API key management
 - 🎨 Modern UI with Tailwind CSS
 - ⚡ Fast development with Vite
 
@@ -16,6 +18,7 @@ A modern React application for managing virtual machines, built with Vite, TypeS
 ### Prerequisites
 
 - Node.js **25.x** (see `engines` in `package.json`, `.nvmrc`) and npm
+- A running Lute API (see `infrastructure/dev/README.md`)
 
 ### Installation
 
@@ -24,15 +27,18 @@ A modern React application for managing virtual machines, built with Vite, TypeS
 npm install
 ```
 
-2. Set up Firebase:
-   - **See [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) for detailed step-by-step instructions**
-   - Quick steps:
-     1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
-     2. Enable Google Authentication
-     3. Add a Web app and copy the configuration
-     4. Create a `.env` file in the `ui` directory with your Firebase credentials
+2. Configure the API endpoint:
 
-   For complete instructions, see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md)
+   Create a `.env` file in the `ui` directory if the API is not served from the same origin:
+
+   ```bash
+   # Leave empty to use the same origin as the page (the default when the UI is
+   # embedded in the API binary).
+   VITE_API_URL=http://localhost:8080
+   ```
+
+   No auth provider configuration is needed — sign-in goes to the API's `/api/v1/auth` endpoints.
+   The bootstrap admin account is seeded by the API from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 ### Development
 
@@ -42,7 +48,7 @@ Start the development server:
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`
+The app will be available at `http://localhost:3000` (see `vite.config.ts`).
 
 ### Build
 
@@ -52,7 +58,7 @@ Build for production:
 npm run build
 ```
 
-The production build will be in the `dist` directory.
+The production build will be in the `dist` directory. `make api-build` embeds it into the API binary.
 
 ### Preview
 
@@ -70,26 +76,31 @@ ui/
 │   ├── components/       # Reusable React components
 │   │   └── layout/       # App shell, navbar, etc.
 │   ├── contexts/         # React contexts
-│   │   └── AuthContext.tsx
-│   ├── pages/           # Page components
+│   │   ├── AuthContext.tsx
+│   │   └── ThemeContext.tsx
+│   ├── features/         # Feature-scoped components (jobs, workers, ...)
+│   ├── hooks/            # Shared hooks
+│   ├── lib/              # Low-level helpers
+│   ├── pages/            # Page components
 │   │   ├── Dashboard.tsx
 │   │   ├── Login.tsx
-│   │   ├── UserMachines.tsx
-│   │   └── PublicMachines.tsx
-│   ├── services/         # API and service functions
+│   │   ├── Workers.tsx
+│   │   ├── WorkerDetail.tsx
+│   │   ├── Executions.tsx
+│   │   ├── ExecutionDetail.tsx
+│   │   └── Settings.tsx
+│   ├── services/         # API client and service functions
+│   │   ├── api.ts
 │   │   └── authService.ts
-│   ├── config/          # Configuration files
-│   │   └── firebase.ts
-│   ├── types/           # TypeScript type definitions
-│   │   └── index.ts
-│   ├── App.tsx          # Main App component
-│   ├── main.tsx         # Application entry point
-│   └── index.css        # Global styles
-├── public/              # Static assets
-├── index.html           # HTML template
-├── vite.config.ts       # Vite configuration
-├── tsconfig.json        # TypeScript configuration
-└── package.json         # Dependencies and scripts
+│   ├── types/            # TypeScript type definitions
+│   ├── utils/            # Utilities
+│   ├── App.tsx           # Main App component
+│   ├── main.tsx          # Application entry point
+│   └── index.css         # Global styles
+├── index.html            # HTML template
+├── vite.config.ts        # Vite configuration
+├── tsconfig.json         # TypeScript configuration
+└── package.json          # Dependencies and scripts
 ```
 
 ## Technologies
@@ -98,15 +109,5 @@ ui/
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
 - **React Router** - Client-side routing
-- **Firebase Auth** - Authentication
+- **TanStack Query** - Server state and caching
 - **Tailwind CSS** - Styling
-
-## Next Steps
-
-- Connect to your backend API for VM management
-- Implement actual VM CRUD operations
-- Add VM creation/editing forms
-- Implement real-time updates
-- Add error handling and loading states
-- Set up state management (Redux/Zustand) if needed
-
