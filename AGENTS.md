@@ -27,7 +27,6 @@ Lute/
 ├── shared/proto/           # Go module github.com/lute/proto — protobuf/gRPC definitions & generated code (do not hand-edit generated files)
 ├── ui/                     # React + Vite + TypeScript SPA (JWT auth against the API; TanStack Query)
 ├── infrastructure/dev/     # Docker Compose, `.env` for local stack (SQLite + API image build)
-├── docs/                   # OpenAPI / docs JSON / supplemental docs
 ├── Makefile                # Primary automation (compose, worker builds, lint, release-ish targets)
 ├── .golangci.yml           # golangci-lint v2; excludes generated proto tree
 ├── .zed/settings.json      # Optional repo-local Zed (ESLint via `ui/`, format-on-save)
@@ -193,7 +192,7 @@ If adding tests:
 1. **Drive-by refactors** unrelated to the task (especially cross-module renames).
 2. **Committing secrets** (`.env`, service account JSON, production URIs). Use placeholders and reference `infrastructure/dev/README.md`.
 3. **Editing generated protobuf outputs** without regeneration workflow.
-4. **Breaking HTTP/WebSocket/gRPC contracts** without updating clients (`ui`, `worker`, docs/openapi where applicable).
+4. **Breaking HTTP/WebSocket/gRPC contracts** without updating clients (`ui`, `worker`).
 5. **Adding heavyweight dependencies** without justification (especially to `worker/` — compile time and binary size matter).
 
 ---
@@ -212,7 +211,6 @@ Write commits and PR descriptions as:
 - `infrastructure/dev/README.md` — Compose env vars and ports.
 - `ui/README.md` — Frontend setup details.
 - `worker/README.md` — Worker module layout.
-- `docs/openapi.yaml` — HTTP surface documentation where applicable.
 
 ---
 
