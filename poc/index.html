@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lute · PoC directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f1216;--card:#171b21;--line:#262c35;--ink:#eef1f4;--muted:#8b95a3;--a:#ffb454;--b:#3d5afe;--c:#ffe500}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;padding:56px 24px}
+  .head{max-width:1000px;margin:0 auto 40px}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:34px;margin:0 0 8px;letter-spacing:-.02em}
+  .head p{color:var(--muted);max-width:64ch;margin:0;font-size:15px}
+  .grid{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  a.card{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;transition:transform .15s,border-color .15s}
+  a.card:hover{transform:translateY(-3px)}
+  .swatch{height:88px;display:flex;align-items:center;padding:0 18px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.15em;text-transform:uppercase}
+  .s-console{background:linear-gradient(120deg,#0a1418,#132a31);color:var(--a);border-bottom:1px solid var(--line)}
+  .s-atlas{background:linear-gradient(120deg,#eef1ff,#fff);color:var(--b)}
+  .s-signal{background:repeating-linear-gradient(-45deg,var(--c) 0 16px,#101014 16px 17px);color:#101014;font-weight:700}
+  .cbody{padding:16px 18px}
+  .cbody b{font-family:'Space Grotesk',sans-serif;font-size:18px;display:block;margin-bottom:6px}
+  .cbody p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+  .cbody .go{margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink)}
+  a.card:hover .go{color:var(--a)}
+  .note{max-width:1000px;margin:36px auto 0;color:var(--muted);font-size:13px;font-family:'JetBrains Mono',monospace}
+  @media(max-width:800px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Lute — admin panel, three directions</h1>
+    <p>All three show the same signature screen: a Git-managed job, its rich typed inputs (select, multiselect, date, toggle, secret), and triggering a build. Compare the design language, not the features.</p>
+  </div>
+  <div class="grid">
+    <a class="card" href="console.html">
+      <div class="swatch s-console">01 · Console</div>
+      <div class="cbody"><b>Console</b><p>Dark instrument panel. Monospace, dense, config-as-code front and center with a source ⇄ form toggle. For the programmatic crowd.</p><div class="go">open console.html →</div></div>
+    </a>
+    <a class="card" href="atlas.html">
+      <div class="swatch s-atlas">02 · Atlas</div>
+      <div class="cbody"><b>Atlas</b><p>Light, calm, product-grade SaaS. Generous whitespace, soft cards, one confident cobalt hue. The rich inputs get room to breathe.</p><div class="go">open atlas.html →</div></div>
+    </a>
+    <a class="card" href="signal.html">
+      <div class="swatch s-signal">03 · Signal</div>
+      <div class="cbody"><b>Signal</b><p>Opinionated industrial control-room. Bold color-blocking, hazard-signal yellow, status ribbon. Operations-first, unmistakable.</p><div class="go">open signal.html →</div></div>
+    </a>
+  </div>
+  <div class="note">// static mockups · open any file directly in a browser · see PRODUCT.md for the architecture</div>
+</body>
+</html>

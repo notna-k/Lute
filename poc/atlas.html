@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lute · Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --sub:#fbfcfe; --line:#e7eaf3; --line-2:#eef0f7;
+    --ink:#171a26; --muted:#6b7189; --dim:#a3a9bd;
+    --brand:#3d5afe; --brand-2:#6f7dff; --brand-wash:#eef1ff;
+    --ok:#16a373; --ok-wash:#e6f7f0; --warn:#c9820a; --warn-wash:#fdf4e3; --err:#d84a4a; --err-wash:#fbecec;
+    --violet:#7a5af8;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+    --sans:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --shadow:0 1px 2px rgba(20,25,50,.04), 0 8px 24px -12px rgba(20,25,50,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:14px; line-height:1.55; -webkit-font-smoothing:antialiased}
+  .app{display:grid; grid-template-columns:240px 1fr; min-height:100vh}
+
+  /* rail */
+  .rail{background:var(--card); border-right:1px solid var(--line); padding:20px 16px; display:flex; flex-direction:column; gap:24px; position:sticky; top:0; height:100vh}
+  .brand{display:flex; align-items:center; gap:11px}
+  .glyph{width:30px;height:30px;border-radius:9px;background:linear-gradient(145deg,var(--brand),var(--brand-2)); position:relative; box-shadow:0 6px 16px -6px rgba(61,90,254,.6)}
+  .glyph::after{content:"";position:absolute;inset:8px 9px;border-radius:3px;border:2px solid rgba(255,255,255,.9);border-right-color:transparent;border-bottom-color:transparent}
+  .brand b{font-family:var(--disp); font-weight:700; font-size:17px; letter-spacing:-.01em}
+  .brand small{display:block; color:var(--dim); font-size:11px; font-weight:500}
+  .lbl{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); padding:0 10px 8px}
+  nav a{display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:10px; color:var(--muted); text-decoration:none; font-weight:500; font-size:13.5px}
+  nav a svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7}
+  nav a:hover{background:var(--sub); color:var(--ink)}
+  nav a.on{background:var(--brand-wash); color:var(--brand)}
+  nav a .ct{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--dim)}
+  .rail .foot{margin-top:auto; background:var(--sub); border:1px solid var(--line); border-radius:12px; padding:12px}
+  .rail .foot b{font-size:12.5px} .rail .foot p{margin:2px 0 0; color:var(--muted); font-size:12px}
+
+  /* main */
+  main{min-width:0}
+  .top{background:rgba(246,247,251,.8); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:14px 32px; display:flex; align-items:center; gap:14px; position:sticky; top:0; z-index:10}
+  .crumb{color:var(--muted); font-size:13px}
+  .crumb b{color:var(--ink)} .crumb span{color:var(--dim); margin:0 7px}
+  .search{margin-left:auto; display:flex; align-items:center; gap:9px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 12px; color:var(--dim); font-size:13px; width:240px}
+  .avatar{width:30px;height:30px;border-radius:50%; background:linear-gradient(135deg,#ffd27a,#ff8fab); box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--line)}
+
+  .wrap{padding:28px 32px; max-width:1160px}
+  .head{display:flex; align-items:flex-start; gap:16px; margin-bottom:24px}
+  .head h1{font-family:var(--disp); font-size:28px; letter-spacing:-.02em; margin:0 0 8px; display:flex; align-items:center; gap:12px}
+  .tag{font-family:var(--sans); font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px}
+  .tag.git{color:var(--brand); background:var(--brand-wash)}
+  .head p{margin:0; color:var(--muted); max-width:64ch}
+  .head .src{margin-top:12px; display:inline-flex; align-items:center; gap:9px; font-family:var(--mono); font-size:12px; color:var(--muted); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:6px 11px}
+  .head .src .b{color:var(--ink)} .head .src .h{color:var(--ok)}
+  .head .spacer{flex:1}
+  .head .status{text-align:right}
+  .head .status .big{font-family:var(--disp); font-size:22px; color:var(--ok)}
+  .head .status small{color:var(--muted)}
+
+  .cols{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:24px; align-items:start}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow)}
+  .card .ch{padding:18px 20px 0; display:flex; align-items:center; gap:12px}
+  .card .ch h2{font-family:var(--disp); font-size:16px; margin:0} .card .ch p{margin:3px 0 0; color:var(--muted); font-size:12.5px}
+  .card .cb{padding:8px 20px 20px}
+
+  .field{padding:16px 0; border-bottom:1px solid var(--line-2)}
+  .field:last-child{border-bottom:0}
+  .flabel{display:flex; align-items:center; gap:8px; margin-bottom:10px}
+  .flabel .n{font-weight:600; font-size:14px}
+  .flabel .req{font-size:11px; font-weight:600; color:var(--brand); background:var(--brand-wash); padding:2px 7px; border-radius:12px}
+  .flabel .var{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--dim)}
+  .desc{color:var(--muted); font-size:12.5px; margin:9px 0 0}
+  input[type=text]{width:100%; font-family:var(--sans); font-size:14px; color:var(--ink); background:var(--sub); border:1px solid var(--line); border-radius:11px; padding:11px 13px}
+  input[type=text]:focus{outline:none; border-color:var(--brand); background:var(--card); box-shadow:0 0 0 4px rgba(61,90,254,.12)}
+
+  .sel{position:relative}
+  .sel .box{display:flex; align-items:center; gap:11px; background:var(--sub); border:1px solid var(--line); border-radius:11px; padding:11px 13px; cursor:pointer}
+  .sel .box .caret{margin-left:auto; color:var(--dim); transition:.15s}
+  .sel.open .box{border-color:var(--brand); background:var(--card); box-shadow:0 0 0 4px rgba(61,90,254,.12)}
+  .sel.open .caret{transform:rotate(180deg)}
+  .swatch{width:22px;height:22px;border-radius:7px}
+  .sw-dev{background:linear-gradient(135deg,#7ee0c0,#16a373)} .sw-stg{background:linear-gradient(135deg,#ffd27a,#f0a92a)} .sw-prod{background:linear-gradient(135deg,#ff9db0,#d84a4a)}
+  .menu{position:absolute; z-index:6; top:calc(100% + 8px); left:0; right:0; background:var(--card); border:1px solid var(--line); border-radius:13px; padding:7px; box-shadow:0 20px 44px -16px rgba(20,25,50,.28); display:none}
+  .sel.open .menu{display:block}
+  .opt{display:flex; align-items:center; gap:11px; padding:10px 11px; border-radius:9px; cursor:pointer}
+  .opt:hover{background:var(--brand-wash)}
+  .opt .m{font-size:12px; color:var(--muted)} .opt b{font-size:13.5px}
+  .opt .check{margin-left:auto; color:var(--brand); opacity:0}
+  .opt.on .check{opacity:1}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px; background:var(--sub); border:1px solid var(--line); border-radius:11px; padding:9px 11px}
+  .chip{display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:500; background:var(--brand-wash); color:var(--brand); border-radius:8px; padding:5px 10px}
+  .chip .x{opacity:.6; cursor:pointer} .chip.add{background:var(--card); border:1px dashed var(--line); color:var(--muted); cursor:pointer}
+
+  .date{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap}
+  .date .disp{font-family:var(--mono); font-size:14px; background:var(--sub); border:1px solid var(--line); border-radius:11px; padding:11px 13px; flex:1; min-width:150px; display:flex; align-items:center; gap:10px}
+  .date .disp .c{color:var(--brand)}
+  .cal{background:var(--card); border:1px solid var(--line); border-radius:13px; padding:14px; width:236px; box-shadow:var(--shadow)}
+  .cal .h{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-family:var(--disp); font-size:14px}
+  .cal .h span{color:var(--dim); cursor:pointer; padding:2px 6px; border-radius:6px}
+  .g7{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; text-align:center}
+  .g7 i{font-size:10px; color:var(--dim); font-style:normal; padding:4px 0}
+  .g7 b{font-family:var(--mono); font-weight:400; font-size:12.5px; color:var(--muted); padding:6px 0; border-radius:8px; cursor:pointer}
+  .g7 b:hover{background:var(--sub)}
+  .g7 b.on{background:var(--brand); color:#fff; font-weight:600}
+
+  .tgl{display:inline-flex; align-items:center; gap:11px; cursor:pointer}
+  .track{width:46px;height:26px;border-radius:20px; background:#dfe3f0; position:relative; transition:.16s}
+  .knob{position:absolute; top:3px; left:3px; width:20px;height:20px;border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:.16s}
+  .tgl.on .track{background:var(--brand)} .tgl.on .knob{left:23px}
+  .tval{font-weight:500; color:var(--muted)}
+
+  .secret{display:flex; align-items:center; gap:11px; background:var(--sub); border:1px solid var(--line); border-radius:11px; padding:11px 13px}
+  .secret .ic{width:22px;height:22px;border-radius:7px; background:linear-gradient(135deg,#c3b5ff,var(--violet)); display:grid; place-items:center; color:#fff; font-size:12px}
+  .secret code{font-family:var(--mono); color:var(--muted); letter-spacing:.2em}
+  .secret .from{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--dim)}
+
+  .footbar{display:flex; align-items:center; gap:14px; margin-top:20px; padding:16px 20px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow)}
+  .footbar .lead{color:var(--muted); font-size:13px} .footbar .lead b{color:var(--ink)}
+  .btn{font-family:var(--sans); font-weight:600; font-size:14px; border-radius:11px; border:1px solid var(--line); background:var(--card); color:var(--muted); padding:11px 18px; cursor:pointer}
+  .btn.primary{margin-left:auto; border:0; color:#fff; background:linear-gradient(135deg,var(--brand),var(--brand-2)); box-shadow:0 10px 22px -10px rgba(61,90,254,.7); display:inline-flex; align-items:center; gap:9px}
+  .btn.primary:hover{filter:brightness(1.05)}
+
+  /* side */
+  .side{display:flex; flex-direction:column; gap:24px}
+  .metrics{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .metric{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:var(--shadow)}
+  .metric .k{font-family:var(--disp); font-size:24px} .metric small{color:var(--muted); font-size:12px}
+  .metric.a .k{color:var(--ok)} .metric.b .k{color:var(--ink)}
+  .build{display:flex; align-items:center; gap:11px; padding:12px 0; border-bottom:1px solid var(--line-2); font-size:13.5px}
+  .build:last-child{border-bottom:0}
+  .build .id{font-family:var(--mono); font-size:12px; color:var(--muted)} .build .env{color:var(--ink); font-weight:500}
+  .build .when{margin-left:auto; font-size:12px; color:var(--dim); font-family:var(--mono)}
+  .st{font-size:11px; font-weight:600; padding:4px 9px; border-radius:20px}
+  .st.ok{color:var(--ok); background:var(--ok-wash)} .st.run{color:var(--warn); background:var(--warn-wash)} .st.err{color:var(--err); background:var(--err-wash)}
+  .st.run::before{content:"●"; animation:pulse 1.2s infinite; margin-right:5px}
+  @keyframes pulse{50%{opacity:.3}}
+
+  @media(max-width:1080px){ .cols{grid-template-columns:1fr} .app{grid-template-columns:1fr} .rail{display:none} }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><div class="glyph"></div><div><b>Lute</b><small>orchestration</small></div></div>
+    <div>
+      <div class="lbl">Operate</div>
+      <nav>
+        <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/></svg> Jobs <span class="ct">12</span></a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Builds <span class="ct">340</span></a>
+        <a href="#"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/></svg> Workers <span class="ct">3</span></a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16M6 12h12M9 17h6"/></svg> Queue</a>
+      </nav>
+      <div class="lbl" style="margin-top:16px">Configure</div>
+      <nav>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M6 3v12a3 3 0 003 3h6M18 3v6"/><circle cx="18" cy="18" r="2.5"/><circle cx="6" cy="4" r="1.5"/></svg> Git sources</a>
+        <a href="#"><svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M17 12v4"/></svg> API keys</a>
+        <a href="#"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg> Secrets</a>
+      </nav>
+    </div>
+    <div class="foot"><b>3 workers online</b><p>eu-central · us-east · queue idle</p></div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div class="crumb"><b>Jobs</b><span>/</span>deploy<span>/</span><b>web-release</b></div>
+      <div class="search">⌕ Search jobs, builds, workers…</div>
+      <div class="avatar"></div>
+    </div>
+
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <h1>web-release <span class="tag git">Git-managed</span></h1>
+          <p>Builds and ships the marketing site. This definition is synced from Git — trigger and watch builds here; change the config in the repo.</p>
+          <div class="src">⎇ infra/jobs · <span class="b">deploy/web-release.yaml</span> · <span class="h">✓ in sync @a91f0c</span></div>
+        </div>
+        <div class="spacer"></div>
+        <div class="status"><div class="big">98%</div><small>success · 30d</small></div>
+      </div>
+
+      <div class="cols">
+        <!-- LEFT -->
+        <div>
+          <section class="card">
+            <div class="ch"><div><h2>Run a build</h2><p>Fill the inputs this job declares, then dispatch.</p></div></div>
+            <div class="cb">
+              <div class="field">
+                <div class="flabel"><span class="n">Target environment</span><span class="req">Required</span><span class="var">ENVIRONMENT</span></div>
+                <div class="sel" id="sel" onclick="toggleSel(event)">
+                  <div class="box"><span class="swatch sw-stg"></span><b>Staging</b><span class="m" style="color:var(--muted)">· staging.lute.dev</span><span class="caret">▾</span></div>
+                  <div class="menu">
+                    <div class="opt" onclick="pick(this,'sw-dev','Development','dev.lute.dev')"><span class="swatch sw-dev"></span><div><b>Development</b><div class="m">dev.lute.dev</div></div><span class="check">✓</span></div>
+                    <div class="opt on" onclick="pick(this,'sw-stg','Staging','staging.lute.dev')"><span class="swatch sw-stg"></span><div><b>Staging</b><div class="m">staging.lute.dev</div></div><span class="check">✓</span></div>
+                    <div class="opt" onclick="pick(this,'sw-prod','Production','www.lute.dev')"><span class="swatch sw-prod"></span><div><b>Production</b><div class="m">www.lute.dev · approval required</div></div><span class="check">✓</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="flabel"><span class="n">Regions</span><span class="var">REGIONS</span></div>
+                <div class="chips">
+                  <span class="chip">eu-central <span class="x">✕</span></span>
+                  <span class="chip">us-east <span class="x">✕</span></span>
+                  <span class="chip add">+ Add region</span>
+                </div>
+                <p class="desc">Passed to the command as a comma-separated list.</p>
+              </div>
+
+              <div class="field">
+                <div class="flabel"><span class="n">Release date</span><span class="var">RELEASE_DATE</span></div>
+                <div class="date">
+                  <div class="disp"><span class="c">▦</span> 2026-07-25</div>
+                  <div class="cal">
+                    <div class="h"><span>‹</span><span style="font-family:var(--disp)">July 2026</span><span>›</span></div>
+                    <div class="g7"><i>Mo</i><i>Tu</i><i>We</i><i>Th</i><i>Fr</i><i>Sa</i><i>Su</i>
+                      <b>21</b><b>22</b><b>23</b><b>24</b><b class="on">25</b><b>26</b><b>27</b>
+                      <b>28</b><b>29</b><b>30</b><b>31</b><b style="color:var(--dim)">1</b><b style="color:var(--dim)">2</b><b style="color:var(--dim)">3</b>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="flabel"><span class="n">Dry run</span><span class="var">DRY_RUN</span></div>
+                <div class="tgl on" onclick="this.classList.toggle('on'); this.querySelector('.tval').textContent=this.classList.contains('on')?'Enabled':'Disabled'">
+                  <div class="track"><div class="knob"></div></div><span class="tval">Enabled</span>
+                </div>
+                <p class="desc">Produces a plan without shifting any traffic.</p>
+              </div>
+
+              <div class="field">
+                <div class="flabel"><span class="n">Deploy token</span><span class="var">DEPLOY_TOKEN</span></div>
+                <div class="secret"><span class="ic">🔒</span><code>••••••••••••</code><span class="from">secrets/deploy · never logged</span></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="footbar">
+            <span class="lead">Dispatches to <b>deploy</b> · worker <b>region=eu</b> · typical wait <b>&lt; 1s</b></span>
+            <button class="btn">Save as preset</button>
+            <button class="btn primary">Run build →</button>
+          </div>
+        </div>
+
+        <!-- RIGHT -->
+        <aside class="side">
+          <div class="metrics">
+            <div class="metric a"><div class="k">1m 12s</div><small>median build</small></div>
+            <div class="metric b"><div class="k">340</div><small>builds · 30d</small></div>
+          </div>
+          <section class="card">
+            <div class="ch"><div><h2>Recent builds</h2></div></div>
+            <div class="cb" style="padding-top:2px">
+              <div class="build"><span class="st run">running</span><span class="env">staging</span><span class="id">#4127</span><span class="when">20s ago</span></div>
+              <div class="build"><span class="st ok">Passed</span><span class="env">staging</span><span class="id">#4126</span><span class="when">4m</span></div>
+              <div class="build"><span class="st err">Failed</span><span class="env">prod</span><span class="id">#4125</span><span class="when">1h</span></div>
+              <div class="build"><span class="st ok">Passed</span><span class="env">dev</span><span class="id">#4124</span><span class="when">2h</span></div>
+              <div class="build"><span class="st ok">Passed</span><span class="env">staging</span><span class="id">#4123</span><span class="when">3h</span></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+  function toggleSel(e){ if(e.target.closest('.opt')) return; document.getElementById('sel').classList.toggle('open'); }
+  function pick(el,sw,name,host){
+    const box=el.closest('.sel').querySelector('.box');
+    box.innerHTML='<span class="swatch '+sw+'"></span><b>'+name+'</b><span class="m" style="color:var(--muted)">· '+host+'</span><span class="caret">▾</span>';
+    el.closest('.menu').querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));
+    el.classList.add('on'); el.closest('.sel').classList.remove('open');
+  }
+  document.addEventListener('click',e=>{ if(!e.target.closest('.sel')) document.getElementById('sel').classList.remove('open'); });
+</script>
+</body>
+</html>
