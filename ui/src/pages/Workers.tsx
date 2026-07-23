@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Server } from 'lucide-react';
 import {
   useDeleteWorker,
   useReEnableWorker,
   useUserWorkers,
 } from '@/hooks/useWorkers';
 import type { Worker } from '@/types';
-import { Alert, Button, Input, PageHeader } from '@/components/ui';
+import { Alert, Button, EmptyState, Input, PageHeader } from '@/components/ui';
 import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
 import { DeleteWorkerDialog } from '@/features/workers/DeleteWorkerDialog';
 import { WorkerList } from '@/features/workers/WorkerList';

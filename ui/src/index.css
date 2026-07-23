@@ -48,47 +48,48 @@
     --color-info-fg: 29 78 216;
   }
 
+  /* Console — petrol-dark instrument palette, amber signal accent. */
   .dark {
-    --color-bg: 2 6 23;
-    --color-bg-subtle: 15 23 42;
-    --color-bg-muted: 30 41 59;
-    --color-bg-elevated: 15 23 42;
-    --color-bg-inverse: 248 250 252;
+    --color-bg: 10 20 24;
+    --color-bg-subtle: 15 30 36;
+    --color-bg-muted: 19 42 49;
+    --color-bg-elevated: 15 30 36;
+    --color-bg-inverse: 231 240 241;
 
-    --color-surface: 15 23 42;
-    --color-surface-hover: 30 41 59;
-    --color-surface-active: 51 65 85;
+    --color-surface: 15 30 36;
+    --color-surface-hover: 19 42 49;
+    --color-surface-active: 29 59 68;
 
-    --color-border: 30 41 59;
-    --color-border-strong: 51 65 85;
-    --color-border-subtle: 15 23 42;
+    --color-border: 29 59 68;
+    --color-border-strong: 42 79 89;
+    --color-border-subtle: 19 42 49;
 
-    --color-fg: 241 245 249;
-    --color-fg-muted: 148 163 184;
-    --color-fg-subtle: 100 116 139;
-    --color-fg-on-primary: 255 255 255;
-    --color-fg-inverse: 15 23 42;
+    --color-fg: 231 240 241;
+    --color-fg-muted: 127 160 166;
+    --color-fg-subtle: 79 113 120;
+    --color-fg-on-primary: 26 18 6;
+    --color-fg-inverse: 10 20 24;
 
-    --color-primary: 59 130 246;
-    --color-primary-hover: 96 165 250;
-    --color-primary-active: 147 197 253;
-    --color-primary-subtle: 30 58 138;
+    --color-primary: 255 180 84;
+    --color-primary-hover: 255 192 111;
+    --color-primary-active: 255 202 133;
+    --color-primary-subtle: 58 42 18;
 
-    --color-success: 34 197 94;
-    --color-success-subtle: 20 83 45;
-    --color-success-fg: 134 239 172;
+    --color-success: 57 215 195;
+    --color-success-subtle: 15 46 43;
+    --color-success-fg: 111 240 224;
 
-    --color-warning: 245 158 11;
-    --color-warning-subtle: 120 53 15;
-    --color-warning-fg: 252 211 77;
+    --color-warning: 255 180 84;
+    --color-warning-subtle: 58 42 18;
+    --color-warning-fg: 255 202 133;
 
-    --color-danger: 239 68 68;
-    --color-danger-subtle: 127 29 29;
-    --color-danger-fg: 252 165 165;
+    --color-danger: 255 107 107;
+    --color-danger-subtle: 58 26 26;
+    --color-danger-fg: 255 179 179;
 
-    --color-info: 59 130 246;
-    --color-info-subtle: 30 58 138;
-    --color-info-fg: 147 197 253;
+    --color-info: 155 140 255;
+    --color-info-subtle: 40 34 74;
+    --color-info-fg: 190 182 255;
   }
 
   html {

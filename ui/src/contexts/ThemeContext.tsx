@@ -30,7 +30,8 @@ function readStoredMode(): ThemeMode {
   } catch {
     /* ignore */
   }
-  return 'system';
+  // Console is a dark-first design; default new visitors to dark.
+  return 'dark';
 }
 
 function systemPrefersDark(): boolean {

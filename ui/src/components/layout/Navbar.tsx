@@ -7,6 +7,7 @@ import {
   Server,
   Settings,
   Terminal,
+  Workflow,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,8 +24,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, match: (p) => p === '/' || p === '/dashboard' },
+  { to: '/jobs', label: 'Jobs', icon: Workflow, match: (p) => p.startsWith('/jobs') },
   { to: '/workers', label: 'Workers', icon: Server, match: (p) => p.startsWith('/workers') },
-  { to: '/executions', label: 'Executions', icon: Terminal, match: (p) => p.startsWith('/executions') || p.startsWith('/jobs') },
+  { to: '/executions', label: 'Executions', icon: Terminal, match: (p) => p.startsWith('/executions') },
   { to: '/settings', label: 'Settings', icon: Settings, match: (p) => p.startsWith('/settings') },
 ];
 
