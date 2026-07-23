@@ -17,6 +17,7 @@ func RegisteredModels() []any {
 		&models.WorkerSnapshot{},
 		&models.JobExecution{},
 		&models.APIKey{},
+		&models.JobDefinition{},
 		&models.Run{},
 		&models.WebhookDelivery{},
 		&models.QueueSlot{},

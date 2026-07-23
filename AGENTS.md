@@ -18,7 +18,7 @@ Agents should preserve:
 
 ```text
 Lute/
-├── api/                    # Go module github.com/lute/api — HTTP API, WS, gRPC, embedded SPA
+├── api/                    # Go module github.com/lute/api — Core: HTTP API, WS, gRPC (panel is a separate container now)
 │   ├── cmd/api/            # API entrypoint
 │   └── internal/           # All implementation (handlers, repos, queue, middleware, ui embed)
 ├── worker/                 # Go module github.com/lute/worker — standalone worker CLI (Docker/git runners, heartbeat, metrics)
@@ -26,7 +26,7 @@ Lute/
 │   └── internal/
 ├── shared/proto/           # Go module github.com/lute/proto — protobuf/gRPC definitions & generated code (do not hand-edit generated files)
 ├── ui/                     # React + Vite + TypeScript SPA (JWT auth against the API; TanStack Query)
-├── infrastructure/dev/     # Docker Compose, `.env` for local stack (SQLite + API image build)
+├── infrastructure/dev/     # Docker Compose: three containers (postgres + core + admin); `jobdefs/` job-definition YAML
 ├── Makefile                # Primary automation (compose, worker builds, lint, release-ish targets)
 ├── .golangci.yml           # golangci-lint v2; excludes generated proto tree
 ├── .zed/settings.json      # Optional repo-local Zed (ESLint via `ui/`, format-on-save)
@@ -49,7 +49,8 @@ Lute/
 |------|-------------|
 | Go | **1.26** (`go 1.26.0` in `api/go.mod`, `worker/go.mod`, `shared/proto/go.mod`) |
 | Node | **25.x** — required for `ui/` (`engines`, `ui/.nvmrc`, repo `.nvmrc`); Docker UI stages use **`node:25-alpine`**. |
-| SQLite | **file-backed** in API (`modernc.org/sqlite`); persists domain data **and** the job queue (`SQLITE_PATH`, default `lute.db`) |
+| PostgreSQL | **Primary/deployed DB** (`DB_DRIVER=postgres`, `POSTGRES_DSN`); persists domain data **and** the job queue. Compose runs it as its own container. |
+| SQLite | **Optional** for quick native runs (`DB_DRIVER=sqlite`, `SQLITE_PATH`). Not used by the Compose stack. |
 
 Agents must **not** silently downgrade language versions or swap major framework versions without explicit instruction.
 

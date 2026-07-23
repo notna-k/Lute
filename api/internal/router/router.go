@@ -8,6 +8,7 @@ import (
 	"github.com/lute/api/internal/db/repos"
 	luteGrpc "github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/health"
+	"github.com/lute/api/internal/jobdefs"
 	"github.com/lute/api/internal/jobs"
 	"github.com/lute/api/internal/middleware"
 	"github.com/lute/api/internal/publicapi"
@@ -32,6 +33,7 @@ type SetupRouterDeps struct {
 	JobExecutionRepo   *repos.JobExecutionRepository
 	APIKeyRepo         *repos.APIKeyRepository
 	RunRepo            *repos.RunRepository
+	JobDefRepo         *repos.JobDefinitionRepository
 	Hub                *websocket.Hub
 	QueueEngine        *queue.Engine
 	StatsAgg           *queue.StatsAggregator
@@ -64,6 +66,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	apiKeysHandler := publicapi.NewAPIKeysHandler(d.APIKeyRepo)
 
 	jobHandler := jobs.NewJobHandler(d.QueueEngine, d.StatsAgg, d.GRPCServer, d.JobExecutionRepo)
+	jobDefHandler := jobdefs.NewHandler(d.JobDefRepo, d.RunRepo, d.JobExecutionRepo, d.QueueEngine, d.StatsAgg, d.GRPCServer)
 	executionsHandler := jobs.NewExecutionsHandler(d.JobExecutionRepo)
 	queueHandler := jobs.NewQueueHandler(d.QueueEngine, d.StatsAgg)
 	dlqHandler := jobs.NewDLQHandler(d.QueueEngine, d.GRPCServer)
@@ -81,6 +84,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 		authed.Use(authedMW)
 		{
 			jobs.SetupRoutes(authed, jobHandler, queueHandler, dlqHandler, executionsHandler)
+			jobdefs.SetupRoutes(authed, jobDefHandler)
 			publicapi.SetupAPIKeyRoutes(authed, apiKeysHandler)
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/jobdefs"
 	"github.com/lute/api/internal/queue"
 )
 
@@ -32,6 +33,7 @@ type Dependencies struct {
 	RunRepo            *repos.RunRepository
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	RefreshTokenRepo   *repos.RefreshTokenRepository
+	JobDefRepo         *repos.JobDefinitionRepository
 	TokenService       *auth.TokenService
 	AuthService        *auth.Service
 }
@@ -64,6 +66,11 @@ func Initialize() (*Dependencies, error) {
 		return nil, err
 	}
 
+	jobDefRepo := repos.NewJobDefinitionRepository(db.DB)
+	if _, err := jobdefs.Sync(context.Background(), jobDefRepo, cfg.JobDefs.Dir); err != nil {
+		return nil, err
+	}
+
 	return &Dependencies{
 		Config:             cfg,
 		Database:           db,
@@ -80,6 +87,7 @@ func Initialize() (*Dependencies, error) {
 		RunRepo:            reposInit.RunRepo,
 		WebhookRepo:        reposInit.WebhookRepo,
 		RefreshTokenRepo:   reposInit.RefreshTokenRepo,
+		JobDefRepo:         jobDefRepo,
 		TokenService:       tokenSvc,
 		AuthService:        authSvc,
 	}, nil

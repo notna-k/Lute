@@ -10,6 +10,12 @@ type Run struct {
 	APIKeyID       id.ID             `json:"api_key_id,omitempty" gorm:"size:24"`
 	Queue          string            `json:"queue"`
 	Type           string            `json:"type"`
+	// JobSlug links a run to the JobDefinition that produced it. Empty for
+	// ad-hoc runs (the hybrid model in PRODUCT.md).
+	JobSlug        string            `json:"job_slug,omitempty" gorm:"column:job_slug;size:191;index"`
+	// Environment is the resolved value of a job's `environment` parameter,
+	// surfaced on the build list. Optional.
+	Environment    string            `json:"environment,omitempty" gorm:"column:environment;size:64"`
 	IdempotencyKey string            `json:"idempotency_key,omitempty" gorm:"size:191"`
 	WebhookURL     string            `json:"webhook_url,omitempty"`
 	WebhookSecret  string            `json:"-"`

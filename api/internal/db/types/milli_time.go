@@ -90,7 +90,12 @@ func (m *MilliTime) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (m MilliTime) GormDataType(_ string) string {
+// GormDataType makes GORM store MilliTime as an integer column (BIGINT) on every
+// dialect. The signature MUST be parameterless to satisfy GORM's
+// GormDataTypeInterface — with a parameter GORM ignores it and falls back to the
+// embedded time.Time, producing a timestamptz column that rejects our millis on
+// PostgreSQL (SQLite's loose typing hid this).
+func (MilliTime) GormDataType() string {
 	return "bigint"
 }
 

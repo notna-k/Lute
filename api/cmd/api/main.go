@@ -31,6 +31,7 @@ func main() {
 		APIKeyRepo:         deps.APIKeyRepo,
 		RunRepo:            deps.RunRepo,
 		WebhookRepo:        deps.WebhookRepo,
+		JobDefRepo:         deps.JobDefRepo,
 		QueueEngine:        deps.QueueEngine,
 		QueueScheduler:     deps.QueueScheduler,
 		StatsAgg:           deps.StatsAggregator,

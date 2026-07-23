@@ -13,9 +13,15 @@ function formatDuration(ms: number): string {
 }
 
 function JobCard({ job }: { job: JobDefinition }) {
+  const hasBuilds = job.medianDurationMs > 0 || job.successRate > 0;
   const rate = Math.round(job.successRate * 100);
-  const rateTone =
-    rate >= 97 ? 'text-success' : rate >= 90 ? 'text-warning' : 'text-danger';
+  const rateTone = !hasBuilds
+    ? 'text-fg-subtle'
+    : rate >= 97
+      ? 'text-success'
+      : rate >= 90
+        ? 'text-warning'
+        : 'text-danger';
   return (
     <Link
       to={`/jobs/${job.slug}`}
@@ -34,8 +40,10 @@ function JobCard({ job }: { job: JobDefinition }) {
           <p className='mt-1 line-clamp-2 text-xs text-fg-muted'>{job.description}</p>
         </div>
         <div className='ml-auto text-right'>
-          <div className={`font-mono text-lg font-bold ${rateTone}`}>{rate}%</div>
-          <div className='text-xxs text-fg-subtle'>30d</div>
+          <div className={`font-mono text-lg font-bold ${rateTone}`}>
+            {hasBuilds ? `${rate}%` : '—'}
+          </div>
+          <div className='text-xxs text-fg-subtle'>{hasBuilds ? '30d' : 'no builds'}</div>
         </div>
       </div>
       <div className='flex items-center gap-4 border-t border-border-subtle pt-3 font-mono text-xxs text-fg-subtle'>
@@ -44,7 +52,8 @@ function JobCard({ job }: { job: JobDefinition }) {
         </span>
         <span className='truncate'>{job.runtime}</span>
         <span className='ml-auto inline-flex items-center gap-1'>
-          <Timer className='h-3 w-3' /> {formatDuration(job.medianDurationMs)}
+          <Timer className='h-3 w-3' />{' '}
+          {job.medianDurationMs > 0 ? formatDuration(job.medianDurationMs) : '—'}
         </span>
       </div>
     </Link>

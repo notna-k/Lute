@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, GitBranch, Play, Lock } from 'lucide-react';
-import { getJob, listBuilds } from '@/services/jobDefService';
+import { getJob, listBuilds, triggerBuild } from '@/services/jobDefService';
 import { ParameterForm } from '@/features/jobs/ParameterForm';
 import { Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import type { Build, JobDefinition } from '@/types/jobs';
+import type { Build, JobDefinition, ParameterValues } from '@/types/jobs';
 
 function relativeTime(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000);
@@ -89,40 +89,29 @@ function RecentBuilds({ builds }: { builds: Build[] }) {
   );
 }
 
-function LiveLog() {
+function LiveLog({ running }: { running?: Build }) {
   return (
     <div className='overflow-hidden rounded-xl border border-border bg-bg'>
       <div className='flex items-center gap-2 border-b border-border px-3 py-2.5 font-mono text-xxs text-fg-subtle'>
         <span className='h-2.5 w-2.5 rounded-full bg-danger' />
         <span className='h-2.5 w-2.5 rounded-full bg-warning' />
         <span className='h-2.5 w-2.5 rounded-full bg-success' />
-        <span className='ml-1'>#4127 · live tail</span>
+        <span className='ml-1'>{running ? `#${running.id} · live tail` : 'log tail'}</span>
       </div>
-      <pre className='scrollbar-thin max-h-56 overflow-auto p-3 font-mono text-xs leading-relaxed text-fg-muted'>
-        <span className='text-fg-subtle'>12:04:01</span>{' '}
-        <span className='text-success'>▸</span>{' '}
-        <span className='text-fg'>clone infra/jobs @a91f0c</span>
-        {'\n'}
-        <span className='text-fg-subtle'>12:04:02</span>{' '}
-        <span className='text-success'>▸</span> pull node:25-alpine …{' '}
-        <span className='text-success'>ok</span>
-        {'\n'}
-        <span className='text-fg-subtle'>12:04:04</span>{' '}
-        <span className='text-warning'>▸</span> ENVIRONMENT=staging DRY_RUN=true
-        {'\n'}
-        <span className='text-fg-subtle'>12:04:05</span>{' '}
-        <span className='text-success'>▸</span> ./scripts/ship.sh
-        {'\n'}
-        <span className='text-fg-subtle'>12:04:07</span> building bundle…
-        {'\n'}
-        <span className='text-fg-subtle'>12:04:11</span> uploading artifacts →{' '}
-        <span className='text-warning'>s3://lute/…</span>
-        {'\n'}
-        <span className='text-fg-subtle'>12:04:12</span>{' '}
-        <span className='text-success'>▸</span>{' '}
-        <span className='text-fg'>plan complete — 0 changes</span>
-        <span className='animate-pulse text-warning'>█</span>
-      </pre>
+      <div className='scrollbar-thin flex max-h-56 min-h-[7rem] items-center justify-center overflow-auto p-4 text-center font-mono text-xs text-fg-subtle'>
+        {running ? (
+          <span>
+            Build <span className='text-fg'>#{running.id}</span> is running.
+            Streaming from the worker…
+            <span className='animate-pulse text-warning'>█</span>
+          </span>
+        ) : (
+          <span>
+            No build streaming. Trigger a build — logs tail here live from the
+            worker while it runs.
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -130,6 +119,8 @@ function LiveLog() {
 export default function JobDetail() {
   const { slug = '' } = useParams();
   const [view, setView] = useState<'form' | 'source'>('form');
+  const [values, setValues] = useState<ParameterValues>({});
+  const queryClient = useQueryClient();
 
   const { data: job, isLoading } = useQuery({
     queryKey: ['job', slug],
@@ -138,6 +129,14 @@ export default function JobDetail() {
   const { data: builds } = useQuery({
     queryKey: ['builds', slug],
     queryFn: () => listBuilds(slug),
+  });
+
+  const trigger = useMutation({
+    mutationFn: () => triggerBuild(slug, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['builds', slug] });
+      queryClient.invalidateQueries({ queryKey: ['job', slug] });
+    },
   });
 
   if (isLoading) {
@@ -216,7 +215,7 @@ export default function JobDetail() {
             </div>
             <div className='px-4 py-3'>
               {view === 'form' ? (
-                <ParameterForm fields={job.parameters} />
+                <ParameterForm fields={job.parameters} onChange={setValues} />
               ) : (
                 <pre className='scrollbar-thin overflow-auto py-2 font-mono text-xs leading-relaxed text-fg-muted'>
                   {toYaml(job)}
@@ -230,10 +229,19 @@ export default function JobDetail() {
             <span className='font-mono text-xs text-fg-muted'>
               Dispatches to <span className='text-fg'>{job.queue}</span> · worker{' '}
               <span className='text-fg'>
-                {Object.entries(job.labelSelector).map(([k, v]) => `${k}=${v}`).join(', ')}
-              </span>{' '}
-              · wait <span className='text-fg'>&lt;1s</span>
+                {Object.entries(job.labelSelector).map(([k, v]) => `${k}=${v}`).join(', ') || 'any'}
+              </span>
             </span>
+            {trigger.isError && (
+              <span className='font-mono text-xs text-danger'>
+                {(trigger.error as Error).message}
+              </span>
+            )}
+            {trigger.isSuccess && (
+              <span className='font-mono text-xs text-success'>
+                Build #{trigger.data.id} queued
+              </span>
+            )}
             <button
               type='button'
               className='ml-auto inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-hover'
@@ -242,17 +250,19 @@ export default function JobDetail() {
             </button>
             <button
               type='button'
-              className='inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover'
+              onClick={() => trigger.mutate()}
+              disabled={trigger.isPending}
+              className='inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60'
             >
-              <Play className='h-4 w-4' /> Run build
+              <Play className='h-4 w-4' /> {trigger.isPending ? 'Running…' : 'Run build'}
             </button>
           </div>
         </div>
 
         {/* RIGHT */}
         <div className='flex flex-col gap-6'>
-          {builds && <RecentBuilds builds={builds} />}
-          <LiveLog />
+          {builds && builds.length > 0 && <RecentBuilds builds={builds} />}
+          <LiveLog running={builds?.find((b) => b.status === 'running')} />
         </div>
       </div>
     </div>

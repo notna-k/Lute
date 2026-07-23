@@ -1,34 +1,58 @@
-version: '3.8'
-
+# Lute dev stack — three separate containers:
+#   postgres  durable state + job queue
+#   core      stateless Go API (HTTP + WebSocket + gRPC), no embedded UI
+#   admin     decoupled SPA (nginx), proxies /api to core
 services:
-  api:
+  postgres:
+    image: postgres:17-alpine
+    container_name: lute-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lute}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lute}
+      POSTGRES_DB: ${POSTGRES_DB:-lute}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lute-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lute} -d ${POSTGRES_DB:-lute}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core:
     build:
       context: ../..
       dockerfile: api/Dockerfile
       args:
         - WORKER_VERSION=${WORKER_VERSION:-0.1.0}
         - BUILD_TIME=${BUILD_TIME:-unknown}
-        - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
-    container_name: lute-api
+    container_name: lute-core
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
-      - "${API_HTTP_PORT:-8080}:8080" # HTTP
-      - "${API_GRPC_PORT:-50051}:50051" # gRPC
+      - "${API_HTTP_PORT:-8081}:8080" # HTTP API (direct/programmatic access)
+      - "${API_GRPC_PORT:-50051}:50051" # gRPC (workers connect here)
     environment:
       # Server
-      SERVER_PORT: ${SERVER_PORT}
-      SERVER_HOST: ${SERVER_HOST}
-      GIN_MODE: ${GIN_MODE}
-      # SQLite (persistent app data + job queue)
-      SQLITE_PATH: ${SQLITE_PATH:-/data/lute.db}
-      SQLITE_BUSY_TIMEOUT: ${SQLITE_BUSY_TIMEOUT:-5s}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      GIN_MODE: ${GIN_MODE:-release}
+      # Database (Postgres)
+      DB_DRIVER: postgres
+      POSTGRES_DSN: postgres://${POSTGRES_USER:-lute}:${POSTGRES_PASSWORD:-lute}@postgres:5432/${POSTGRES_DB:-lute}?sslmode=disable
+      # Job definitions (GitOps source, mounted below)
+      JOB_DEFS_DIR: /etc/lute/jobdefs
       # gRPC
-      GRPC_PORT: ${GRPC_PORT}
-      GRPC_HOST: ${GRPC_HOST}
+      GRPC_PORT: ${GRPC_PORT:-50051}
+      GRPC_HOST: ${GRPC_HOST:-0.0.0.0}
       # WebSocket
-      WS_READ_BUFFER_SIZE: ${WS_READ_BUFFER_SIZE}
-      WS_WRITE_BUFFER_SIZE: ${WS_WRITE_BUFFER_SIZE}
-      WS_CHECK_ORIGIN: ${WS_CHECK_ORIGIN}
+      WS_READ_BUFFER_SIZE: ${WS_READ_BUFFER_SIZE:-1024}
+      WS_WRITE_BUFFER_SIZE: ${WS_WRITE_BUFFER_SIZE:-1024}
+      WS_CHECK_ORIGIN: ${WS_CHECK_ORIGIN:-false}
       # Auth (JWT + seeded admin)
       JWT_SECRET: ${JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-lute}
@@ -39,16 +63,35 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       # Worker binaries
       WORKER_BINARY_DIR: /opt/lute/worker-binaries
-      # Metrics snapshot job: how often we write snapshots to DB (e.g. 5s). Use 5s for chart resolution.
+      # Metrics / heartbeat
       METRICS_SNAPSHOT_INTERVAL: ${METRICS_SNAPSHOT_INTERVAL:-5s}
-      # How often we ping workers for status + metrics. Should be <= METRICS_SNAPSHOT_INTERVAL so each snapshot has fresh metrics.
       HEARTBEAT_CHECK_INTERVAL: ${HEARTBEAT_CHECK_INTERVAL:-5s}
     volumes:
-      - sqlite_data:/data
+      - ./jobdefs:/etc/lute/jobdefs:ro
     networks:
       - lute-network
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/api/health" ]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: ui/Dockerfile
+      args:
+        - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
+    container_name: lute-admin
+    restart: unless-stopped
+    depends_on:
+      - core
+    ports:
+      - "${ADMIN_PORT:-8080}:80"
+    networks:
+      - lute-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:80/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -58,4 +101,4 @@ networks:
     driver: bridge
 
 volumes:
-  sqlite_data:
+  postgres_data:

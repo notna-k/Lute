@@ -41,9 +41,31 @@ func (r *RunRepository) GetByIdempotency(ctx context.Context, userID id.ID, key 
 }
 
 type RunListFilter struct {
-	UserID id.ID
-	Queue  string
-	Type   string
+	UserID  id.ID
+	Queue   string
+	Type    string
+	JobSlug string
+}
+
+// ListByJobSlug returns the most recent runs (builds) for a job definition,
+// scoped to a user, newest first.
+func (r *RunRepository) ListByJobSlug(ctx context.Context, userID id.ID, slug string, limit int) ([]models.Run, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var rows []models.Run
+	err := r.q(ctx).
+		Where("user_id = ? AND job_slug = ?", userID.Hex(), slug).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	if rows == nil {
+		rows = []models.Run{}
+	}
+	return rows, nil
 }
 
 func (r *RunRepository) List(ctx context.Context, f RunListFilter, offset, limit int64) ([]models.Run, int64, error) {
@@ -63,6 +85,9 @@ func (r *RunRepository) List(ctx context.Context, f RunListFilter, offset, limit
 	}
 	if f.Type != "" {
 		q = q.Where("type = ?", f.Type)
+	}
+	if f.JobSlug != "" {
+		q = q.Where("job_slug = ?", f.JobSlug)
 	}
 
 	var total int64
