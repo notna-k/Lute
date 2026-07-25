@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, GitBranch, Play, Lock } from 'lucide-react';
+import { ArrowLeft, GitBranch, Play } from 'lucide-react';
 import { getJob, listBuilds, triggerBuild } from '@/services/jobDefService';
+import { ApiError } from '@/services/api';
 import { ParameterForm } from '@/features/jobs/ParameterForm';
 import { Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -129,6 +130,12 @@ export default function JobDetail() {
   const { data: builds } = useQuery({
     queryKey: ['builds', slug],
     queryFn: () => listBuilds(slug),
+    // Builds move through queued → running → passed/failed on the worker, so
+    // keep polling while any of them is still in flight.
+    refetchInterval: (query) =>
+      query.state.data?.some((b) => b.status === 'queued' || b.status === 'running')
+        ? 2000
+        : 15000,
   });
 
   const trigger = useMutation({
@@ -138,6 +145,9 @@ export default function JobDetail() {
       queryClient.invalidateQueries({ queryKey: ['job', slug] });
     },
   });
+
+  const fieldErrors =
+    trigger.error instanceof ApiError ? trigger.error.fields : undefined;
 
   if (isLoading) {
     return (
@@ -215,7 +225,11 @@ export default function JobDetail() {
             </div>
             <div className='px-4 py-3'>
               {view === 'form' ? (
-                <ParameterForm fields={job.parameters} onChange={setValues} />
+                <ParameterForm
+                  fields={job.parameters}
+                  onChange={setValues}
+                  errors={fieldErrors}
+                />
               ) : (
                 <pre className='scrollbar-thin overflow-auto py-2 font-mono text-xs leading-relaxed text-fg-muted'>
                   {toYaml(job)}
@@ -244,15 +258,9 @@ export default function JobDetail() {
             )}
             <button
               type='button'
-              className='ml-auto inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-hover'
-            >
-              <Lock className='h-3.5 w-3.5' /> Save preset
-            </button>
-            <button
-              type='button'
               onClick={() => trigger.mutate()}
               disabled={trigger.isPending}
-              className='inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60'
+              className='ml-auto inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60'
             >
               <Play className='h-4 w-4' /> {trigger.isPending ? 'Running…' : 'Run build'}
             </button>

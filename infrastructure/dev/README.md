@@ -37,6 +37,13 @@ worker  ─────────────────── gRPC ───
    override them in `.env` for anything shared. Optional auth tuning is documented
    in `.env.example`.
 
+   > **Upgrading from the old single-container stack:** the panel moved to its own
+   > container, so `ADMIN_PORT` and `API_HTTP_PORT` are now two different host
+   > ports. An `.env` carried over from before sets `API_HTTP_PORT=8080`, which
+   > now collides with the admin container and fails with
+   > `Bind for 0.0.0.0:8080 failed: port is already allocated`. Set
+   > `API_HTTP_PORT=8081` (and optionally `ADMIN_PORT=8080`) before starting.
+
 3. **Start** (from project root):
    ```bash
    make dev-up          # or: cd infrastructure/dev && docker compose up -d --build

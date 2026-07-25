@@ -62,7 +62,10 @@ type jobDTO struct {
 }
 
 type buildDTO struct {
-	ID          string `json:"id"`
+	// ID is the short, human-facing build reference (#a1b2c3d4).
+	ID string `json:"id"`
+	// RunID is the full run identifier — use this to address the build in APIs.
+	RunID       string `json:"runId"`
 	JobSlug     string `json:"jobSlug"`
 	Status      string `json:"status"`
 	Environment string `json:"environment,omitempty"`
@@ -120,9 +123,24 @@ func (h *Handler) List(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	slugs := make([]string, 0, len(defs))
+	for i := range defs {
+		slugs = append(slugs, defs[i].Slug)
+	}
+	runsBySlug, err := h.runs.ListByJobSlugs(ctx, userID, slugs, 100)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	execs, err := h.execsFor(ctx, runsBySlug)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	out := make([]jobDTO, 0, len(defs))
 	for i := range defs {
-		rate, median := h.statsFor(ctx, userID, defs[i].Slug)
+		rate, median := statsOf(runsBySlug[defs[i].Slug], execs)
 		out = append(out, h.toJobDTO(&defs[i], rate, median))
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": out})
@@ -140,7 +158,17 @@ func (h *Handler) Get(c *gin.Context) {
 		notFoundOrInternal(c, err)
 		return
 	}
-	rate, median := h.statsFor(ctx, userID, def.Slug)
+	runs, err := h.runs.ListByJobSlug(ctx, userID, def.Slug, 100)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	execs, err := h.executions.ListByJobIDs(ctx, jobIDsOf(runs))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	rate, median := statsOf(runs, execs)
 	c.JSON(http.StatusOK, h.toJobDTO(def, rate, median))
 }
 
@@ -157,9 +185,14 @@ func (h *Handler) Builds(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	execs, err := h.executions.ListByJobIDs(ctx, jobIDsOf(runs))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 	out := make([]buildDTO, 0, len(runs))
 	for i := range runs {
-		out = append(out, h.buildDTO(ctx, &runs[i]))
+		out = append(out, h.buildDTO(ctx, &runs[i], execs[runs[i].JobID]))
 	}
 	c.JSON(http.StatusOK, gin.H{"builds": out})
 }
@@ -191,7 +224,13 @@ func (h *Handler) Trigger(c *gin.Context) {
 	if verr != nil {
 		var ve *ValidationError
 		if errors.As(verr, &ve) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "invalid_parameters", "fields": ve.Fields}})
+			// `error` stays a plain string like every other handler in the API
+			// (the UI renders it directly); `fields` carries the per-input detail.
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error":  ve.Error(),
+				"code":   "invalid_parameters",
+				"fields": ve.Fields,
+			})
 			return
 		}
 		writeError(c, http.StatusBadRequest, verr.Error())
@@ -216,6 +255,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 		Type:        "container",
 		JobSlug:     def.Slug,
 		Environment: resolved.Environment,
+		Params:      resolved.Env,
 	}
 	if err := h.runs.Create(ctx, run); err != nil {
 		writeError(c, http.StatusInternalServerError, err.Error())
@@ -239,13 +279,16 @@ func (h *Handler) Trigger(c *gin.Context) {
 		h.grpcSrv.DispatchQueue(ctx, def.Queue)
 	}
 
-	c.JSON(http.StatusCreated, h.buildDTO(ctx, run))
+	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
 }
 
-// buildDTO derives a build's live status from queue + execution state.
-func (h *Handler) buildDTO(ctx context.Context, run *models.Run) buildDTO {
+// buildDTO derives a build's live status from queue + execution state. exec is
+// the already-loaded execution record for this run, or nil if it hasn't
+// finished (see execsFor / ListByJobIDs — never query per build here).
+func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.JobExecution) buildDTO {
 	b := buildDTO{
 		ID:          shortID(run.ID),
+		RunID:       run.ID.Hex(),
 		JobSlug:     run.JobSlug,
 		Status:      "queued",
 		Environment: run.Environment,
@@ -266,30 +309,43 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run) buildDTO {
 			b.StartedAt = job.StartedAt * 1000
 		}
 	}
-	if h.executions != nil {
-		if exec, err := h.executions.GetByJobID(ctx, run.JobID); err == nil {
-			b.DurationMs = exec.ElapsedMs
-			if exec.Success {
-				b.Status = "passed"
-			} else {
-				b.Status = "failed"
-			}
+	if exec != nil {
+		b.DurationMs = exec.ElapsedMs
+		if exec.Success {
+			b.Status = "passed"
+		} else {
+			b.Status = "failed"
 		}
 	}
 	return b
 }
 
-// statsFor computes success rate and median duration over a job's builds.
-func (h *Handler) statsFor(ctx context.Context, userID id.ID, slug string) (float64, int64) {
-	runs, err := h.runs.ListByJobSlug(ctx, userID, slug, 100)
-	if err != nil || len(runs) == 0 {
-		return 0, 0
+// jobIDsOf collects the queue-job IDs of a run set, for a batched execution load.
+func jobIDsOf(runs []models.Run) []string {
+	ids := make([]string, 0, len(runs))
+	for i := range runs {
+		ids = append(ids, runs[i].JobID)
 	}
+	return ids
+}
+
+// execsFor loads the executions for every run in a slug→runs map in one query.
+func (h *Handler) execsFor(ctx context.Context, runsBySlug map[string][]models.Run) (map[string]*models.JobExecution, error) {
+	var ids []string
+	for _, runs := range runsBySlug {
+		ids = append(ids, jobIDsOf(runs)...)
+	}
+	return h.executions.ListByJobIDs(ctx, ids)
+}
+
+// statsOf computes success rate and median duration over a job's builds using
+// pre-loaded executions.
+func statsOf(runs []models.Run, execs map[string]*models.JobExecution) (float64, int64) {
 	var durations []int64
 	finished, passed := 0, 0
 	for i := range runs {
-		exec, err := h.executions.GetByJobID(ctx, runs[i].JobID)
-		if err != nil {
+		exec := execs[runs[i].JobID]
+		if exec == nil {
 			continue
 		}
 		finished++
@@ -342,6 +398,8 @@ func notFoundOrInternal(c *gin.Context, err error) {
 	writeError(c, http.StatusInternalServerError, err.Error())
 }
 
+// writeError matches the `{"error": "message"}` shape the rest of the API (and
+// the UI's api client) uses — a nested object here surfaces as "[object Object]".
 func writeError(c *gin.Context, status int, message string) {
-	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"message": message}})
+	c.AbortWithStatusJSON(status, gin.H{"error": message})
 }

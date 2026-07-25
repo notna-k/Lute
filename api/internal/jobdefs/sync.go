@@ -33,15 +33,15 @@ type yamlJob struct {
 }
 
 type yamlParam struct {
-	Name        string        `yaml:"name"`
-	Type        string        `yaml:"type"`
-	Label       string        `yaml:"label"`
-	Env         string        `yaml:"env"`
-	Description string        `yaml:"description"`
-	Required    bool          `yaml:"required"`
-	Default     any           `yaml:"default"`
-	Options     []yamlOption  `yaml:"options"`
-	SecretRef   string        `yaml:"secretRef"`
+	Name        string       `yaml:"name"`
+	Type        string       `yaml:"type"`
+	Label       string       `yaml:"label"`
+	Env         string       `yaml:"env"`
+	Description string       `yaml:"description"`
+	Required    bool         `yaml:"required"`
+	Default     any          `yaml:"default"`
+	Options     []yamlOption `yaml:"options"`
+	SecretRef   string       `yaml:"secretRef"`
 }
 
 type yamlOption struct {
@@ -137,6 +137,15 @@ func parseFile(path, root string) (*models.JobDefinition, error) {
 
 	params := make([]models.ParameterField, 0, len(y.Parameters))
 	for _, p := range y.Parameters {
+		if strings.TrimSpace(p.Name) == "" {
+			return nil, fmt.Errorf("parameter with no name")
+		}
+		if !KnownTypes[p.Type] {
+			return nil, fmt.Errorf("parameter %q has unknown type %q", p.Name, p.Type)
+		}
+		if (p.Type == "select" || p.Type == "multiselect") && len(p.Options) == 0 {
+			return nil, fmt.Errorf("parameter %q of type %s needs options", p.Name, p.Type)
+		}
 		opts := make([]models.ParameterOption, 0, len(p.Options))
 		for _, o := range p.Options {
 			opts = append(opts, models.ParameterOption{Value: o.Value, Label: o.Label, Hint: o.Hint, Tone: o.Tone})

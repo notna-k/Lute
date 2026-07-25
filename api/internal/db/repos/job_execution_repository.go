@@ -54,6 +54,24 @@ func (r *JobExecutionRepository) GetByJobID(ctx context.Context, jobID string) (
 	return &e, nil
 }
 
+// ListByJobIDs loads executions for many queue-job IDs in one query, keyed by
+// job ID. Used by the job-definition handlers so rendering N jobs' build stats
+// costs one query instead of one per build.
+func (r *JobExecutionRepository) ListByJobIDs(ctx context.Context, jobIDs []string) (map[string]*models.JobExecution, error) {
+	out := make(map[string]*models.JobExecution, len(jobIDs))
+	if len(jobIDs) == 0 {
+		return out, nil
+	}
+	var rows []models.JobExecution
+	if err := r.q(ctx).Where("job_id IN ?", jobIDs).Find(&rows).Error; err != nil {
+		return nil, mapErr(err)
+	}
+	for i := range rows {
+		out[rows[i].JobID] = &rows[i]
+	}
+	return out, nil
+}
+
 type JobExecutionListFilter struct {
 	Queue  string
 	Type   string

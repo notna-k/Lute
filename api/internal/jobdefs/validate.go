@@ -9,6 +9,14 @@ import (
 	"github.com/lute/api/internal/db/models"
 )
 
+// KnownTypes is the set of parameter types the schema supports. A definition
+// naming anything else is rejected at sync time rather than silently accepting
+// arbitrary values at trigger time.
+var KnownTypes = map[string]bool{
+	"string": true, "number": true, "bool": true, "select": true,
+	"multiselect": true, "date": true, "datetime": true, "secret": true,
+}
+
 // Resolved is the outcome of validating a trigger payload against a schema.
 type Resolved struct {
 	// Env maps each parameter's EnvVar to its stringified value, ready to hand
@@ -147,6 +155,7 @@ func coerce(f models.ParameterField, raw any) (string, error) {
 		return s, nil
 
 	default:
+		// Unreachable for synced definitions — Sync rejects unknown types.
 		return fmt.Sprintf("%v", raw), nil
 	}
 }

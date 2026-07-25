@@ -38,6 +38,11 @@ function defaultsOf(fields: ParameterField[]): ParameterValues {
       values[f.name] = [];
     } else if (f.type === 'bool') {
       values[f.name] = false;
+    } else if (f.type === 'select') {
+      // ConsoleSelect renders the first option when nothing is chosen, so seed
+      // it as the actual value — otherwise the form shows a selection it never
+      // submits and the server rejects a `required` select as missing.
+      values[f.name] = f.options?.[0]?.value ?? '';
     } else {
       values[f.name] = '';
     }
@@ -61,9 +66,10 @@ function useOutsideClick(onClose: () => void) {
 interface FieldRowProps {
   field: ParameterField;
   children: ReactNode;
+  error?: string;
 }
 
-function FieldRow({ field, children }: FieldRowProps) {
+function FieldRow({ field, children, error }: FieldRowProps) {
   return (
     <div className='border-b border-dashed border-border py-4 last:border-b-0'>
       <div className='mb-2.5 flex items-baseline gap-2'>
@@ -78,8 +84,12 @@ function FieldRow({ field, children }: FieldRowProps) {
         </span>
       </div>
       {children}
-      {field.description && (
-        <p className='mt-2 text-xs text-fg-muted'>{field.description}</p>
+      {error ? (
+        <p className='mt-2 font-mono text-xs text-danger'>{error}</p>
+      ) : (
+        field.description && (
+          <p className='mt-2 text-xs text-fg-muted'>{field.description}</p>
+        )
       )}
     </div>
   );
@@ -243,8 +253,15 @@ function ConsoleMultiSelect({ options, value, onChange }: MultiSelectProps) {
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/**
+ * Formats a Date as YYYY-MM-DD in LOCAL time. `toISOString()` would convert to
+ * UTC first and shift the day by one for any timezone east of UTC — the picker
+ * would then submit yesterday's date.
+ */
 function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 interface DateProps {
@@ -385,15 +402,38 @@ function ConsoleSecret({ secretRef }: { secretRef?: string }) {
 export interface ParameterFormProps {
   fields: ParameterField[];
   onChange?: (values: ParameterValues) => void;
+  /** Per-field messages from the server's schema validation, keyed by name. */
+  errors?: Record<string, string>;
 }
 
-export function ParameterForm({ fields, onChange }: ParameterFormProps) {
+export function ParameterForm({ fields, onChange, errors }: ParameterFormProps) {
   const [values, setValues] = useState<ParameterValues>(() => defaultsOf(fields));
+
+  // Publish the defaults to the parent (and re-seed when the schema changes).
+  // Without this the parent holds `{}` until the user touches an input, so
+  // hitting Run straight away submits none of the values shown on screen.
+  //
+  // Keyed on the schema's *content*, not the array identity: refetching the job
+  // hands us an equal-but-new `fields` array, and re-seeding on that would wipe
+  // whatever the user had typed.
+  const schemaKey = useMemo(
+    () => fields.map((f) => `${f.name}:${f.type}:${JSON.stringify(f.default ?? null)}`).join('|'),
+    [fields]
+  );
+  const fieldsRef = useRef(fields);
+  fieldsRef.current = fields;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    const next = defaultsOf(fieldsRef.current);
+    setValues(next);
+    onChangeRef.current?.(next);
+  }, [schemaKey]);
 
   function set(name: string, value: ParameterValue) {
     setValues((prev) => {
       const next = { ...prev, [name]: value };
-      onChange?.(next);
+      onChangeRef.current?.(next);
       return next;
     });
   }
@@ -401,7 +441,7 @@ export function ParameterForm({ fields, onChange }: ParameterFormProps) {
   return (
     <div>
       {fields.map((field) => (
-        <FieldRow key={field.name} field={field}>
+        <FieldRow key={field.name} field={field} error={errors?.[field.name]}>
           {field.type === 'select' && (
             <ConsoleSelect
               options={field.options ?? []}
@@ -439,12 +479,15 @@ export function ParameterForm({ fields, onChange }: ParameterFormProps) {
             <input
               type={field.type === 'number' ? 'number' : 'text'}
               value={String(values[field.name] ?? '')}
-              onChange={(e) =>
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Keep an emptied number input empty rather than coercing to 0 —
+                // 0 is a real value and would defeat a `required` check.
                 set(
                   field.name,
-                  field.type === 'number' ? Number(e.target.value) : e.target.value
-                )
-              }
+                  field.type === 'number' && raw !== '' ? Number(raw) : raw
+                );
+              }}
               className='w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-fg placeholder:text-fg-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20'
               placeholder={field.required ? 'required' : 'optional'}
             />

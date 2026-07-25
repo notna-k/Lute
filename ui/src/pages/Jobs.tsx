@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { GitBranch, Timer } from 'lucide-react';
 import { listJobs } from '@/services/jobDefService';
-import { Spinner } from '@/components/ui';
+import { EmptyState, Spinner } from '@/components/ui';
 import type { JobDefinition } from '@/types/jobs';
 
 function formatDuration(ms: number): string {
@@ -84,10 +84,16 @@ export default function Jobs() {
         <div className='flex justify-center py-20'>
           <Spinner size={28} />
         </div>
-      ) : (
+      ) : jobs && jobs.length > 0 ? (
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-          {jobs?.map((job) => <JobCard key={job.slug} job={job} />)}
+          {jobs.map((job) => <JobCard key={job.slug} job={job} />)}
         </div>
+      ) : (
+        <EmptyState
+          icon={<GitBranch className='h-5 w-5' />}
+          title='No job definitions'
+          description='Job definitions are synced from Git. Add a YAML file to the job-definitions source (JOB_DEFS_DIR) and restart Core to see it here.'
+        />
       )}
     </div>
   );
