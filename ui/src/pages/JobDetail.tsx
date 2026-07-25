@@ -197,73 +197,43 @@ export default function JobDetail() {
         </div>
       </div>
 
-      <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]'>
+      <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]'>
         {/* LEFT — trigger */}
-        <div>
-          <div className='rounded-xl border border-border bg-surface'>
-            <div className='flex items-center gap-3 border-b border-border px-4 py-3'>
-              <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>
-                Trigger a build
-              </h2>
-              <div className='ml-auto flex rounded-lg border border-border bg-bg p-0.5'>
-                {(['form', 'source'] as const).map((v) => (
-                  <button
-                    key={v}
-                    type='button'
-                    onClick={() => setView(v)}
-                    className={cn(
-                      'rounded-md px-3 py-1 font-mono text-xs transition-colors',
-                      view === v
-                        ? 'bg-surface-active text-fg'
-                        : 'text-fg-muted hover:text-fg'
-                    )}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className='px-4 py-3'>
-              {view === 'form' ? (
-                <ParameterForm
-                  fields={job.parameters}
-                  onChange={setValues}
-                  errors={fieldErrors}
-                />
-              ) : (
-                <pre className='scrollbar-thin overflow-auto py-2 font-mono text-xs leading-relaxed text-fg-muted'>
-                  {toYaml(job)}
-                </pre>
-              )}
+        <div className='rounded-xl border border-border bg-surface'>
+          <div className='flex items-center gap-3 border-b border-border px-4 py-3'>
+            <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>
+              Trigger a build
+            </h2>
+            <div className='ml-auto flex rounded-lg border border-border bg-bg p-0.5'>
+              {(['form', 'source'] as const).map((v) => (
+                <button
+                  key={v}
+                  type='button'
+                  onClick={() => setView(v)}
+                  className={cn(
+                    'rounded-md px-3 py-1 font-mono text-xs transition-colors',
+                    view === v
+                      ? 'bg-surface-active text-fg'
+                      : 'text-fg-muted hover:text-fg'
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
           </div>
-
-          {/* Run bar */}
-          <div className='mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3'>
-            <span className='font-mono text-xs text-fg-muted'>
-              Dispatches to <span className='text-fg'>{job.queue}</span> · worker{' '}
-              <span className='text-fg'>
-                {Object.entries(job.labelSelector).map(([k, v]) => `${k}=${v}`).join(', ') || 'any'}
-              </span>
-            </span>
-            {trigger.isError && (
-              <span className='font-mono text-xs text-danger'>
-                {(trigger.error as Error).message}
-              </span>
+          <div className='px-4 py-3'>
+            {view === 'form' ? (
+              <ParameterForm
+                fields={job.parameters}
+                onChange={setValues}
+                errors={fieldErrors}
+              />
+            ) : (
+              <pre className='scrollbar-thin overflow-auto py-2 font-mono text-xs leading-relaxed text-fg-muted'>
+                {toYaml(job)}
+              </pre>
             )}
-            {trigger.isSuccess && (
-              <span className='font-mono text-xs text-success'>
-                Build #{trigger.data.id} queued
-              </span>
-            )}
-            <button
-              type='button'
-              onClick={() => trigger.mutate()}
-              disabled={trigger.isPending}
-              className='ml-auto inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60'
-            >
-              <Play className='h-4 w-4' /> {trigger.isPending ? 'Running…' : 'Run build'}
-            </button>
           </div>
         </div>
 
@@ -271,6 +241,34 @@ export default function JobDetail() {
         <div className='flex flex-col gap-6'>
           {builds && builds.length > 0 && <RecentBuilds builds={builds} />}
           <LiveLog running={builds?.find((b) => b.status === 'running')} />
+        </div>
+
+        {/* Run bar — spans both columns, as in poc/console.html */}
+        <div className='flex flex-wrap items-center gap-3 rounded-xl border border-border bg-gradient-to-r from-surface to-surface-hover px-4 py-3 lg:col-span-2'>
+          <span className='font-mono text-xs text-fg-muted'>
+            Dispatches to <span className='text-fg'>{job.queue}</span> · worker{' '}
+            <span className='text-fg'>
+              {Object.entries(job.labelSelector).map(([k, v]) => `${k}=${v}`).join(', ') || 'any'}
+            </span>
+          </span>
+          {trigger.isError && (
+            <span className='font-mono text-xs text-danger'>
+              {(trigger.error as Error).message}
+            </span>
+          )}
+          {trigger.isSuccess && (
+            <span className='font-mono text-xs text-success'>
+              Build #{trigger.data.id} queued
+            </span>
+          )}
+          <button
+            type='button'
+            onClick={() => trigger.mutate()}
+            disabled={trigger.isPending}
+            className='ml-auto inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60'
+          >
+            <Play className='h-4 w-4' /> {trigger.isPending ? 'Running…' : 'Run build'}
+          </button>
         </div>
       </div>
     </div>

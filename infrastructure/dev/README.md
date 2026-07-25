@@ -19,10 +19,10 @@ worker  ─────────────────── gRPC ───
 
 ## Quick Start
 
-1. **Create `.env`** in this directory:
+1. **Create the env file at the repo root** (not in this directory — the Makefile
+   passes `--env-file <repo-root>/.env` to compose):
    ```bash
-   cd infrastructure/dev
-   cp .env.example .env
+   cp infrastructure/dev/.env.example .env    # from the repo root
    ```
 
 2. **Configure required values** in `.env`:
@@ -72,7 +72,8 @@ re-sync. See `jobdefs/web-release.yaml` for the format.
 
 ## Environment Variables
 
-Configured in `.env` (copy from `.env.example`). Highlights:
+Configured in the repo-root `.env` (copy from `infrastructure/dev/.env.example`).
+Override the location with `make ENV_FILE=/path/to/env dev-up`. Highlights:
 
 - **Database**: Core runs with `DB_DRIVER=postgres` and a `POSTGRES_DSN` pointing
   at the `postgres` service (set by compose). SQLite remains available for native

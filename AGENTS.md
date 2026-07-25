@@ -62,7 +62,7 @@ Agents must **not** silently downgrade language versions or swap major framework
 
 Documented in `infrastructure/dev/README.md`:
 
-1. Copy `infrastructure/dev/.env.example` to `.env` and set `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` as described there.
+1. Copy `infrastructure/dev/.env.example` to **`.env` at the repo root** (the Makefile passes `--env-file $(CURDIR)/.env` to compose) and set `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` as described there.
 2. From repo root: `make dev-up` (requires Docker BuildKit; `DOCKER_BUILDKIT=1` is set in `Makefile`).
 3. App + API: `http://localhost:8080`, health: `http://localhost:8080/api/health`.
 
