@@ -71,6 +71,10 @@ type buildDTO struct {
 	Environment string `json:"environment,omitempty"`
 	StartedAt   int64  `json:"startedAt"`
 	DurationMs  int64  `json:"durationMs,omitempty"`
+	// Params are the resolved values this build ran with, keyed by env var.
+	// The panel offers them as a starting point for the next build. Secret
+	// parameters never reach Run.Params, so nothing sensitive is echoed here.
+	Params map[string]string `json:"params,omitempty"`
 }
 
 // containerSpec is the JSON envelope for a "container" job (matches the proto
@@ -293,6 +297,7 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 		Status:      "queued",
 		Environment: run.Environment,
 		StartedAt:   run.CreatedAt.UTC().UnixMilli(),
+		Params:      run.Params,
 	}
 	if job, err := h.engine.GetJob(ctx, run.JobID); err == nil {
 		switch job.Status {

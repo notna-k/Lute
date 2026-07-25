@@ -68,9 +68,16 @@ export type BuildStatus = 'running' | 'passed' | 'failed' | 'queued';
 
 export interface Build {
   id: string;
+  /** Full run identifier — use this to address the build in APIs. */
+  runId?: string;
   jobSlug: string;
   status: BuildStatus;
   environment?: string;
   startedAt: number;
   durationMs?: number;
+  /**
+   * Resolved values this build ran with, keyed by env var (never secrets).
+   * Lets the panel prefill a new build from a previous one.
+   */
+  params?: Record<string, string>;
 }
