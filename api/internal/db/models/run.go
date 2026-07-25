@@ -5,11 +5,21 @@ import "github.com/lute/api/internal/db/id"
 // Run is an API-visible record linking a queued job id to tenant config.
 type Run struct {
 	BaseModel
-	JobID          string            `json:"job_id" gorm:"uniqueIndex"`
-	UserID         id.ID             `json:"user_id" gorm:"size:24;not null"`
-	APIKeyID       id.ID             `json:"api_key_id,omitempty" gorm:"size:24"`
-	Queue          string            `json:"queue"`
-	Type           string            `json:"type"`
+	JobID    string `json:"job_id" gorm:"uniqueIndex"`
+	UserID   id.ID  `json:"user_id" gorm:"size:24;not null"`
+	APIKeyID id.ID  `json:"api_key_id,omitempty" gorm:"size:24"`
+	Queue    string `json:"queue"`
+	Type     string `json:"type"`
+	// JobSlug links a run to the JobDefinition that produced it. Empty for
+	// ad-hoc runs (the hybrid model in PRODUCT.md).
+	JobSlug string `json:"job_slug,omitempty" gorm:"column:job_slug;size:191;index"`
+	// Environment is the resolved value of a job's `environment` parameter,
+	// surfaced on the build list. Optional.
+	Environment string `json:"environment,omitempty" gorm:"column:environment;size:64"`
+	// Params are the resolved parameter values this build was triggered with
+	// (env var name → value), so a build stays auditable and reproducible after
+	// the definition moves on. Secrets are never stored here.
+	Params         map[string]string `json:"params,omitempty" gorm:"column:params;serializer:json"`
 	IdempotencyKey string            `json:"idempotency_key,omitempty" gorm:"size:191"`
 	WebhookURL     string            `json:"webhook_url,omitempty"`
 	WebhookSecret  string            `json:"-"`

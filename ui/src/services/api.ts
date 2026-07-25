@@ -15,6 +15,23 @@ function resolveApiBaseURL(): string {
 
 const API_URL = resolveApiBaseURL();
 
+/**
+ * An error response from the API. `fields` carries per-input messages when the
+ * server rejected a payload against a schema (see the job-definition trigger
+ * endpoint) so callers can attach them to the inputs that produced them.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly fields?: Record<string, string>;
+
+  constructor(message: string, status: number, fields?: Record<string, string>) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.fields = fields;
+  }
+}
+
 class ApiClient {
   private baseURL: string;
 
@@ -59,8 +76,12 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+      const body = await response.json().catch(() => ({ error: response.statusText }));
+      const message =
+        typeof body.error === 'string'
+          ? body.error
+          : `HTTP error! status: ${response.status}`;
+      throw new ApiError(message, response.status, body.fields);
     }
     return response.json() as Promise<T>;
   }

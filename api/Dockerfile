@@ -1,20 +1,10 @@
 # syntax=docker/dockerfile:1
-
-# ---- UI (Vite), embedded into the API binary ----
-FROM node:25-alpine AS ui-builder
-
-ARG VITE_METRICS_UPDATE_INTERVAL_SECONDS=5
-
-ENV VITE_METRICS_UPDATE_INTERVAL_SECONDS=$VITE_METRICS_UPDATE_INTERVAL_SECONDS \
-    VITE_API_URL= \
-    NPM_CONFIG_CACHE=/root/.cache/npm
-
-WORKDIR /app/ui
-COPY ui/package.json ui/package-lock.json ./
-RUN --mount=type=cache,target=/root/.cache/npm \
-    npm ci --prefer-offline --no-audit --no-fund
-COPY ui .
-RUN npm run build
+#
+# Core image — stateless Go API (HTTP + WebSocket + gRPC). The admin panel is a
+# SEPARATE image (ui/Dockerfile); Core no longer builds or embeds the SPA. A
+# minimal placeholder `api/internal/ui/web/index.html` (kept in the build
+# context) satisfies the //go:embed so the binary still compiles and answers
+# non-/api routes if hit directly.
 
 # ---- Go API + worker binaries ----
 FROM golang:1.26-alpine AS builder
@@ -41,9 +31,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY shared/proto shared/proto
 COPY api api
 COPY worker worker
-
-# Embedded SPA (must exist before go build)
-COPY --from=ui-builder /app/ui/dist /app/api/internal/ui/web
 
 # Build the API server (module cache must stay mounted — downloads do not persist in image layers)
 WORKDIR /app/api

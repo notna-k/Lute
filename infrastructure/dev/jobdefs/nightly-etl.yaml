@@ -1,0 +1,32 @@
+name: nightly-etl
+description: >-
+  Runs the analytics rollup and loads warehouse tables. Scheduled nightly;
+  can be triggered on demand.
+queue: batch
+labels:
+  class: cpu
+runtime: python:3.12-slim
+command: python -m etl.run
+source:
+  repo: infra/jobs
+  commit: a91f0c
+parameters:
+  - name: window
+    type: select
+    label: Rollup window
+    env: WINDOW
+    required: true
+    default: day
+    options:
+      - { value: hour, label: Hourly }
+      - { value: day, label: Daily }
+      - { value: week, label: Weekly }
+  - name: backfill_from
+    type: date
+    label: Backfill from
+    env: BACKFILL_FROM
+  - name: full_refresh
+    type: bool
+    label: Full refresh
+    env: FULL_REFRESH
+    default: false

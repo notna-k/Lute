@@ -13,8 +13,8 @@ node_modules
 
 worker/bin
 
-# Stale embedded UI from local `make ui-build` — Docker rebuilds UI in ui-builder stage.
-api/internal/ui/web
+# NOTE: api/internal/ui/web is intentionally NOT ignored — Core embeds the
+# committed placeholder index.html there (the admin SPA is a separate image).
 
 .env
 .env.*

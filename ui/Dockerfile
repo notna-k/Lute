@@ -1,42 +1,32 @@
 # syntax=docker/dockerfile:1
-# Build stage
+#
+# Admin panel — decoupled SPA served by nginx, proxying /api to the core
+# container. Build context is the REPO ROOT (see infrastructure/dev/docker-compose.yml)
+# so this stage can also pull in the shared nginx config.
+
+# ---- Build the SPA ----
 FROM node:25-alpine AS builder
 
+ARG VITE_METRICS_UPDATE_INTERVAL_SECONDS=5
+
+# Empty VITE_API_URL => same-origin: the SPA calls /api on its own host and
+# nginx proxies to core. Keeps the panel free of a hard-coded backend URL.
+ENV VITE_METRICS_UPDATE_INTERVAL_SECONDS=$VITE_METRICS_UPDATE_INTERVAL_SECONDS \
+    VITE_API_URL= \
+    NPM_CONFIG_CACHE=/root/.cache/npm
+
 WORKDIR /app
-
-# Accept build arguments for Vite environment variables
-ARG VITE_API_URL
-ARG VITE_METRICS_UPDATE_INTERVAL_SECONDS
-
-# Set as environment variables for build
-ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_METRICS_UPDATE_INTERVAL_SECONDS=$VITE_METRICS_UPDATE_INTERVAL_SECONDS
-ENV NPM_CONFIG_CACHE=/root/.cache/npm
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies (persist tarball cache across builds — requires BuildKit)
+COPY ui/package.json ui/package-lock.json ./
 RUN --mount=type=cache,target=/root/.cache/npm \
     npm ci --prefer-offline --no-audit --no-fund
-
-# Copy source code
-COPY . .
-
-# Build the application
+COPY ui .
 RUN npm run build
 
-# Runtime stage
-FROM nginx:alpine
+# ---- Serve with nginx ----
+FROM nginx:1.27-alpine
 
-# Copy built files to nginx
+COPY infrastructure/dev/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expose port
 EXPOSE 80
-
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]

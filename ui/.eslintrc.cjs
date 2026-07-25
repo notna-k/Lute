@@ -21,7 +21,7 @@ module.exports = {
       'warn',
       {
         allowConstantExport: true,
-        allowExportNames: ['useAuth', 'useTheme'],
+        allowExportNames: ['useAuth', 'useTheme', 'authBridge'],
       },
     ],
   },

@@ -8,6 +8,12 @@ GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v
 # Docker Compose file location
 COMPOSE_DIR := infrastructure/dev
 
+# Single env file for the whole project, kept at the repo root. Passed explicitly
+# with --env-file so compose reads it instead of infrastructure/dev/.env (its
+# default). Absolute, because the targets below `cd` into COMPOSE_DIR first.
+ENV_FILE ?= $(CURDIR)/.env
+COMPOSE  := docker compose --env-file $(ENV_FILE)
+
 # Worker build settings
 WORKER_VERSION ?= 0.1.0
 BUILD_TIME     := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -69,40 +75,40 @@ export DOCKER_BUILDKIT := 1
 # Main command: cleanup containers (keep volumes), rebuild, and start
 dev-up-clean:
 	@echo "=== Stopping and removing containers ==="
-	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose down --remove-orphans || true
+	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) $(COMPOSE) down --remove-orphans || true
 	@echo ""
 	@echo "=== Building all images (cache used; code changes trigger rebuild) ==="
-	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build --parallel
+	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) $(COMPOSE) build --parallel
 	@echo ""
 	@echo "=== Starting all services ==="
-	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose up -d
+	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) $(COMPOSE) up -d
 	@echo ""
 	@echo "Services are starting. Use 'make dev-logs' to view logs."
 
-dev-up: 
-	@cd $(COMPOSE_DIR) && docker compose up -d
+dev-up:
+	@cd $(COMPOSE_DIR) && $(COMPOSE) up -d
 
 # Stop and remove containers, volumes, and networks
 dev-clean:
 	@echo "Cleaning up containers, volumes, and networks..."
-	@cd $(COMPOSE_DIR) && docker compose down -v --remove-orphans || true
+	@cd $(COMPOSE_DIR) && $(COMPOSE) down -v --remove-orphans || true
 	@echo "Cleanup complete."
 
 # Build all images without cache
 dev-build:
 	@echo "Building all images (this may take a while)..."
-	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose build
+	@cd $(COMPOSE_DIR) && WORKER_VERSION=$(WORKER_VERSION) BUILD_TIME=$(BUILD_TIME) $(COMPOSE) build
 	@echo "Build complete."
 
 # Stop all services
 dev-down:
 	@echo "Stopping all services..."
-	@cd $(COMPOSE_DIR) && docker compose down
+	@cd $(COMPOSE_DIR) && $(COMPOSE) down
 	@echo "Services stopped."
 
 # Show logs
 dev-logs:
-	@cd $(COMPOSE_DIR) && docker compose logs -f
+	@cd $(COMPOSE_DIR) && $(COMPOSE) logs -f
 
 # Restart all services
 dev-restart: dev-down dev-up

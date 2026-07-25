@@ -16,6 +16,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Workers from './pages/Workers';
 import WorkerDetail from './pages/WorkerDetail';
+import Jobs from './pages/Jobs';
+import JobDetail from './pages/JobDetail';
 import Executions from './pages/Executions';
 import ExecutionDetail from './pages/ExecutionDetail';
 import Settings from './pages/Settings';
@@ -61,19 +63,13 @@ function AppRoutes() {
           <Route path='/executions' element={<Executions />} />
           <Route path='/executions/:id' element={<ExecutionDetail />} />
           <Route path='/settings' element={<Settings />} />
-          <Route path='/jobs' element={<Navigate to='/executions' replace />} />
-          <Route path='/jobs/:id' element={<LegacyJobRedirect />} />
+          <Route path='/jobs' element={<Jobs />} />
+          <Route path='/jobs/:slug' element={<JobDetail />} />
           <Route path='*' element={<Navigate to='/' replace />} />
         </Route>
       </Route>
     </Routes>
   );
-}
-
-function LegacyJobRedirect() {
-  const { pathname } = useLocation();
-  const id = pathname.split('/').pop();
-  return <Navigate to={`/executions/${id ?? ''}`} replace />;
 }
 
 function App() {

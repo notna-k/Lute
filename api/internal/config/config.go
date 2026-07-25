@@ -15,6 +15,13 @@ type Config struct {
 	Auth         AuthConfig
 	WorkerBinary WorkerBinaryConfig
 	Metrics      MetricsConfig
+	JobDefs      JobDefsConfig
+}
+
+// JobDefsConfig points Core at the directory of Git-managed job-definition
+// YAML files it syncs into Postgres on startup.
+type JobDefsConfig struct {
+	Dir string
 }
 
 // MetricsConfig controls machine snapshot job and dashboard polling.
@@ -96,13 +103,15 @@ func Load() (*Config, error) {
 			Mode:         getEnv("GIN_MODE", "debug"),
 		},
 		Database: DatabaseConfig{
-			Driver: getEnv("DB_DRIVER", "sqlite"),
+			// Postgres is the primary/deployed database. SQLite remains available
+			// for quick local runs by setting DB_DRIVER=sqlite.
+			Driver: getEnv("DB_DRIVER", "postgres"),
 			SQLite: SQLiteConfig{
 				Path:        getEnv("SQLITE_PATH", "lute.db"),
 				BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
 			},
 			Postgres: PostgresConfig{
-				DSN: getEnv("POSTGRES_DSN", ""),
+				DSN: getEnv("POSTGRES_DSN", "postgres://lute:lute@localhost:5432/lute?sslmode=disable"),
 			},
 		},
 		GRPC: GRPCConfig{
@@ -136,6 +145,9 @@ func Load() (*Config, error) {
 		},
 		Metrics: MetricsConfig{
 			SnapshotInterval: getDurationEnv("METRICS_SNAPSHOT_INTERVAL", 5*time.Minute),
+		},
+		JobDefs: JobDefsConfig{
+			Dir: getEnv("JOB_DEFS_DIR", ""),
 		},
 	}
 
