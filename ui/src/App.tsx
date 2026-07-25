@@ -21,6 +21,10 @@ import JobDetail from './pages/JobDetail';
 import Executions from './pages/Executions';
 import ExecutionDetail from './pages/ExecutionDetail';
 import Settings from './pages/Settings';
+import PocInline from './poc/PocInline';
+import PocBuilder from './poc/PocBuilder';
+import PocSplit from './poc/PocSplit';
+import PocWorkbench from './poc/PocWorkbench';
 
 /** Wraps protected pages: one stable <Routes> tree avoids / ↔ /login redirect loops. */
 function AuthGuard() {
@@ -42,6 +46,11 @@ function AuthGuard() {
   return <Outlet />;
 }
 
+/** Bare page chrome for the PoC routes — no sidebar, no auth, just the tokens. */
+function PocPage({ children }: { children: React.ReactNode }) {
+  return <div className='min-h-screen bg-bg p-6 text-fg'>{children}</div>;
+}
+
 function AppShellLayout() {
   return (
     <AppShell>
@@ -54,6 +63,16 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path='/login' element={<Login />} />
+      {/*
+        Build-UX PoCs. Throwaway comparison routes on this branch only: pure
+        mock data, no API calls, deliberately outside the AuthGuard so they can
+        be reviewed without a running Core. Delete with the branch.
+      */}
+      <Route path='/poc' element={<Navigate to='/poc/inline' replace />} />
+      <Route path='/poc/inline' element={<PocPage><PocInline /></PocPage>} />
+      <Route path='/poc/builder' element={<PocPage><PocBuilder /></PocPage>} />
+      <Route path='/poc/split' element={<PocPage><PocSplit /></PocPage>} />
+      <Route path='/poc/workbench' element={<PocPage><PocWorkbench /></PocPage>} />
       <Route element={<AuthGuard />}>
         <Route element={<AppShellLayout />}>
           <Route path='/' element={<Dashboard />} />
