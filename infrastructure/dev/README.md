@@ -22,7 +22,7 @@ worker  ─────────────────── gRPC ───
 1. **Create the env file at the repo root** (not in this directory — the Makefile
    passes `--env-file <repo-root>/.env` to compose):
    ```bash
-   cp infrastructure/dev/.env.example .env    # from the repo root
+   cp .env.example .env    # from the repo root
    ```
 
 2. **Configure required values** in `.env`:
@@ -72,7 +72,7 @@ re-sync. See `jobdefs/web-release.yaml` for the format.
 
 ## Environment Variables
 
-Configured in the repo-root `.env` (copy from `infrastructure/dev/.env.example`).
+Configured in the repo-root `.env` (copy from `.env.example` at the repo root).
 Override the location with `make ENV_FILE=/path/to/env dev-up`. Highlights:
 
 - **Database**: Core runs with `DB_DRIVER=postgres` and a `POSTGRES_DSN` pointing
