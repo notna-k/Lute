@@ -10,12 +10,16 @@
  *   right   context  — running: the equivalent `docker run` / `curl`
  *                      editing: the YAML you would commit, copy or download
  *
- * Editing is deliberately read-only against the server. Git is the source of
- * truth (PRODUCT.md §6), so the editor's only artifact is YAML you commit to
- * the job-definitions repo — there is no "save to panel" that would make a
- * definition expressible outside its file.
+ * Editing a Git-synced definition stays read-only against the server: its
+ * artifact is YAML you commit to the job-definitions repo. A drifted schema can
+ * still be *run* — it goes through as an ad-hoc build carrying its own schema,
+ * gated on the operator's "allow ad-hoc builds" setting.
+ *
+ * In `authorOnly` mode the job does not exist yet: there is nothing to run, so
+ * the run pane is hidden and the caller owns the save action.
  */
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   Check,
   ChevronDown,
@@ -40,7 +44,12 @@ import { ParamEditor } from '@/features/params/ParamEditor';
 import { toEnvPairs, typeDef, valuesFromEnv } from '@/features/params/registry';
 import { downloadYaml, toYaml } from '@/features/params/yaml';
 import { stripIds, useSchemaDraft } from '@/features/params/useSchemaDraft';
-import type { Build, JobDefinition, ParameterValues } from '@/types/jobs';
+import type {
+  Build,
+  JobDefinition,
+  ParameterField,
+  ParameterValues,
+} from '@/types/jobs';
 
 type Mode = 'run' | 'edit';
 type RunPane = 'docker' | 'curl';
@@ -87,7 +96,24 @@ function YamlLine({ text, highlight }: { text: string; highlight: boolean }) {
 export interface BuildWorkbenchProps {
   job: JobDefinition;
   builds: Build[];
-  onRun: (values: ParameterValues) => void;
+  /**
+   * `fields` is the schema as currently authored — the server validates against
+   * it, so a parameter added here actually reaches the build instead of being
+   * dropped. Compare it with `job.parameters` to know whether this is a drifted
+   * (ad-hoc) build.
+   */
+  onRun: (values: ParameterValues, fields: ParameterField[]) => void;
+  /**
+   * Authoring a template that does not exist yet: there is nothing to run, so
+   * the run pane and its mode toggle are hidden and the caller supplies its own
+   * save action via `footer`.
+   */
+  authorOnly?: boolean;
+  /**
+   * Rendered under the editor — the caller's save/cancel controls. Receives the
+   * schema as currently authored, since the workbench owns that state.
+   */
+  footer?: (fields: ParameterField[]) => ReactNode;
   running: boolean;
   /** Per-field messages from the server's schema validation. */
   serverErrors?: Record<string, string>;
@@ -103,9 +129,11 @@ export function BuildWorkbench({
   serverErrors,
   runError,
   queuedBuildId,
+  authorOnly = false,
+  footer,
 }: BuildWorkbenchProps) {
   const draft = useSchemaDraft(job.parameters);
-  const [mode, setMode] = useState<Mode>('run');
+  const [mode, setMode] = useState<Mode>(authorOnly ? 'edit' : 'run');
   const [runPane, setRunPane] = useState<RunPane>('docker');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusName, setFocusName] = useState<string | null>(null);
@@ -148,7 +176,7 @@ export function BuildWorkbench({
     const payloadValues = Object.fromEntries(
       fields.filter((f) => f.type !== 'secret').map((f) => [f.name, values[f.name]])
     );
-    onRun(payloadValues);
+    onRun(payloadValues, stripIds(fields));
   }
 
   async function copyYaml() {
@@ -170,12 +198,23 @@ export function BuildWorkbench({
         <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>
           {mode === 'run' ? 'New build' : 'Input schema'}
         </h2>
-        {mode === 'edit' && draft.dirty && (
+        {/* Shown in run mode too, not just while editing: this is the moment
+            the distinction matters — a drifted schema runs as an ad-hoc build,
+            and is refused outright when the operator has those turned off. */}
+        {draft.dirty && (
           <span className='inline-flex items-center gap-1.5 rounded bg-warning-subtle px-2 py-1 font-mono text-xxs text-warning-fg'>
-            <GitCompare className='h-3 w-3' /> uncommitted — differs from @{job.source.commit}
+            <GitCompare className='h-3 w-3' />
+            {job.source.commit
+              ? `changed — differs from @${job.source.commit}`
+              : 'new — not committed to Git'}
           </span>
         )}
-        <div className='ml-auto flex overflow-hidden rounded-md border border-border'>
+        <div
+          className={cn(
+            'ml-auto flex overflow-hidden rounded-md border border-border',
+            authorOnly && 'hidden'
+          )}
+        >
           {[
             { id: 'run' as const, label: 'Run', icon: Play },
             { id: 'edit' as const, label: 'Edit configuration', icon: Pencil },
@@ -666,6 +705,10 @@ export function BuildWorkbench({
           )}
         </aside>
       </div>
+
+      {footer && mode === 'edit' && (
+        <div className='mt-6'>{footer(stripIds(fields))}</div>
+      )}
     </div>
   );
 }

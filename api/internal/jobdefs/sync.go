@@ -178,6 +178,7 @@ func parseFile(path, root string) (*models.JobDefinition, error) {
 		SourceRepo:    y.Source.Repo,
 		SourcePath:    filepath.ToSlash(rel),
 		SourceCommit:  y.Source.Commit,
+		Origin:        models.OriginGit,
 		Parameters:    params,
 	}, nil
 }

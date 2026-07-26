@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { GitBranch, Timer } from 'lucide-react';
+import { GitBranch, PenLine, Plus, Timer } from 'lucide-react';
 import { listJobs } from '@/services/jobDefService';
 import { EmptyState, Spinner } from '@/components/ui';
 import type { JobDefinition } from '@/types/jobs';
@@ -33,9 +33,18 @@ function JobCard({ job }: { job: JobDefinition }) {
             <h3 className='truncate font-mono text-sm font-semibold text-fg'>
               {job.name}
             </h3>
-            <span className='inline-flex items-center gap-1 rounded border border-success/30 bg-success-subtle px-1.5 py-0.5 text-xxs font-medium uppercase tracking-wide text-success-fg'>
-              <GitBranch className='h-3 w-3' /> git
-            </span>
+            {job.origin === 'panel' ? (
+              <span
+                className='inline-flex items-center gap-1 rounded border border-warning/30 bg-warning-subtle px-1.5 py-0.5 text-xxs font-medium uppercase tracking-wide text-warning-fg'
+                title='Authored in the panel — not committed to Git'
+              >
+                <PenLine className='h-3 w-3' /> panel
+              </span>
+            ) : (
+              <span className='inline-flex items-center gap-1 rounded border border-success/30 bg-success-subtle px-1.5 py-0.5 text-xxs font-medium uppercase tracking-wide text-success-fg'>
+                <GitBranch className='h-3 w-3' /> git
+              </span>
+            )}
           </div>
           <p className='mt-1 line-clamp-2 text-xs text-fg-muted'>{job.description}</p>
         </div>
@@ -75,9 +84,17 @@ export default function Jobs() {
             Reusable, Git-managed definitions. Trigger a build and watch it run.
           </p>
         </div>
-        <span className='font-mono text-xs text-fg-subtle'>
-          {jobs ? `${jobs.length} definitions` : ''}
-        </span>
+        <div className='flex items-center gap-4'>
+          <span className='font-mono text-xs text-fg-subtle'>
+            {jobs ? `${jobs.length} definitions` : ''}
+          </span>
+          <Link
+            to='/jobs/new'
+            className='inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-fg hover:bg-surface-hover'
+          >
+            <Plus className='h-4 w-4' /> New template
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (
@@ -92,7 +109,7 @@ export default function Jobs() {
         <EmptyState
           icon={<GitBranch className='h-5 w-5' />}
           title='No job definitions'
-          description='Job definitions are synced from Git. Add a YAML file to the job-definitions source (JOB_DEFS_DIR) and restart Core to see it here.'
+          description='Job definitions are synced from Git. Add a YAML file to the job-definitions source (JOB_DEFS_DIR) and restart Core to see it here — or author one from scratch with New template.'
         />
       )}
     </div>

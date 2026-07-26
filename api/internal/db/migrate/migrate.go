@@ -23,6 +23,7 @@ func RegisteredModels() []any {
 		&models.QueueSlot{},
 		&models.QueueDLQ{},
 		&models.QueueStatsMinute{},
+		&models.Setting{},
 	}
 }
 

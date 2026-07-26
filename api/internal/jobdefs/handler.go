@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -22,6 +24,7 @@ type Handler struct {
 	defs       *repos.JobDefinitionRepository
 	runs       *repos.RunRepository
 	executions *repos.JobExecutionRepository
+	settings   *repos.SettingRepository
 	engine     *queue.Engine
 	stats      *queue.StatsAggregator
 	grpcSrv    *grpc.Server
@@ -31,11 +34,20 @@ func NewHandler(
 	defs *repos.JobDefinitionRepository,
 	runs *repos.RunRepository,
 	executions *repos.JobExecutionRepository,
+	settings *repos.SettingRepository,
 	engine *queue.Engine,
 	stats *queue.StatsAggregator,
 	grpcSrv *grpc.Server,
 ) *Handler {
-	return &Handler{defs: defs, runs: runs, executions: executions, engine: engine, stats: stats, grpcSrv: grpcSrv}
+	return &Handler{
+		defs:       defs,
+		runs:       runs,
+		executions: executions,
+		settings:   settings,
+		engine:     engine,
+		stats:      stats,
+		grpcSrv:    grpcSrv,
+	}
 }
 
 // --- DTOs (JSON keys match ui/src/types/jobs.ts) ---
@@ -48,17 +60,19 @@ type sourceDTO struct {
 }
 
 type jobDTO struct {
-	Slug             string                  `json:"slug"`
-	Name             string                  `json:"name"`
-	Description      string                  `json:"description"`
-	Queue            string                  `json:"queue"`
-	LabelSelector    map[string]string       `json:"labelSelector"`
-	Runtime          string                  `json:"runtime"`
-	Command          string                  `json:"command"`
-	Source           sourceDTO               `json:"source"`
-	Parameters       []models.ParameterField `json:"parameters"`
-	SuccessRate      float64                 `json:"successRate"`
-	MedianDurationMs int64                   `json:"medianDurationMs"`
+	Slug          string                  `json:"slug"`
+	Name          string                  `json:"name"`
+	Description   string                  `json:"description"`
+	Queue         string                  `json:"queue"`
+	LabelSelector map[string]string       `json:"labelSelector"`
+	Runtime       string                  `json:"runtime"`
+	Command       string                  `json:"command"`
+	Source        sourceDTO               `json:"source"`
+	Parameters    []models.ParameterField `json:"parameters"`
+	// Origin is "git" for a synced definition, "panel" for one authored here.
+	Origin           string  `json:"origin"`
+	SuccessRate      float64 `json:"successRate"`
+	MedianDurationMs int64   `json:"medianDurationMs"`
 }
 
 type buildDTO struct {
@@ -75,6 +89,9 @@ type buildDTO struct {
 	// The panel offers them as a starting point for the next build. Secret
 	// parameters never reach Run.Params, so nothing sensitive is echoed here.
 	Params map[string]string `json:"params,omitempty"`
+	// AdHoc marks a build that ran a panel-edited schema rather than the
+	// definition committed to Git.
+	AdHoc bool `json:"adHoc,omitempty"`
 }
 
 // containerSpec is the JSON envelope for a "container" job (matches the proto
@@ -107,8 +124,11 @@ func (h *Handler) toJobDTO(def *models.JobDefinition, rate float64, median int64
 			Repo:   def.SourceRepo,
 			Path:   def.SourcePath,
 			Commit: def.SourceCommit,
-			InSync: true,
+			// Sync upserts and prunes on every pass, so a Git-sourced row always
+			// matches its file. A panel-authored one has no file to match.
+			InSync: def.Origin == models.OriginGit,
 		},
+		Origin:           def.Origin,
 		Parameters:       params,
 		SuccessRate:      rate,
 		MedianDurationMs: median,
@@ -203,6 +223,14 @@ func (h *Handler) Builds(c *gin.Context) {
 
 type triggerRequest struct {
 	Values map[string]any `json:"values"`
+	// Parameters is the schema the panel actually rendered. When present and
+	// different from the Git-synced definition, this is an ad-hoc build: the
+	// submitted schema is what gets validated, not the stored one. Omit it to
+	// run the definition as committed.
+	//
+	// Without this, values for panel-added parameters were silently dropped —
+	// Validate only ever walked the stored fields.
+	Parameters []models.ParameterField `json:"parameters"`
 }
 
 // Trigger validates the payload against the schema and enqueues a build.
@@ -224,7 +252,30 @@ func (h *Handler) Trigger(c *gin.Context) {
 		return
 	}
 
-	resolved, verr := Validate(def.Parameters, req.Values)
+	// Decide which schema governs this build. An omitted `parameters` means
+	// "run it as committed"; anything else is compared against Git.
+	schema := def.Parameters
+	adhoc := false
+	if req.Parameters != nil && schemaDiffers(def.Parameters, req.Parameters) {
+		allowed, err := h.settings.GetBool(ctx, models.AllowAdhocBuilds)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !allowed {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+				"error": "this build's parameters differ from the definition in Git, " +
+					"and ad-hoc builds are turned off — commit your changes, or enable " +
+					"ad-hoc builds in Settings",
+				"code": "adhoc_builds_disabled",
+			})
+			return
+		}
+		schema = req.Parameters
+		adhoc = true
+	}
+
+	resolved, verr := Validate(schema, req.Values)
 	if verr != nil {
 		var ve *ValidationError
 		if errors.As(verr, &ve) {
@@ -260,6 +311,10 @@ func (h *Handler) Trigger(c *gin.Context) {
 		JobSlug:     def.Slug,
 		Environment: resolved.Environment,
 		Params:      resolved.Env,
+		AdHoc:       adhoc,
+	}
+	if adhoc {
+		run.ParamSchema = schema
 	}
 	if err := h.runs.Create(ctx, run); err != nil {
 		writeError(c, http.StatusInternalServerError, err.Error())
@@ -286,6 +341,310 @@ func (h *Handler) Trigger(c *gin.Context) {
 	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
 }
 
+// createRequest is a template authored in the panel and saved as a definition.
+type createRequest struct {
+	Name        string                  `json:"name"`
+	Description string                  `json:"description"`
+	Queue       string                  `json:"queue"`
+	Runtime     string                  `json:"runtime"`
+	Command     string                  `json:"command"`
+	SourceRepo  string                  `json:"sourceRepo"`
+	Labels      map[string]string       `json:"labelSelector"`
+	Parameters  []models.ParameterField `json:"parameters"`
+}
+
+// Create saves a panel-authored template as a job definition.
+//
+// It is stored with Origin=panel so the Git sync neither rewrites nor prunes
+// it. This is a deliberate widening of PRODUCT.md §6: Git remains the source of
+// truth for everything it owns, but the panel can now own definitions of its
+// own rather than only producing YAML to commit.
+func (h *Handler) Create(c *gin.Context) {
+	if _, ok := requireUserID(c); !ok {
+		return
+	}
+	ctx := c.Request.Context()
+
+	var req createRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(c, http.StatusBadRequest, "name is required")
+		return
+	}
+	if strings.TrimSpace(req.Runtime) == "" {
+		writeError(c, http.StatusBadRequest, "runtime is required")
+		return
+	}
+	if strings.TrimSpace(req.Command) == "" {
+		writeError(c, http.StatusBadRequest, "command is required")
+		return
+	}
+	for _, p := range req.Parameters {
+		if strings.TrimSpace(p.Name) == "" {
+			writeError(c, http.StatusBadRequest, "every parameter needs a name")
+			return
+		}
+		if !KnownTypes[p.Type] {
+			writeError(c, http.StatusBadRequest,
+				fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
+			return
+		}
+	}
+
+	slug := slugify(req.Name)
+	if slug == "" {
+		writeError(c, http.StatusBadRequest, "could not derive a slug from the name")
+		return
+	}
+	if _, err := h.defs.GetBySlug(ctx, slug); err == nil {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": fmt.Sprintf("a job definition named %q already exists", slug),
+			"code":  "slug_taken",
+		})
+		return
+	} else if !errors.Is(err, repos.ErrNotFound) {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	queueName := strings.TrimSpace(req.Queue)
+	if queueName == "" {
+		queueName = "default"
+	}
+	params := req.Parameters
+	if params == nil {
+		params = []models.ParameterField{}
+	}
+
+	def := &models.JobDefinition{
+		Slug:          slug,
+		Name:          req.Name,
+		Description:   req.Description,
+		Queue:         queueName,
+		LabelSelector: req.Labels,
+		Runtime:       req.Runtime,
+		Command:       req.Command,
+		SourceRepo:    req.SourceRepo,
+		Parameters:    params,
+		Origin:        models.OriginPanel,
+	}
+	if err := h.defs.Create(ctx, def); err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusCreated, h.toJobDTO(def, 0, 0))
+}
+
+// Update rewrites a panel-authored definition.
+//
+// Git-sourced definitions are refused: the next sync would overwrite anything
+// written here, so accepting the edit would only look like it worked.
+func (h *Handler) Update(c *gin.Context) {
+	if _, ok := requireUserID(c); !ok {
+		return
+	}
+	ctx := c.Request.Context()
+
+	def, err := h.defs.GetBySlug(ctx, c.Param("slug"))
+	if err != nil {
+		notFoundOrInternal(c, err)
+		return
+	}
+	if def.Origin != models.OriginPanel {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": "this definition is managed in Git — edit the YAML in the " +
+				"job-definitions repo, or the next sync will overwrite the change",
+			"code": "git_managed",
+		})
+		return
+	}
+
+	var req createRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(c, http.StatusBadRequest, "name is required")
+		return
+	}
+	if strings.TrimSpace(req.Runtime) == "" {
+		writeError(c, http.StatusBadRequest, "runtime is required")
+		return
+	}
+	if strings.TrimSpace(req.Command) == "" {
+		writeError(c, http.StatusBadRequest, "command is required")
+		return
+	}
+	for _, p := range req.Parameters {
+		if strings.TrimSpace(p.Name) == "" {
+			writeError(c, http.StatusBadRequest, "every parameter needs a name")
+			return
+		}
+		if !KnownTypes[p.Type] {
+			writeError(c, http.StatusBadRequest,
+				fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
+			return
+		}
+	}
+
+	queueName := strings.TrimSpace(req.Queue)
+	if queueName == "" {
+		queueName = "default"
+	}
+	params := req.Parameters
+	if params == nil {
+		params = []models.ParameterField{}
+	}
+
+	// Slug is intentionally left alone: runs reference it, so renaming the
+	// template must not orphan its build history.
+	def.Name = req.Name
+	def.Description = req.Description
+	def.Queue = queueName
+	def.LabelSelector = req.Labels
+	def.Runtime = req.Runtime
+	def.Command = req.Command
+	def.SourceRepo = req.SourceRepo
+	def.Parameters = params
+
+	if err := h.defs.Update(ctx, def); err != nil {
+		notFoundOrInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, h.toJobDTO(def, 0, 0))
+}
+
+// adhocRequest is a build for a template that has no Git file at all — created
+// from scratch in the panel. Everything the definition would have supplied has
+// to travel inline, since there is no stored row to read it from.
+type adhocRequest struct {
+	Name       string                  `json:"name"`
+	Queue      string                  `json:"queue"`
+	Runtime    string                  `json:"runtime"`
+	Command    string                  `json:"command"`
+	SourceRepo string                  `json:"sourceRepo"`
+	Labels     map[string]string       `json:"labelSelector"`
+	Parameters []models.ParameterField `json:"parameters"`
+	Values     map[string]any          `json:"values"`
+}
+
+// TriggerAdhoc runs a panel-authored template that was never committed. Always
+// an ad-hoc build by definition, so it is gated on the same setting as a
+// drifted one.
+func (h *Handler) TriggerAdhoc(c *gin.Context) {
+	userID, ok := requireUserID(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+
+	var req adhocRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	allowed, err := h.settings.GetBool(ctx, models.AllowAdhocBuilds)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": "this template is not committed to Git, and ad-hoc builds are " +
+				"turned off — commit it as a job definition, or enable ad-hoc builds in Settings",
+			"code": "adhoc_builds_disabled",
+		})
+		return
+	}
+
+	if strings.TrimSpace(req.Command) == "" {
+		writeError(c, http.StatusBadRequest, "command is required")
+		return
+	}
+	if strings.TrimSpace(req.Runtime) == "" {
+		writeError(c, http.StatusBadRequest, "runtime is required")
+		return
+	}
+	queueName := strings.TrimSpace(req.Queue)
+	if queueName == "" {
+		queueName = "default"
+	}
+	for _, p := range req.Parameters {
+		if !KnownTypes[p.Type] {
+			writeError(c, http.StatusBadRequest,
+				fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
+			return
+		}
+	}
+
+	resolved, verr := Validate(req.Parameters, req.Values)
+	if verr != nil {
+		var ve *ValidationError
+		if errors.As(verr, &ve) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error":  ve.Error(),
+				"code":   "invalid_parameters",
+				"fields": ve.Fields,
+			})
+			return
+		}
+		writeError(c, http.StatusBadRequest, verr.Error())
+		return
+	}
+
+	payload, err := json.Marshal(containerSpec{
+		SourceRepository: req.SourceRepo,
+		Runtime:          req.Runtime,
+		RequestParams:    resolved.Env,
+		Command:          req.Command,
+	})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// JobSlug stays empty: PRODUCT.md defines an ad-hoc run as one with no
+	// definition behind it, and there is no committed definition here to point at.
+	run := &models.Run{
+		JobID:       uuid.New().String(),
+		UserID:      userID,
+		Queue:       queueName,
+		Type:        "container",
+		Environment: resolved.Environment,
+		Params:      resolved.Env,
+		AdHoc:       true,
+		ParamSchema: req.Parameters,
+	}
+	if err := h.runs.Create(ctx, run); err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	job := &queue.Job{
+		ID:       run.JobID,
+		Queue:    queueName,
+		Type:     "container",
+		Payload:  payload,
+		Meta:     map[string]string{"user_id": userID.Hex(), "run_id": run.ID.Hex()},
+		Selector: req.Labels,
+	}
+	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{}); err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.stats.RecordEnqueued(ctx, queueName)
+	if h.grpcSrv != nil {
+		h.grpcSrv.DispatchQueue(ctx, queueName)
+	}
+
+	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
+}
+
 // buildDTO derives a build's live status from queue + execution state. exec is
 // the already-loaded execution record for this run, or nil if it hasn't
 // finished (see execsFor / ListByJobIDs — never query per build here).
@@ -298,6 +657,7 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 		Environment: run.Environment,
 		StartedAt:   run.CreatedAt.UTC().UnixMilli(),
 		Params:      run.Params,
+		AdHoc:       run.AdHoc,
 	}
 	if job, err := h.engine.GetJob(ctx, run.JobID); err == nil {
 		switch job.Status {

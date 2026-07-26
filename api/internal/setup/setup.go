@@ -34,6 +34,7 @@ type Dependencies struct {
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	RefreshTokenRepo   *repos.RefreshTokenRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	SettingRepo        *repos.SettingRepository
 	TokenService       *auth.TokenService
 	AuthService        *auth.Service
 }
@@ -88,6 +89,7 @@ func Initialize() (*Dependencies, error) {
 		WebhookRepo:        reposInit.WebhookRepo,
 		RefreshTokenRepo:   reposInit.RefreshTokenRepo,
 		JobDefRepo:         jobDefRepo,
+		SettingRepo:        reposInit.SettingRepo,
 		TokenService:       tokenSvc,
 		AuthService:        authSvc,
 	}, nil
@@ -157,6 +159,7 @@ type Repositories struct {
 	RunRepo            *repos.RunRepository
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	RefreshTokenRepo   *repos.RefreshTokenRepository
+	SettingRepo        *repos.SettingRepository
 }
 
 func initializeRepositories(db *connection.Database) *Repositories {
@@ -171,5 +174,6 @@ func initializeRepositories(db *connection.Database) *Repositories {
 		RunRepo:            repos.NewRunRepository(db.DB),
 		WebhookRepo:        repos.NewWebhookDeliveryRepository(db.DB),
 		RefreshTokenRepo:   repos.NewRefreshTokenRepository(db.DB),
+		SettingRepo:        repos.NewSettingRepository(db.DB),
 	}
 }

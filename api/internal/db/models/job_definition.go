@@ -39,6 +39,16 @@ type JobDefinition struct {
 	SourcePath    string            `json:"sourcePath"`
 	SourceCommit  string            `json:"sourceCommit"`
 	Parameters    []ParameterField  `json:"parameters,omitempty" gorm:"serializer:json"`
+	// Origin records who owns this definition. Git-synced rows are rewritten and
+	// pruned by every sync; panel-created ones are not, or authoring one would
+	// vanish on the next restart.
+	Origin string `json:"origin" gorm:"column:origin;size:16;index;default:git"`
 }
+
+// Definition origins.
+const (
+	OriginGit   = "git"
+	OriginPanel = "panel"
+)
 
 func (*JobDefinition) TableName() string { return "job_definitions" }

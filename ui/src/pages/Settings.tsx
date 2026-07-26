@@ -9,6 +9,7 @@ import {
   Input,
   PageHeader,
 } from '@/components/ui';
+import { getSettings, updateSettings } from '@/services/settingsService';
 import {
   apiKeyService,
   type APIKeySummary,
@@ -45,6 +46,16 @@ const Settings = () => {
     },
   });
 
+  const settingsQuery = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+  });
+
+  const settingsMut = useMutation({
+    mutationFn: (allowAdhocBuilds: boolean) => updateSettings({ allowAdhocBuilds }),
+    onSuccess: (data) => qc.setQueryData(['settings'], data),
+  });
+
   const revokeMut = useMutation({
     mutationFn: (id: string) => apiKeyService.revoke(id),
     onSuccess: () => {
@@ -73,6 +84,34 @@ const Settings = () => {
         <code className='mt-2 block break-all rounded-md bg-bg px-2 py-1.5 text-xs text-fg'>
           {publicApiBase()}
         </code>
+      </Card>
+
+      <Card className='mb-6 border-border bg-surface p-4 sm:p-5'>
+        <h2 className='text-sm font-semibold text-fg'>Builds</h2>
+        <label className='mt-3 flex items-start gap-3'>
+          <input
+            type='checkbox'
+            className='mt-0.5 h-4 w-4 shrink-0 accent-accent'
+            checked={settingsQuery.data?.allowAdhocBuilds ?? true}
+            disabled={settingsQuery.isLoading || settingsMut.isPending}
+            onChange={(e) => settingsMut.mutate(e.target.checked)}
+          />
+          <span>
+            <span className='block text-sm font-medium text-fg'>Allow ad-hoc builds</span>
+            <span className='mt-0.5 block text-sm text-fg-muted'>
+              Let the panel run templates that differ from Git — edited in the
+              workbench, or created from scratch. Turn this off to require every
+              build to come from a committed definition.
+            </span>
+          </span>
+        </label>
+        {settingsMut.isError && (
+          <Alert tone='danger' className='mt-3'>
+            {settingsMut.error instanceof Error
+              ? settingsMut.error.message
+              : 'Could not save the setting.'}
+          </Alert>
+        )}
       </Card>
 
       {newToken && (

@@ -13,6 +13,7 @@ import (
 	"github.com/lute/api/internal/middleware"
 	"github.com/lute/api/internal/publicapi"
 	"github.com/lute/api/internal/queue"
+	"github.com/lute/api/internal/settings"
 	"github.com/lute/api/internal/ui"
 	"github.com/lute/api/internal/websocket"
 	"github.com/lute/api/internal/worker"
@@ -34,6 +35,7 @@ type SetupRouterDeps struct {
 	APIKeyRepo         *repos.APIKeyRepository
 	RunRepo            *repos.RunRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	SettingRepo        *repos.SettingRepository
 	Hub                *websocket.Hub
 	QueueEngine        *queue.Engine
 	StatsAgg           *queue.StatsAggregator
@@ -66,7 +68,8 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	apiKeysHandler := publicapi.NewAPIKeysHandler(d.APIKeyRepo)
 
 	jobHandler := jobs.NewJobHandler(d.QueueEngine, d.StatsAgg, d.GRPCServer, d.JobExecutionRepo)
-	jobDefHandler := jobdefs.NewHandler(d.JobDefRepo, d.RunRepo, d.JobExecutionRepo, d.QueueEngine, d.StatsAgg, d.GRPCServer)
+	jobDefHandler := jobdefs.NewHandler(d.JobDefRepo, d.RunRepo, d.JobExecutionRepo, d.SettingRepo, d.QueueEngine, d.StatsAgg, d.GRPCServer)
+	settingsHandler := settings.NewHandler(d.SettingRepo)
 	executionsHandler := jobs.NewExecutionsHandler(d.JobExecutionRepo)
 	queueHandler := jobs.NewQueueHandler(d.QueueEngine, d.StatsAgg)
 	dlqHandler := jobs.NewDLQHandler(d.QueueEngine, d.GRPCServer)
@@ -86,6 +89,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 			jobs.SetupRoutes(authed, jobHandler, queueHandler, dlqHandler, executionsHandler)
 			jobdefs.SetupRoutes(authed, jobDefHandler)
 			publicapi.SetupAPIKeyRoutes(authed, apiKeysHandler)
+			settings.SetupRoutes(authed, settingsHandler)
 		}
 	}
 

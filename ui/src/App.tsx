@@ -18,6 +18,7 @@ import Workers from './pages/Workers';
 import WorkerDetail from './pages/WorkerDetail';
 import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
+import JobNew from './pages/JobNew';
 import Executions from './pages/Executions';
 import ExecutionDetail from './pages/ExecutionDetail';
 import Settings from './pages/Settings';
@@ -64,6 +65,7 @@ function AppRoutes() {
           <Route path='/executions/:id' element={<ExecutionDetail />} />
           <Route path='/settings' element={<Settings />} />
           <Route path='/jobs' element={<Jobs />} />
+          <Route path='/jobs/new' element={<JobNew />} />
           <Route path='/jobs/:slug' element={<JobDetail />} />
           <Route path='*' element={<Navigate to='/' replace />} />
         </Route>

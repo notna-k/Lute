@@ -13,26 +13,26 @@ import (
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/router"
 	"github.com/lute/api/internal/webhooks"
-	"github.com/lute/api/internal/worker"
 	"github.com/lute/api/internal/websocket"
+	"github.com/lute/api/internal/worker"
 )
 
 type Server struct {
-	HTTP                *http.Server
-	GRPC                *grpc.Server
-	Hub                 *websocket.Hub
-	HeartbeatChecker    *worker.HeartbeatChecker
-	WorkerSnapshotJob   *worker.WorkerSnapshotJob
-	QueueScheduler      *queue.Scheduler
-	WebhookDispatcher   *webhooks.Dispatcher
-	checkerCtx          context.Context
-	checkerStop         context.CancelFunc
-	snapshotJobCtx      context.Context
-	snapshotJobCancel   context.CancelFunc
-	schedulerCtx        context.Context
-	schedulerCancel     context.CancelFunc
-	webhookCtx          context.Context
-	webhookCancel       context.CancelFunc
+	HTTP              *http.Server
+	GRPC              *grpc.Server
+	Hub               *websocket.Hub
+	HeartbeatChecker  *worker.HeartbeatChecker
+	WorkerSnapshotJob *worker.WorkerSnapshotJob
+	QueueScheduler    *queue.Scheduler
+	WebhookDispatcher *webhooks.Dispatcher
+	checkerCtx        context.Context
+	checkerStop       context.CancelFunc
+	snapshotJobCtx    context.Context
+	snapshotJobCancel context.CancelFunc
+	schedulerCtx      context.Context
+	schedulerCancel   context.CancelFunc
+	webhookCtx        context.Context
+	webhookCancel     context.CancelFunc
 }
 
 // Deps aggregates the dependencies needed to construct a Server.
@@ -49,6 +49,7 @@ type Deps struct {
 	RunRepo            *repos.RunRepository
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	SettingRepo        *repos.SettingRepository
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
 	StatsAgg           *queue.StatsAggregator
@@ -77,6 +78,7 @@ func New(d Deps) *Server {
 		APIKeyRepo:         d.APIKeyRepo,
 		RunRepo:            d.RunRepo,
 		JobDefRepo:         d.JobDefRepo,
+		SettingRepo:        d.SettingRepo,
 		Hub:                hub,
 		QueueEngine:        d.QueueEngine,
 		StatsAgg:           d.StatsAgg,
