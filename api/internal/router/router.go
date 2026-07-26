@@ -49,7 +49,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(d.Config.Server.AllowedOrigins))
 
 	healthHandler := health.NewHealthHandler(d.DB)
 	api := r.Group("/api")
