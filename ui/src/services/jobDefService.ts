@@ -76,22 +76,3 @@ export function updateJob(slug: string, template: NewJobTemplate): Promise<JobDe
   );
 }
 
-/** A template authored in the panel that has no Git file behind it. */
-export interface AdhocTemplate {
-  name: string;
-  queue: string;
-  runtime: string;
-  command: string;
-  sourceRepo?: string;
-  labelSelector?: Record<string, string>;
-  parameters: ParameterField[];
-  values: ParameterValues;
-}
-
-/**
- * Runs a from-scratch template. There is no stored definition to address, so
- * the whole spec travels inline. Always an ad-hoc build.
- */
-export function triggerAdhocBuild(template: AdhocTemplate): Promise<Build> {
-  return apiClient.post<Build>('/api/v1/job-definitions/adhoc/trigger', template);
-}

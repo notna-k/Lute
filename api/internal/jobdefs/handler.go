@@ -353,6 +353,43 @@ type createRequest struct {
 	Parameters  []models.ParameterField `json:"parameters"`
 }
 
+// validate checks the fields a template cannot be saved without, and returns a
+// message suitable for the panel. Shared by Create and Update so the two cannot
+// drift apart.
+func (r createRequest) validate() string {
+	if strings.TrimSpace(r.Name) == "" {
+		return "name is required"
+	}
+	if strings.TrimSpace(r.Runtime) == "" {
+		return "runtime is required"
+	}
+	if strings.TrimSpace(r.Command) == "" {
+		return "command is required"
+	}
+	for _, p := range r.Parameters {
+		if strings.TrimSpace(p.Name) == "" {
+			return "every parameter needs a name"
+		}
+		if !KnownTypes[p.Type] {
+			return fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type)
+		}
+	}
+	return ""
+}
+
+// normalized returns the queue and parameter list with defaults applied.
+func (r createRequest) normalized() (string, []models.ParameterField) {
+	queueName := strings.TrimSpace(r.Queue)
+	if queueName == "" {
+		queueName = "default"
+	}
+	params := r.Parameters
+	if params == nil {
+		params = []models.ParameterField{}
+	}
+	return queueName, params
+}
+
 // Create saves a panel-authored template as a job definition.
 //
 // It is stored with Origin=panel so the Git sync neither rewrites nor prunes
@@ -370,28 +407,9 @@ func (h *Handler) Create(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if strings.TrimSpace(req.Name) == "" {
-		writeError(c, http.StatusBadRequest, "name is required")
+	if msg := req.validate(); msg != "" {
+		writeError(c, http.StatusBadRequest, msg)
 		return
-	}
-	if strings.TrimSpace(req.Runtime) == "" {
-		writeError(c, http.StatusBadRequest, "runtime is required")
-		return
-	}
-	if strings.TrimSpace(req.Command) == "" {
-		writeError(c, http.StatusBadRequest, "command is required")
-		return
-	}
-	for _, p := range req.Parameters {
-		if strings.TrimSpace(p.Name) == "" {
-			writeError(c, http.StatusBadRequest, "every parameter needs a name")
-			return
-		}
-		if !KnownTypes[p.Type] {
-			writeError(c, http.StatusBadRequest,
-				fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
-			return
-		}
 	}
 
 	slug := slugify(req.Name)
@@ -410,14 +428,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	queueName := strings.TrimSpace(req.Queue)
-	if queueName == "" {
-		queueName = "default"
-	}
-	params := req.Parameters
-	if params == nil {
-		params = []models.ParameterField{}
-	}
+	queueName, params := req.normalized()
 
 	def := &models.JobDefinition{
 		Slug:          slug,
@@ -467,38 +478,12 @@ func (h *Handler) Update(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if strings.TrimSpace(req.Name) == "" {
-		writeError(c, http.StatusBadRequest, "name is required")
+	if msg := req.validate(); msg != "" {
+		writeError(c, http.StatusBadRequest, msg)
 		return
-	}
-	if strings.TrimSpace(req.Runtime) == "" {
-		writeError(c, http.StatusBadRequest, "runtime is required")
-		return
-	}
-	if strings.TrimSpace(req.Command) == "" {
-		writeError(c, http.StatusBadRequest, "command is required")
-		return
-	}
-	for _, p := range req.Parameters {
-		if strings.TrimSpace(p.Name) == "" {
-			writeError(c, http.StatusBadRequest, "every parameter needs a name")
-			return
-		}
-		if !KnownTypes[p.Type] {
-			writeError(c, http.StatusBadRequest,
-				fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
-			return
-		}
 	}
 
-	queueName := strings.TrimSpace(req.Queue)
-	if queueName == "" {
-		queueName = "default"
-	}
-	params := req.Parameters
-	if params == nil {
-		params = []models.ParameterField{}
-	}
+	queueName, params := req.normalized()
 
 	// Slug is intentionally left alone: runs reference it, so renaming the
 	// template must not orphan its build history.
@@ -516,133 +501,6 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, h.toJobDTO(def, 0, 0))
-}
-
-// adhocRequest is a build for a template that has no Git file at all — created
-// from scratch in the panel. Everything the definition would have supplied has
-// to travel inline, since there is no stored row to read it from.
-type adhocRequest struct {
-	Name       string                  `json:"name"`
-	Queue      string                  `json:"queue"`
-	Runtime    string                  `json:"runtime"`
-	Command    string                  `json:"command"`
-	SourceRepo string                  `json:"sourceRepo"`
-	Labels     map[string]string       `json:"labelSelector"`
-	Parameters []models.ParameterField `json:"parameters"`
-	Values     map[string]any          `json:"values"`
-}
-
-// TriggerAdhoc runs a panel-authored template that was never committed. Always
-// an ad-hoc build by definition, so it is gated on the same setting as a
-// drifted one.
-func (h *Handler) TriggerAdhoc(c *gin.Context) {
-	userID, ok := requireUserID(c)
-	if !ok {
-		return
-	}
-	ctx := c.Request.Context()
-
-	var req adhocRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	allowed, err := h.settings.GetBool(ctx, models.AllowAdhocBuilds)
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if !allowed {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "this template is not committed to Git, and ad-hoc builds are " +
-				"turned off — commit it as a job definition, or enable ad-hoc builds in Settings",
-			"code": "adhoc_builds_disabled",
-		})
-		return
-	}
-
-	if strings.TrimSpace(req.Command) == "" {
-		writeError(c, http.StatusBadRequest, "command is required")
-		return
-	}
-	if strings.TrimSpace(req.Runtime) == "" {
-		writeError(c, http.StatusBadRequest, "runtime is required")
-		return
-	}
-	queueName := strings.TrimSpace(req.Queue)
-	if queueName == "" {
-		queueName = "default"
-	}
-	for _, p := range req.Parameters {
-		if !KnownTypes[p.Type] {
-			writeError(c, http.StatusBadRequest,
-				fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
-			return
-		}
-	}
-
-	resolved, verr := Validate(req.Parameters, req.Values)
-	if verr != nil {
-		var ve *ValidationError
-		if errors.As(verr, &ve) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error":  ve.Error(),
-				"code":   "invalid_parameters",
-				"fields": ve.Fields,
-			})
-			return
-		}
-		writeError(c, http.StatusBadRequest, verr.Error())
-		return
-	}
-
-	payload, err := json.Marshal(containerSpec{
-		SourceRepository: req.SourceRepo,
-		Runtime:          req.Runtime,
-		RequestParams:    resolved.Env,
-		Command:          req.Command,
-	})
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// JobSlug stays empty: PRODUCT.md defines an ad-hoc run as one with no
-	// definition behind it, and there is no committed definition here to point at.
-	run := &models.Run{
-		JobID:       uuid.New().String(),
-		UserID:      userID,
-		Queue:       queueName,
-		Type:        "container",
-		Environment: resolved.Environment,
-		Params:      resolved.Env,
-		AdHoc:       true,
-		ParamSchema: req.Parameters,
-	}
-	if err := h.runs.Create(ctx, run); err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	job := &queue.Job{
-		ID:       run.JobID,
-		Queue:    queueName,
-		Type:     "container",
-		Payload:  payload,
-		Meta:     map[string]string{"user_id": userID.Hex(), "run_id": run.ID.Hex()},
-		Selector: req.Labels,
-	}
-	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{}); err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	h.stats.RecordEnqueued(ctx, queueName)
-	if h.grpcSrv != nil {
-		h.grpcSrv.DispatchQueue(ctx, queueName)
-	}
-
-	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
 }
 
 // buildDTO derives a build's live status from queue + execution state. exec is

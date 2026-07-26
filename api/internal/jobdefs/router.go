@@ -10,8 +10,6 @@ func SetupRoutes(authed *gin.RouterGroup, h *Handler) {
 	{
 		jobs.GET("", h.List)
 		jobs.POST("", h.Create)
-		// Registered before /:slug/... so "adhoc" is never read as a slug.
-		jobs.POST("/adhoc/trigger", h.TriggerAdhoc)
 		jobs.GET("/:slug", h.Get)
 		jobs.PUT("/:slug", h.Update)
 		jobs.GET("/:slug/builds", h.Builds)
