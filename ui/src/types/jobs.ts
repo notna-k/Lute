@@ -59,6 +59,8 @@ export interface JobDefinition {
   command: string;
   source: JobSource;
   parameters: ParameterField[];
+  /** "git" for a definition synced from the repo, "panel" for one authored here. */
+  origin: 'git' | 'panel';
   /** Success ratio over the trailing 30 days, 0..1. */
   successRate: number;
   medianDurationMs: number;
@@ -68,9 +70,18 @@ export type BuildStatus = 'running' | 'passed' | 'failed' | 'queued';
 
 export interface Build {
   id: string;
+  /** Full run identifier — use this to address the build in APIs. */
+  runId?: string;
   jobSlug: string;
   status: BuildStatus;
   environment?: string;
   startedAt: number;
   durationMs?: number;
+  /**
+   * Resolved values this build ran with, keyed by env var (never secrets).
+   * Lets the panel prefill a new build from a previous one.
+   */
+  params?: Record<string, string>;
+  /** True when this build ran a panel-edited schema, not the committed one. */
+  adHoc?: boolean;
 }

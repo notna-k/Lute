@@ -9,7 +9,9 @@ func SetupRoutes(authed *gin.RouterGroup, h *Handler) {
 	jobs := authed.Group("/job-definitions")
 	{
 		jobs.GET("", h.List)
+		jobs.POST("", h.Create)
 		jobs.GET("/:slug", h.Get)
+		jobs.PUT("/:slug", h.Update)
 		jobs.GET("/:slug/builds", h.Builds)
 		jobs.POST("/:slug/trigger", h.Trigger)
 	}

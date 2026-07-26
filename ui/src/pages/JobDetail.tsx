@@ -1,13 +1,12 @@
-import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, GitBranch, Play } from 'lucide-react';
-import { getJob, listBuilds, triggerBuild } from '@/services/jobDefService';
+import { ArrowLeft, GitBranch, PenLine, Save } from 'lucide-react';
+import { getJob, listBuilds, triggerBuild, updateJob } from '@/services/jobDefService';
 import { ApiError } from '@/services/api';
-import { ParameterForm } from '@/features/jobs/ParameterForm';
-import { Spinner } from '@/components/ui';
+import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
+import { Button, Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import type { Build, JobDefinition, ParameterValues } from '@/types/jobs';
+import type { Build, ParameterField, ParameterValues } from '@/types/jobs';
 
 function relativeTime(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000);
@@ -15,7 +14,8 @@ function relativeTime(ts: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
-  return `${h}h ago`;
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function formatDuration(ms?: number): string {
@@ -31,39 +31,17 @@ const BUILD_TONE: Record<Build['status'], string> = {
   queued: 'text-fg-muted bg-surface-hover',
 };
 
-function toYaml(job: JobDefinition): string {
-  const lines = [
-    `# ${job.source.path} — source of truth`,
-    `name: ${job.name}`,
-    `queue: ${job.queue}`,
-    `runtime: ${job.runtime}`,
-    `command: ${job.command}`,
-    'parameters:',
-  ];
-  for (const p of job.parameters) {
-    lines.push(`  - name: ${p.name}`);
-    lines.push(`    type: ${p.type}${p.required ? '   required: true' : ''}`);
-    if (p.options) lines.push(`    options: [${p.options.map((o) => o.value).join(', ')}]`);
-    if (p.default !== undefined) {
-      lines.push(`    default: ${Array.isArray(p.default) ? `[${p.default.join(', ')}]` : p.default}`);
-    }
-  }
-  return lines.join('\n');
-}
-
-function RecentBuilds({ builds }: { builds: Build[] }) {
+function BuildHistory({ builds }: { builds: Build[] }) {
   return (
-    <div className='rounded-xl border border-border bg-surface'>
+    <div className='mt-6 rounded-xl border border-border bg-surface'>
       <div className='border-b border-border px-4 py-3'>
-        <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>
-          Recent builds
-        </h2>
+        <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>Build history</h2>
       </div>
-      <div className='px-3 py-1'>
+      <div className='px-4 py-1'>
         {builds.map((b) => (
           <div
             key={b.id}
-            className='flex items-center gap-3 border-b border-border-subtle py-2.5 text-sm last:border-b-0'
+            className='flex flex-wrap items-center gap-3 border-b border-border-subtle py-2.5 text-sm last:border-b-0'
           >
             <span
               className={cn(
@@ -71,18 +49,18 @@ function RecentBuilds({ builds }: { builds: Build[] }) {
                 BUILD_TONE[b.status]
               )}
             >
-              {b.status === 'running' && (
-                <span className='mr-1 animate-pulse'>●</span>
-              )}
+              {b.status === 'running' && <span className='mr-1 animate-pulse'>●</span>}
               {b.status}
             </span>
             <span className='font-mono text-xs text-fg-muted'>#{b.id}</span>
-            <div className='ml-auto text-right'>
-              <div className='text-xs text-fg'>{b.environment}</div>
-              <div className='font-mono text-xxs text-fg-subtle'>
-                {relativeTime(b.startedAt)} · {formatDuration(b.durationMs)}
-              </div>
-            </div>
+            {b.environment && (
+              <span className='rounded bg-surface-hover px-1.5 py-0.5 font-mono text-xxs text-fg-muted'>
+                {b.environment}
+              </span>
+            )}
+            <span className='ml-auto font-mono text-xxs text-fg-subtle'>
+              {relativeTime(b.startedAt)} · {formatDuration(b.durationMs)}
+            </span>
           </div>
         ))}
       </div>
@@ -90,37 +68,8 @@ function RecentBuilds({ builds }: { builds: Build[] }) {
   );
 }
 
-function LiveLog({ running }: { running?: Build }) {
-  return (
-    <div className='overflow-hidden rounded-xl border border-border bg-bg'>
-      <div className='flex items-center gap-2 border-b border-border px-3 py-2.5 font-mono text-xxs text-fg-subtle'>
-        <span className='h-2.5 w-2.5 rounded-full bg-danger' />
-        <span className='h-2.5 w-2.5 rounded-full bg-warning' />
-        <span className='h-2.5 w-2.5 rounded-full bg-success' />
-        <span className='ml-1'>{running ? `#${running.id} · live tail` : 'log tail'}</span>
-      </div>
-      <div className='scrollbar-thin flex max-h-56 min-h-[7rem] items-center justify-center overflow-auto p-4 text-center font-mono text-xs text-fg-subtle'>
-        {running ? (
-          <span>
-            Build <span className='text-fg'>#{running.id}</span> is running.
-            Streaming from the worker…
-            <span className='animate-pulse text-warning'>█</span>
-          </span>
-        ) : (
-          <span>
-            No build streaming. Trigger a build — logs tail here live from the
-            worker while it runs.
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function JobDetail() {
   const { slug = '' } = useParams();
-  const [view, setView] = useState<'form' | 'source'>('form');
-  const [values, setValues] = useState<ParameterValues>({});
   const queryClient = useQueryClient();
 
   const { data: job, isLoading } = useQuery({
@@ -139,15 +88,66 @@ export default function JobDetail() {
   });
 
   const trigger = useMutation({
-    mutationFn: () => triggerBuild(slug, values),
+    // The authored schema goes with the values: the server validates against
+    // what the user actually saw, so an added parameter is applied rather than
+    // silently dropped.
+    mutationFn: ({ values, fields }: { values: ParameterValues; fields: ParameterField[] }) =>
+      triggerBuild(slug, values, fields),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['builds', slug] });
       queryClient.invalidateQueries({ queryKey: ['job', slug] });
     },
   });
 
-  const fieldErrors =
-    trigger.error instanceof ApiError ? trigger.error.fields : undefined;
+  const saveEdit = useMutation({
+    mutationFn: (parameters: ParameterField[]) =>
+      updateJob(slug, {
+        name: job?.name ?? '',
+        description: job?.description ?? '',
+        queue: job?.queue ?? 'default',
+        runtime: job?.runtime ?? '',
+        command: job?.command ?? '',
+        sourceRepo: job?.source.repo || undefined,
+        labelSelector: job?.labelSelector,
+        parameters,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['job', slug] });
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+  });
+
+  // Only panel-authored definitions can be saved. A Git-managed one would be
+  // overwritten by the next sync, so it gets the export path instead.
+  const editFooter =
+    job?.origin === 'panel'
+      ? (parameters: ParameterField[]) => (
+          <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
+            <Button
+              type='button'
+              disabled={saveEdit.isPending}
+              onClick={() => saveEdit.mutate(parameters)}
+            >
+              <Save className='mr-1.5 h-4 w-4' />
+              {saveEdit.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+            {saveEdit.isSuccess && !saveEdit.isPending && (
+              <span className='text-sm text-success'>Saved.</span>
+            )}
+            {saveEdit.isError && (
+              <span className='text-sm text-danger-fg'>
+                {(saveEdit.error as Error).message}
+              </span>
+            )}
+          </div>
+        )
+      : undefined;
+
+  const fieldErrors = trigger.error instanceof ApiError ? trigger.error.fields : undefined;
+  // A field-level rejection is already rendered on the inputs; repeating the
+  // summary line above them would just say "invalid parameters" twice.
+  const runError =
+    trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
 
   if (isLoading) {
     return (
@@ -177,100 +177,47 @@ export default function JobDetail() {
         <ArrowLeft className='h-3.5 w-3.5' /> Jobs
       </Link>
 
-      {/* Header */}
       <div className='mb-6 flex flex-wrap items-start gap-4'>
         <div className='min-w-0'>
           <div className='flex items-center gap-3'>
-            <h1 className='font-mono text-2xl font-bold tracking-tight text-fg'>
-              {job.name}
-            </h1>
-            <span className='inline-flex items-center gap-1 rounded border border-success/30 bg-success-subtle px-2 py-0.5 text-xxs font-medium uppercase tracking-wide text-success-fg'>
-              <GitBranch className='h-3 w-3' /> git-managed
-            </span>
+            <h1 className='font-mono text-2xl font-bold tracking-tight text-fg'>{job.name}</h1>
+            {job.origin === 'panel' ? (
+              <span className='inline-flex items-center gap-1 rounded border border-warning/30 bg-warning-subtle px-2 py-0.5 text-xxs font-medium uppercase tracking-wide text-warning-fg'>
+                <PenLine className='h-3 w-3' /> panel
+              </span>
+            ) : (
+              <span className='inline-flex items-center gap-1 rounded border border-success/30 bg-success-subtle px-2 py-0.5 text-xxs font-medium uppercase tracking-wide text-success-fg'>
+                <GitBranch className='h-3 w-3' /> git-managed
+              </span>
+            )}
           </div>
           <p className='mt-1.5 max-w-2xl text-sm text-fg-muted'>{job.description}</p>
         </div>
-        <div className='ml-auto flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
-          <GitBranch className='h-3.5 w-3.5' />
-          {job.source.repo} · <span className='text-fg'>{job.source.path}</span> ·{' '}
-          <span className='text-success'>@{job.source.commit}</span>
-        </div>
+        {job.origin === 'panel' ? (
+          <div className='ml-auto flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
+            <PenLine className='h-3.5 w-3.5' /> authored in the panel · not in Git
+          </div>
+        ) : (
+          <div className='ml-auto flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
+            <GitBranch className='h-3.5 w-3.5' />
+            {job.source.repo} · <span className='text-fg'>{job.source.path}</span> ·{' '}
+            <span className='text-success'>@{job.source.commit}</span>
+          </div>
+        )}
       </div>
 
-      <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]'>
-        {/* LEFT — trigger */}
-        <div className='rounded-xl border border-border bg-surface'>
-          <div className='flex items-center gap-3 border-b border-border px-4 py-3'>
-            <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>
-              Trigger a build
-            </h2>
-            <div className='ml-auto flex rounded-lg border border-border bg-bg p-0.5'>
-              {(['form', 'source'] as const).map((v) => (
-                <button
-                  key={v}
-                  type='button'
-                  onClick={() => setView(v)}
-                  className={cn(
-                    'rounded-md px-3 py-1 font-mono text-xs transition-colors',
-                    view === v
-                      ? 'bg-surface-active text-fg'
-                      : 'text-fg-muted hover:text-fg'
-                  )}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className='px-4 py-3'>
-            {view === 'form' ? (
-              <ParameterForm
-                fields={job.parameters}
-                onChange={setValues}
-                errors={fieldErrors}
-              />
-            ) : (
-              <pre className='scrollbar-thin overflow-auto py-2 font-mono text-xs leading-relaxed text-fg-muted'>
-                {toYaml(job)}
-              </pre>
-            )}
-          </div>
-        </div>
+      <BuildWorkbench
+        job={job}
+        builds={builds ?? []}
+        onRun={(values, fields) => trigger.mutate({ values, fields })}
+        running={trigger.isPending}
+        serverErrors={fieldErrors}
+        runError={runError}
+        queuedBuildId={trigger.isSuccess ? trigger.data.id : undefined}
+        footer={editFooter}
+      />
 
-        {/* RIGHT */}
-        <div className='flex flex-col gap-6'>
-          {builds && builds.length > 0 && <RecentBuilds builds={builds} />}
-          <LiveLog running={builds?.find((b) => b.status === 'running')} />
-        </div>
-
-        {/* Run bar — spans both columns, as in poc/console.html */}
-        <div className='flex flex-wrap items-center gap-3 rounded-xl border border-border bg-gradient-to-r from-surface to-surface-hover px-4 py-3 lg:col-span-2'>
-          <span className='font-mono text-xs text-fg-muted'>
-            Dispatches to <span className='text-fg'>{job.queue}</span> · worker{' '}
-            <span className='text-fg'>
-              {Object.entries(job.labelSelector).map(([k, v]) => `${k}=${v}`).join(', ') || 'any'}
-            </span>
-          </span>
-          {trigger.isError && (
-            <span className='font-mono text-xs text-danger'>
-              {(trigger.error as Error).message}
-            </span>
-          )}
-          {trigger.isSuccess && (
-            <span className='font-mono text-xs text-success'>
-              Build #{trigger.data.id} queued
-            </span>
-          )}
-          <button
-            type='button'
-            onClick={() => trigger.mutate()}
-            disabled={trigger.isPending}
-            className='ml-auto inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-fg-onPrimary shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60'
-          >
-            <Play className='h-4 w-4' /> {trigger.isPending ? 'Running…' : 'Run build'}
-          </button>
-        </div>
-      </div>
+      {builds && builds.length > 0 && <BuildHistory builds={builds} />}
     </div>
   );
 }

@@ -49,6 +49,7 @@ type Deps struct {
 	RunRepo            *repos.RunRepository
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	SettingRepo        *repos.SettingRepository
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
 	StatsAgg           *queue.StatsAggregator
@@ -77,6 +78,7 @@ func New(d Deps) *Server {
 		APIKeyRepo:         d.APIKeyRepo,
 		RunRepo:            d.RunRepo,
 		JobDefRepo:         d.JobDefRepo,
+		SettingRepo:        d.SettingRepo,
 		Hub:                hub,
 		QueueEngine:        d.QueueEngine,
 		StatsAgg:           d.StatsAgg,

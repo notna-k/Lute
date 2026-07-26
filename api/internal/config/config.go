@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -47,6 +48,10 @@ type ServerConfig struct {
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
 	Mode         string // "debug", "release", "test"
+	// AllowedOrigins is the CORS allow-list. The panel's own origin must be in
+	// here: browsers send Origin even on same-origin POSTs, and the CORS
+	// middleware rejects unlisted origins with 403.
+	AllowedOrigins []string
 }
 
 // SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
@@ -101,6 +106,11 @@ func Load() (*Config, error) {
 			WriteTimeout: getDurationEnv("SERVER_WRITE_TIMEOUT", 15*time.Second),
 			IdleTimeout:  getDurationEnv("SERVER_IDLE_TIMEOUT", 60*time.Second),
 			Mode:         getEnv("GIN_MODE", "debug"),
+			AllowedOrigins: getCSVEnv("CORS_ALLOWED_ORIGINS", []string{
+				"http://localhost:" + getEnv("ADMIN_PORT", "8090"), // admin panel
+				"http://localhost:8080",                           // core, direct
+				"http://localhost:5173",                           // vite dev server
+			}),
 		},
 		Database: DatabaseConfig{
 			// Postgres is the primary/deployed database. SQLite remains available
@@ -159,6 +169,24 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getCSVEnv reads a comma-separated list, trimming blanks around each entry.
+func getCSVEnv(key string, defaultValue []string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	var out []string
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return defaultValue
+	}
+	return out
 }
 
 func getIntEnv(key string, defaultValue int) int {

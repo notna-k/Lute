@@ -32,6 +32,7 @@ func main() {
 		RunRepo:            deps.RunRepo,
 		WebhookRepo:        deps.WebhookRepo,
 		JobDefRepo:         deps.JobDefRepo,
+		SettingRepo:        deps.SettingRepo,
 		QueueEngine:        deps.QueueEngine,
 		QueueScheduler:     deps.QueueScheduler,
 		StatsAgg:           deps.StatsAggregator,

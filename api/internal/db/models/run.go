@@ -19,11 +19,18 @@ type Run struct {
 	// Params are the resolved parameter values this build was triggered with
 	// (env var name → value), so a build stays auditable and reproducible after
 	// the definition moves on. Secrets are never stored here.
-	Params         map[string]string `json:"params,omitempty" gorm:"column:params;serializer:json"`
-	IdempotencyKey string            `json:"idempotency_key,omitempty" gorm:"size:191"`
-	WebhookURL     string            `json:"webhook_url,omitempty"`
-	WebhookSecret  string            `json:"-"`
-	WebhookEvents  []string          `json:"webhook_events,omitempty" gorm:"serializer:json"`
+	Params map[string]string `json:"params,omitempty" gorm:"column:params;serializer:json"`
+	// AdHoc marks a build whose parameter schema differed from the definition
+	// synced from Git — edited in the panel workbench, not committed.
+	AdHoc bool `json:"ad_hoc,omitempty" gorm:"column:ad_hoc;index"`
+	// ParamSchema snapshots the schema an ad-hoc build actually ran with. The
+	// stored definition cannot explain such a run, so without this the build is
+	// unauditable. Empty for builds that ran the committed definition.
+	ParamSchema    []ParameterField `json:"param_schema,omitempty" gorm:"column:param_schema;serializer:json"`
+	IdempotencyKey string           `json:"idempotency_key,omitempty" gorm:"size:191"`
+	WebhookURL     string           `json:"webhook_url,omitempty"`
+	WebhookSecret  string           `json:"-"`
+	WebhookEvents  []string         `json:"webhook_events,omitempty" gorm:"serializer:json"`
 }
 
 func (*Run) TableName() string { return "runs" }
