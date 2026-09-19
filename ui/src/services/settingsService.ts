@@ -15,6 +15,11 @@ export interface Settings {
    * build must come from a committed definition.
    */
   allowAdhocBuilds: boolean;
+  /**
+   * Whether a Git sync deletes every definition no YAML file defines — panel
+   * templates included. Off keeps them, flagged as not in Git.
+   */
+  pruneDefinitions: boolean;
 }
 
 export function getSettings(): Promise<Settings> {

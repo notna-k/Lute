@@ -1,9 +1,9 @@
 /**
  * Job-definition service — talks to the Core API.
  *
- * Endpoints (see api/internal/jobdefs): job definitions are Git-managed and
- * synced into Postgres; the parameter schema both renders the trigger UI and
- * is validated server-side on trigger.
+ * Endpoints (see api/internal/jobdefs): job definitions are synced from Git
+ * into Postgres and may be edited here; the parameter schema both renders the
+ * trigger UI and is validated server-side on trigger.
  */
 
 import { apiClient } from './api';
@@ -58,16 +58,16 @@ export interface NewJobTemplate {
 }
 
 /**
- * Saves a panel-authored template. Stored with origin=panel so the Git sync
- * neither rewrites nor prunes it.
+ * Saves a panel-authored template. It shows as "not in Git" until a file with
+ * its slug is committed.
  */
 export function createJob(template: NewJobTemplate): Promise<JobDefinition> {
   return apiClient.post<JobDefinition>('/api/v1/job-definitions', template);
 }
 
 /**
- * Saves edits to a panel-authored definition. Git-managed ones are refused with
- * 409 `git_managed` — a sync would overwrite the change anyway.
+ * Saves edits to a definition. On one that came from Git this makes it drift:
+ * the edit stands until its file changes in Git.
  */
 export function updateJob(slug: string, template: NewJobTemplate): Promise<JobDefinition> {
   return apiClient.put<JobDefinition>(
@@ -76,3 +76,41 @@ export function updateJob(slug: string, template: NewJobTemplate): Promise<JobDe
   );
 }
 
+
+/** What one sync did (api/internal/jobdefs/sync.go SyncResult). */
+export interface SyncResult {
+  added: number;
+  updated: number;
+  unchanged: number;
+  detached: number;
+  pruned: number;
+  /** Files or documents that failed to parse. */
+  skipped: string[];
+}
+
+/** Reconciles definitions with the Git source now, rather than on restart. */
+export function syncJobs(): Promise<SyncResult> {
+  return apiClient.post<SyncResult>('/api/v1/job-definitions/sync', {});
+}
+
+/** Every definition as one multi-document YAML stream, ready to commit. */
+export async function exportJobs(): Promise<string> {
+  const res = await apiClient.get<{ yaml: string }>('/api/v1/job-definitions/export');
+  return res.yaml;
+}
+
+/** One definition's YAML, as it would be committed. */
+export async function exportJob(slug: string): Promise<string> {
+  const res = await apiClient.get<{ yaml: string }>(
+    `/api/v1/job-definitions/${encodeURIComponent(slug)}/yaml`
+  );
+  return res.yaml;
+}
+
+/** Discards panel edits, restoring what Git last said. */
+export function revertJob(slug: string): Promise<JobDefinition> {
+  return apiClient.post<JobDefinition>(
+    `/api/v1/job-definitions/${encodeURIComponent(slug)}/revert`,
+    {}
+  );
+}
