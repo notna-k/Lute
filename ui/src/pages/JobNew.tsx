@@ -1,9 +1,9 @@
 /**
  * From-scratch template authoring.
  *
- * This page only *saves* — there is nothing to run yet. The template is stored
- * with origin=panel, which keeps the Git sync from rewriting or pruning it, and
- * you run it from its detail page like any other definition.
+ * This page only *saves* — there is nothing to run yet. The template shows as
+ * "created in the panel" until its config is committed to Git, and you run it
+ * from its detail page like any other definition.
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -43,9 +43,9 @@ export default function JobNew() {
       labelSelector: {},
       runtime,
       command,
-      source: { repo: sourceRepo, path: '', commit: '', inSync: false },
+      source: { repo: sourceRepo, path: '', commit: '' },
       parameters: NO_PARAMETERS,
-      origin: 'panel',
+      gitState: 'manual',
       successRate: 0,
       medianDurationMs: 0,
     }),

@@ -52,7 +52,7 @@ const Settings = () => {
   });
 
   const settingsMut = useMutation({
-    mutationFn: (allowAdhocBuilds: boolean) => updateSettings({ allowAdhocBuilds }),
+    mutationFn: updateSettings,
     onSuccess: (data) => qc.setQueryData(['settings'], data),
   });
 
@@ -94,7 +94,7 @@ const Settings = () => {
             className='mt-0.5 h-4 w-4 shrink-0 accent-accent'
             checked={settingsQuery.data?.allowAdhocBuilds ?? true}
             disabled={settingsQuery.isLoading || settingsMut.isPending}
-            onChange={(e) => settingsMut.mutate(e.target.checked)}
+            onChange={(e) => settingsMut.mutate({ allowAdhocBuilds: e.target.checked })}
           />
           <span>
             <span className='block text-sm font-medium text-fg'>Allow ad-hoc builds</span>
@@ -102,6 +102,25 @@ const Settings = () => {
               Let the panel run templates that differ from Git — edited in the
               workbench, or created from scratch. Turn this off to require every
               build to come from a committed definition.
+            </span>
+          </span>
+        </label>
+        <label className='mt-4 flex items-start gap-3'>
+          <input
+            type='checkbox'
+            className='mt-0.5 h-4 w-4 shrink-0 accent-accent'
+            checked={settingsQuery.data?.pruneDefinitions ?? false}
+            disabled={settingsQuery.isLoading || settingsMut.isPending}
+            onChange={(e) => settingsMut.mutate({ pruneDefinitions: e.target.checked })}
+          />
+          <span>
+            <span className='block text-sm font-medium text-fg'>
+              Prune definitions missing from Git
+            </span>
+            <span className='mt-0.5 block text-sm text-fg-muted'>
+              On each sync, delete every definition no YAML file defines — including
+              templates created in the panel. Off keeps them, marked as not in Git.
+              Build history is kept either way.
             </span>
           </span>
         </label>

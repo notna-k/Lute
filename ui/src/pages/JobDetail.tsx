@@ -1,9 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, GitBranch, PenLine, Save } from 'lucide-react';
+import { ArrowLeft, GitBranch, Save } from 'lucide-react';
 import { getJob, listBuilds, triggerBuild, updateJob } from '@/services/jobDefService';
 import { ApiError } from '@/services/api';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
+import { GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { Button, Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import type { Build, ParameterField, ParameterValues } from '@/types/jobs';
@@ -117,11 +118,9 @@ export default function JobDetail() {
     },
   });
 
-  // Only panel-authored definitions can be saved. A Git-managed one would be
-  // overwritten by the next sync, so it gets the export path instead.
-  const editFooter =
-    job?.origin === 'panel'
-      ? (parameters: ParameterField[]) => (
+  // Any definition can be saved. One from Git then differs from it until its
+  // file changes — or until the saved config is committed.
+  const editFooter = (parameters: ParameterField[]) => (
           <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
             <Button
               type='button'
@@ -132,7 +131,9 @@ export default function JobDetail() {
               {saveEdit.isPending ? 'Saving…' : 'Save changes'}
             </Button>
             {saveEdit.isSuccess && !saveEdit.isPending && (
-              <span className='text-sm text-success'>Saved.</span>
+              <span className='text-sm text-success'>
+                Saved. {job?.source.path && 'Commit the config to keep it past the next change in Git.'}
+              </span>
             )}
             {saveEdit.isError && (
               <span className='text-sm text-danger-fg'>
@@ -140,8 +141,7 @@ export default function JobDetail() {
               </span>
             )}
           </div>
-        )
-      : undefined;
+        );
 
   const fieldErrors = trigger.error instanceof ApiError ? trigger.error.fields : undefined;
   // A field-level rejection is already rendered on the inputs; repeating the
@@ -181,29 +181,27 @@ export default function JobDetail() {
         <div className='min-w-0'>
           <div className='flex items-center gap-3'>
             <h1 className='font-mono text-2xl font-bold tracking-tight text-fg'>{job.name}</h1>
-            {job.origin === 'panel' ? (
-              <span className='inline-flex items-center gap-1 rounded border border-warning/30 bg-warning-subtle px-2 py-0.5 text-xxs font-medium uppercase tracking-wide text-warning-fg'>
-                <PenLine className='h-3 w-3' /> panel
-              </span>
-            ) : (
-              <span className='inline-flex items-center gap-1 rounded border border-success/30 bg-success-subtle px-2 py-0.5 text-xxs font-medium uppercase tracking-wide text-success-fg'>
-                <GitBranch className='h-3 w-3' /> git-managed
-              </span>
-            )}
+            <GitStateBadge state={job.gitState} />
           </div>
           <p className='mt-1.5 max-w-2xl text-sm text-fg-muted'>{job.description}</p>
         </div>
-        {job.origin === 'panel' ? (
-          <div className='ml-auto flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
-            <PenLine className='h-3.5 w-3.5' /> authored in the panel · not in Git
-          </div>
-        ) : (
-          <div className='ml-auto flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
+        <div className='ml-auto flex items-center gap-2'>
+          <div className='flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
             <GitBranch className='h-3.5 w-3.5' />
-            {job.source.repo} · <span className='text-fg'>{job.source.path}</span> ·{' '}
-            <span className='text-success'>@{job.source.commit}</span>
+            {job.source.path ? (
+              <>
+                {job.source.repo && `${job.source.repo} · `}
+                <span className={job.gitState === 'removed' ? 'text-fg line-through' : 'text-fg'}>
+                  {job.source.path}
+                </span>
+                {job.source.commit && <span className='text-success'>@{job.source.commit}</span>}
+              </>
+            ) : (
+              'not in Git'
+            )}
           </div>
-        )}
+          <JobActionsMenu job={job} />
+        </div>
       </div>
 
       <BuildWorkbench

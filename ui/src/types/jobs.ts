@@ -1,7 +1,7 @@
 /**
  * Job definitions and their parameter schema.
  *
- * Mirrors the model in PRODUCT.md: a Job is a reusable, Git-managed definition
+ * Mirrors the model in PRODUCT.md: a Job is a reusable definition, Git-sourced
  * whose `parameters` schema both renders the trigger UI and validates payloads
  * server-side. Types here are the UI-facing shape the backend will serve.
  */
@@ -46,8 +46,16 @@ export interface JobSource {
   repo: string;
   path: string;
   commit: string;
-  inSync: boolean;
 }
+
+/**
+ * How a definition relates to Git (api/internal/db/models/job_definition.go):
+ *  - synced:   matches its YAML file
+ *  - modified: edited in the panel; stands until the file changes in Git
+ *  - manual:   created in the panel, never in Git
+ *  - removed:  its file was deleted from Git; kept because pruning is off
+ */
+export type GitState = 'synced' | 'modified' | 'manual' | 'removed';
 
 export interface JobDefinition {
   slug: string;
@@ -59,8 +67,7 @@ export interface JobDefinition {
   command: string;
   source: JobSource;
   parameters: ParameterField[];
-  /** "git" for a definition synced from the repo, "panel" for one authored here. */
-  origin: 'git' | 'panel';
+  gitState: GitState;
   /** Success ratio over the trailing 30 days, 0..1. */
   successRate: number;
   medianDurationMs: number;

@@ -10,8 +10,12 @@ func SetupRoutes(authed *gin.RouterGroup, h *Handler) {
 	{
 		jobs.GET("", h.List)
 		jobs.POST("", h.Create)
+		jobs.POST("/sync", h.Sync)
+		jobs.GET("/export", h.Export)
 		jobs.GET("/:slug", h.Get)
 		jobs.PUT("/:slug", h.Update)
+		jobs.GET("/:slug/yaml", h.ExportOne)
+		jobs.POST("/:slug/revert", h.Revert)
 		jobs.GET("/:slug/builds", h.Builds)
 		jobs.POST("/:slug/trigger", h.Trigger)
 	}

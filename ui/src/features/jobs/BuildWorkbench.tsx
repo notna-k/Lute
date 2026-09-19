@@ -10,10 +10,10 @@
  *   right   context  — running: the equivalent `docker run` / `curl`
  *                      editing: the YAML you would commit, copy or download
  *
- * Editing a Git-synced definition stays read-only against the server: its
- * artifact is YAML you commit to the job-definitions repo. A drifted schema can
- * still be *run* — it goes through as an ad-hoc build carrying its own schema,
- * gated on the operator's "allow ad-hoc builds" setting.
+ * An edited schema can be saved (the caller's footer) — the definition then
+ * differs from Git until the YAML is committed — or just *run*: it goes through
+ * as an ad-hoc build carrying its own schema, gated on the operator's "allow
+ * ad-hoc builds" setting.
  *
  * In `authorOnly` mode the job does not exist yet: there is nothing to run, so
  * the run pane is hidden and the caller owns the save action.

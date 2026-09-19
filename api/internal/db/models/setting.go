@@ -18,7 +18,13 @@ func (*Setting) TableName() string { return "settings" }
 // definition.
 const AllowAdhocBuilds = "allow_adhoc_builds"
 
+// PruneDefinitions makes the Git sync delete every definition no YAML file
+// defines — panel-created ones included. Default false: such definitions are
+// kept and flagged in the panel instead.
+const PruneDefinitions = "prune_definitions"
+
 // SettingDefaults are applied when a key has never been written.
 var SettingDefaults = map[string]string{
 	AllowAdhocBuilds: "true",
+	PruneDefinitions: "false",
 }

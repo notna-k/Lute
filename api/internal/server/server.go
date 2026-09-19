@@ -10,6 +10,7 @@ import (
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
+	"github.com/lute/api/internal/jobdefs"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/router"
 	"github.com/lute/api/internal/webhooks"
@@ -49,6 +50,7 @@ type Deps struct {
 	RunRepo            *repos.RunRepository
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	JobDefSyncer       *jobdefs.Syncer
 	SettingRepo        *repos.SettingRepository
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
@@ -78,6 +80,7 @@ func New(d Deps) *Server {
 		APIKeyRepo:         d.APIKeyRepo,
 		RunRepo:            d.RunRepo,
 		JobDefRepo:         d.JobDefRepo,
+		JobDefSyncer:       d.JobDefSyncer,
 		SettingRepo:        d.SettingRepo,
 		Hub:                hub,
 		QueueEngine:        d.QueueEngine,
