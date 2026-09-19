@@ -6,7 +6,6 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: lute-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lute}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lute}
@@ -29,7 +28,6 @@ services:
         - WORKER_VERSION=${WORKER_VERSION:-0.1.0}
         - BUILD_TIME=${BUILD_TIME:-unknown}
     container_name: lute-core
-    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,7 +85,6 @@ services:
       args:
         - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
     container_name: lute-admin
-    restart: unless-stopped
     depends_on:
       - core
     ports:
