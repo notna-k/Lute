@@ -9,11 +9,20 @@
 import { Fragment, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Download, FileCode2, GitBranch, MoreVertical, Undo2 } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Download,
+  FileArchive,
+  FileCode2,
+  GitBranch,
+  MoreVertical,
+  Undo2,
+} from 'lucide-react';
 import { Badge, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import { downloadYaml } from '@/features/params/yaml';
-import { exportJob, exportJobs, revertJob } from '@/services/jobDefService';
+import { downloadFile, downloadYaml } from '@/features/params/yaml';
+import { exportJob, exportJobs, exportJobsZip, revertJob } from '@/services/jobDefService';
 import type { GitState, JobDefinition } from '@/types/jobs';
 
 const GIT_STATE_LABEL: Record<Exclude<GitState, 'synced'>, string> = {
@@ -80,6 +89,13 @@ export function ConfigDialog({
   slug?: string;
 }) {
   const [copied, copy] = useCopy();
+  // The zip is a second rendering of the same definitions — one file per job,
+  // at its path in Git — so it is built by the server, not from the stream
+  // shown here.
+  const zip = useMutation({
+    mutationFn: exportJobsZip,
+    onSuccess: (blob) => downloadFile(blob, 'jobdefs.zip'),
+  });
   const {
     data: yaml,
     isLoading,
@@ -101,17 +117,27 @@ export function ConfigDialog({
       description={
         slug
           ? 'The YAML this job would have in Git. Commit it to make the panel’s version canonical.'
-          : 'Every definition as one YAML stream. Each document is headed by its file — paste it into the job-definitions repo as is, or split it by those paths.'
+          : 'Every definition as one YAML stream. Each document is headed by its file — paste it into the job-definitions repo as is, or take the zip, which is already split into one file per job at those paths.'
       }
       footer={
         <>
+          {!slug && (
+            <Button
+              variant='secondary'
+              type='button'
+              loading={zip.isPending}
+              onClick={() => zip.mutate()}
+            >
+              <FileArchive className='mr-1.5 h-4 w-4' /> Download .zip
+            </Button>
+          )}
           <Button
             variant='secondary'
             type='button'
             disabled={!yaml}
             onClick={() => yaml && downloadYaml(yaml.trimEnd(), `${slug ?? 'jobdefs'}.yaml`)}
           >
-            <Download className='mr-1.5 h-4 w-4' /> Download
+            <Download className='mr-1.5 h-4 w-4' /> {slug ? 'Download' : 'Download .yaml'}
           </Button>
           <Button type='button' disabled={!yaml} onClick={() => yaml && copy(yaml)}>
             {copied ? <Check className='mr-1.5 h-4 w-4' /> : <Copy className='mr-1.5 h-4 w-4' />}
@@ -127,9 +153,16 @@ export function ConfigDialog({
       ) : error ? (
         <p className='text-sm text-danger'>{(error as Error).message}</p>
       ) : (
-        <pre className='max-h-[60vh] overflow-auto border border-log-line bg-log-bg p-3 font-mono text-xs leading-relaxed text-log-fg'>
-          {yaml}
-        </pre>
+        <>
+          {zip.error && (
+            <p className='mb-2 text-sm text-danger'>
+              Could not build the zip: {(zip.error as Error).message}
+            </p>
+          )}
+          <pre className='max-h-[60vh] overflow-auto border border-log-line bg-log-bg p-3 font-mono text-xs leading-relaxed text-log-fg'>
+            {yaml}
+          </pre>
+        </>
       )}
     </Dialog>
   );

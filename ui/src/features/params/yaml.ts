@@ -95,7 +95,12 @@ export function toYaml(job: JobDefinition, params: ParameterField[] = job.parame
 
 /** Offers a YAML document as a file download. */
 export function downloadYaml(text: string, filename: string): void {
-  const url = URL.createObjectURL(new Blob([`${text}\n`], { type: 'text/yaml' }));
+  downloadFile(new Blob([`${text}\n`], { type: 'text/yaml' }), filename);
+}
+
+/** Offers any blob — the zip export too — as a file download. */
+export function downloadFile(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
