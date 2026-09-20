@@ -88,7 +88,7 @@ export function WorkerList({
                   {w.name}
                 </Link>
                 {w.description && (
-                  <p className='mt-0.5 max-w-[40ch] truncate text-xs text-fg-subtle'>
+                  <p className='row-subtext max-w-[40ch]'>
                     {w.description}
                   </p>
                 )}

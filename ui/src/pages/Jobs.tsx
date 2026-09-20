@@ -98,7 +98,7 @@ function JobRow({ job }: { job: JobDefinition }) {
           {job.gitState !== 'synced' && <GitStateBadge state={job.gitState} />}
         </div>
         {job.description && (
-          <p className='mt-0.5 max-w-[46ch] truncate text-xs text-fg-subtle'>
+          <p className='row-subtext max-w-[46ch]'>
             {job.description}
           </p>
         )}
