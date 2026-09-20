@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"reflect"
 	"strings"
 
@@ -207,4 +208,45 @@ func Export(defs []models.JobDefinition) ([]byte, error) {
 		buf.Write(body)
 	}
 	return buf.Bytes(), nil
+}
+
+// ExportFile is one file of a split export: where it belongs in the
+// job-definitions repo, and what goes in it.
+type ExportFile struct {
+	Path string
+	Body []byte
+}
+
+// ExportSplit renders definitions as one file per job, each at the path it
+// belongs at in Git — what the panel offers as a zip, ready to unpack over the
+// repo. Definitions sharing a path (a multi-document file in Git) stay
+// together in that file, so splitting never drops a job to a name collision.
+func ExportSplit(defs []models.JobDefinition) ([]ExportFile, error) {
+	var out []ExportFile
+	at := map[string]int{} // path -> index in out
+	for i := range defs {
+		body, err := yaml.MarshalWithOptions(toYAML(&defs[i]), yaml.UseLiteralStyleIfMultiline(true))
+		if err != nil {
+			return nil, fmt.Errorf("export %s: %w", defs[i].Slug, err)
+		}
+		path := exportPath(&defs[i])
+		if j, ok := at[path]; ok {
+			out[j].Body = append(out[j].Body, []byte("---\n")...)
+			out[j].Body = append(out[j].Body, body...)
+			continue
+		}
+		at[path] = len(out)
+		out = append(out, ExportFile{Path: path, Body: body})
+	}
+	return out, nil
+}
+
+// exportPath is filePath, kept inside the archive: an absolute or climbing
+// source path would unpack outside the repo it came from.
+func exportPath(def *models.JobDefinition) string {
+	p := path.Clean(filePath(def))
+	if path.IsAbs(p) || p == "." || strings.HasPrefix(p, "../") {
+		return def.Slug + ".yaml"
+	}
+	return p
 }

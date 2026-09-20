@@ -107,6 +107,11 @@ export async function exportJob(slug: string): Promise<string> {
   return res.yaml;
 }
 
+/** Every definition as a zip of one YAML file per job, at its path in Git. */
+export function exportJobsZip(): Promise<Blob> {
+  return apiClient.getBlob('/api/v1/job-definitions/export.zip');
+}
+
 /** Discards panel edits, restoring what Git last said. */
 export function revertJob(slug: string): Promise<JobDefinition> {
   return apiClient.post<JobDefinition>(

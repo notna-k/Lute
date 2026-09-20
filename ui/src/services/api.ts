@@ -78,6 +78,34 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET', ...init });
   }
 
+  /**
+   * A GET whose body is a file rather than JSON — the zip export. It repeats
+   * `request`'s auth rather than sharing it because the whole point is to not
+   * parse the response as JSON.
+   */
+  async getBlob(endpoint: string): Promise<Blob> {
+    const send = (token: string | null) =>
+      fetch(`${this.baseURL}${endpoint}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+    let response = await send(authBridge.getAccessToken());
+    if (response.status === 401) {
+      const refreshed = await authBridge.refresh();
+      if (refreshed) response = await send(refreshed);
+      else await authBridge.signOut();
+    }
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: response.statusText }));
+      const message =
+        typeof body.error === 'string' ? body.error : `HTTP error! status: ${response.status}`;
+      throw new ApiError(message, response.status, body.fields);
+    }
+    return response.blob();
+  }
+
   async post<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',

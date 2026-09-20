@@ -1,7 +1,12 @@
 package jobdefs
 
 import (
+	"archive/zip"
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -38,6 +43,51 @@ func (h *Handler) ExportOne(c *gin.Context) {
 		return
 	}
 	writeYAML(c, []models.JobDefinition{*def})
+}
+
+// ExportZip returns the same definitions as a zip of one YAML file per job,
+// laid out at the paths they belong at — unpack it over the job-definitions
+// repo and commit.
+func (h *Handler) ExportZip(c *gin.Context) {
+	defs, err := h.defs.List(c.Request.Context())
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	files, err := ExportSplit(defs)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Built in memory so a failure halfway is still a JSON error, not a
+	// truncated download. Definitions are text, and there are tens of them.
+	var buf bytes.Buffer
+	if err := writeZip(&buf, files, time.Now()); err != nil {
+		writeError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="jobdefs.zip"`)
+	c.Data(http.StatusOK, "application/zip", buf.Bytes())
+}
+
+// writeZip packs one deflated entry per file, every entry stamped with one
+// timestamp so an archive reads as a single snapshot.
+func writeZip(w io.Writer, files []ExportFile, at time.Time) error {
+	zw := zip.NewWriter(w)
+	for _, f := range files {
+		entry, err := zw.CreateHeader(&zip.FileHeader{
+			Name:     f.Path,
+			Method:   zip.Deflate,
+			Modified: at,
+		})
+		if err != nil {
+			return fmt.Errorf("zip %s: %w", f.Path, err)
+		}
+		if _, err := entry.Write(f.Body); err != nil {
+			return fmt.Errorf("zip %s: %w", f.Path, err)
+		}
+	}
+	return zw.Close()
 }
 
 // Revert discards panel edits, restoring the spec Git last stated.
