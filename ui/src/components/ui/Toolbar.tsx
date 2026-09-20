@@ -1,7 +1,7 @@
 import { forwardRef, type HTMLAttributes } from 'react';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { Input, type InputProps } from './Input';
+import { Input, NativeSelect, type InputProps } from './Input';
 
 /**
  * The filter strip under a page header: search, segmented filters, and a result
@@ -42,3 +42,71 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
     );
   }
 );
+
+export interface FilterSelectProps {
+  /** The dimension being filtered, e.g. "queue"; used for the accessible name. */
+  label: string;
+  /** The unfiltered choice, e.g. "All queues". */
+  allLabel: string;
+  value: string;
+  /**
+   * The values worth offering. Empty means there are none to filter by yet;
+   * `null` means the panel could not find out, and the operator types instead.
+   */
+  options: string[] | null;
+  onChange: (value: string) => void;
+  className?: string;
+}
+
+/**
+ * A toolbar filter over a closed set of values. Matching is exact, and a search
+ * box would promise otherwise — so the control shows the values rather than
+ * asking the operator to recall one, and goes quiet when there are none. An
+ * active filter carries the stronger border, so a narrowed list is visible
+ * without reading the values.
+ */
+export function FilterSelect({
+  label,
+  allLabel,
+  value,
+  options,
+  onChange,
+  className,
+}: FilterSelectProps) {
+  const ariaLabel = `Filter by ${label}`;
+
+  // Only when the option list could not be fetched: typing is the last resort,
+  // not the empty state.
+  if (options === null) {
+    return (
+      <SearchInput
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={allLabel}
+        aria-label={ariaLabel}
+        className={cn('w-[160px]', className)}
+      />
+    );
+  }
+
+  return (
+    <NativeSelect
+      value={value}
+      aria-label={ariaLabel}
+      disabled={options.length === 0}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        'w-[160px]',
+        value ? 'border-border-strong' : 'text-fg-muted',
+        className
+      )}
+    >
+      <option value=''>{allLabel}</option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </NativeSelect>
+  );
+}

@@ -7,16 +7,16 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, X } from 'lucide-react';
 import {
   Alert,
   Button,
   EmptyState,
+  FilterSelect,
   IconButton,
   NativeSelect,
   Pagination,
   RowLink,
-  SearchInput,
   SegmentedControl,
   Skeleton,
   StatusText,
@@ -57,8 +57,9 @@ export default function Executions() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [sort, setSort] = useState<SortOption>('finished_at_desc');
 
-  const [queueOptions, setQueueOptions] = useState<string[]>([]);
-  const [typeOptions, setTypeOptions] = useState<string[]>([]);
+  // null once the lookup fails: the filters then fall back to free text.
+  const [queueOptions, setQueueOptions] = useState<string[] | null>([]);
+  const [typeOptions, setTypeOptions] = useState<string[] | null>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -68,7 +69,8 @@ export default function Executions() {
         setQueueOptions(o.queues ?? []);
         setTypeOptions(o.types ?? []);
       } catch {
-        /* the filters degrade to free text */
+        setQueueOptions(null);
+        setTypeOptions(null);
       }
     })();
   }, []);
@@ -100,6 +102,14 @@ export default function Executions() {
     void fetchExecutions();
   }, [fetchExecutions]);
 
+  const filtered = Boolean(queueFilter || typeFilter || statusFilter);
+  const clearFilters = () => {
+    setQueueFilter('');
+    setTypeFilter('');
+    setStatusFilter('');
+    setPage(0);
+  };
+
   return (
     <>
       <PageHeader
@@ -127,38 +137,26 @@ export default function Executions() {
             { value: 'failed', label: 'Failed' },
           ]}
         />
-        <SearchInput
+        <FilterSelect
+          label='queue'
+          allLabel='All queues'
           value={queueFilter}
-          onChange={(e) => {
-            setQueueFilter(e.target.value);
+          options={queueOptions}
+          onChange={(v) => {
+            setQueueFilter(v);
             setPage(0);
           }}
-          placeholder='Queue (exact)'
-          aria-label='Filter by queue'
-          className='w-[180px]'
-          list='exec-queue-options'
         />
-        <datalist id='exec-queue-options'>
-          {queueOptions.map((q) => (
-            <option key={q} value={q} />
-          ))}
-        </datalist>
-        <SearchInput
+        <FilterSelect
+          label='type'
+          allLabel='All types'
           value={typeFilter}
-          onChange={(e) => {
-            setTypeFilter(e.target.value);
+          options={typeOptions}
+          onChange={(v) => {
+            setTypeFilter(v);
             setPage(0);
           }}
-          placeholder='Type (exact)'
-          aria-label='Filter by type'
-          className='w-[180px]'
-          list='exec-type-options'
         />
-        <datalist id='exec-type-options'>
-          {typeOptions.map((t) => (
-            <option key={t} value={t} />
-          ))}
-        </datalist>
         <NativeSelect
           value={sort}
           aria-label='Sort order'
@@ -171,6 +169,11 @@ export default function Executions() {
           <option value='finished_at_desc'>Newest first</option>
           <option value='finished_at_asc'>Oldest first</option>
         </NativeSelect>
+        {filtered && (
+          <Button variant='ghost' size='sm' onClick={clearFilters}>
+            <X className='h-3.5 w-3.5' /> Clear
+          </Button>
+        )}
         <IconButton
           label='Refresh'
           variant='outline'
@@ -198,12 +201,22 @@ export default function Executions() {
         ) : rows.length === 0 ? (
           <div className='py-16'>
             <EmptyState
-              title='No runs match these filters'
-              description='Loosen the filters, or trigger a job to produce one.'
+              title={filtered ? 'No runs match these filters' : 'No runs recorded yet'}
+              description={
+                filtered
+                  ? 'Loosen the filters, or trigger a job to produce one.'
+                  : 'Trigger a job and its run will land here.'
+              }
               action={
-                <Button size='sm' onClick={() => setDialogOpen(true)}>
-                  <Plus className='h-3.5 w-3.5' /> Trigger job
-                </Button>
+                filtered ? (
+                  <Button size='sm' onClick={clearFilters}>
+                    <X className='h-3.5 w-3.5' /> Clear filters
+                  </Button>
+                ) : (
+                  <Button size='sm' onClick={() => setDialogOpen(true)}>
+                    <Plus className='h-3.5 w-3.5' /> Trigger job
+                  </Button>
+                )
               }
             />
           </div>
