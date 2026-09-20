@@ -13,7 +13,7 @@ problems it has:
 > **Status: early work in progress.** Lute is a weekend project, it has no users yet and no stable
 > release. Expect breaking changes without deprecation.
 
-![The Lute panel — fleet overview](docs/media/dashboard.png)
+![The Lute panel — job definitions synced from Git](docs/media/jobs.png)
 
 ## How it works
 
