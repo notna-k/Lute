@@ -1,41 +1,53 @@
 import { Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/cn';
 
-export function UserMenu() {
+export interface UserMenuProps {
+  /** Avatar only, for the collapsed rail. */
+  compact?: boolean;
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+export function UserMenu({ compact }: UserMenuProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
   if (!user) return null;
 
-  const handleLogout = async () => {
+  const name = user.display_name || user.email;
+  const initials = initialsOf(name || 'U');
+
+  async function handleSignOut() {
     try {
       await signOut();
       navigate('/login');
-    } catch (e) {
-      console.error('Error logging out:', e);
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
-  };
-
-  const initials = (user.display_name || user.email || 'U')
-    .split(/\s+/)
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  }
 
   return (
-    <Menu as='div' className='relative'>
-      <Menu.Button className='flex items-center gap-2 rounded-full p-0.5 pr-2 text-sm text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'>
-        <span className='flex h-8 w-8 items-center justify-center rounded-full bg-primary-subtle text-xs font-semibold text-info-fg'>
+    <Menu as='div' className='relative flex min-w-0'>
+      <Menu.Button
+        title={name}
+        className='flex min-w-0 items-center gap-2.5 text-[12.5px] text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg'
+      >
+        <span className='grid h-6 w-6 shrink-0 place-items-center bg-surface-active font-mono text-[10px] font-semibold text-fg'>
           {initials}
         </span>
-        <span className='hidden max-w-[10rem] truncate sm:inline'>
-          {user.display_name || user.email}
-        </span>
+        {!compact && <span className='truncate'>{name}</span>}
       </Menu.Button>
       <Transition
         as={Fragment}
@@ -46,36 +58,26 @@ export function UserMenu() {
         leaveFrom='opacity-100'
         leaveTo='opacity-0'
       >
-        <Menu.Items className='absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-md border border-border bg-surface py-1 shadow-popover focus:outline-none'>
+        <Menu.Items className='absolute bottom-full left-0 z-50 mb-2 w-56 border border-border bg-surface py-1 shadow-popover focus:outline-none'>
           <div className='border-b border-border px-3 py-2'>
-            <div className='truncate text-sm font-medium text-fg'>
+            <div className='truncate text-[13px] font-medium text-fg'>
               {user.display_name || 'User'}
             </div>
-            <div className='truncate text-xs text-fg-muted'>{user.email}</div>
+            <div className='truncate font-mono text-[11px] text-fg-muted'>
+              {user.email}
+            </div>
           </div>
-          <Menu.Item disabled>
-            {() => (
-              <span
-                className={cn(
-                  'flex items-center gap-2 px-3 py-2 text-sm text-fg-muted'
-                )}
-              >
-                <UserIcon className='h-4 w-4' />
-                <span>{user.email}</span>
-              </span>
-            )}
-          </Menu.Item>
           <Menu.Item>
             {({ active }) => (
               <button
                 type='button'
-                onClick={handleLogout}
+                onClick={handleSignOut}
                 className={cn(
-                  'flex w-full items-center gap-2 px-3 py-2 text-sm text-fg',
+                  'flex w-full items-center gap-2 px-3 py-2 text-[13px] text-fg',
                   active && 'bg-surface-hover'
                 )}
               >
-                <LogOut className='h-4 w-4' />
+                <LogOut className='h-3.5 w-3.5' />
                 Sign out
               </button>
             )}

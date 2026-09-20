@@ -1,97 +1,11 @@
-@import url("https://rsms.me/inter/inter.css");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap");
+@import "./styles/tokens.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --color-bg: 248 250 252;
-    --color-bg-subtle: 241 245 249;
-    --color-bg-muted: 226 232 240;
-    --color-bg-elevated: 255 255 255;
-    --color-bg-inverse: 15 23 42;
-
-    --color-surface: 255 255 255;
-    --color-surface-hover: 241 245 249;
-    --color-surface-active: 226 232 240;
-
-    --color-border: 226 232 240;
-    --color-border-strong: 203 213 225;
-    --color-border-subtle: 241 245 249;
-
-    --color-fg: 15 23 42;
-    --color-fg-muted: 71 85 105;
-    --color-fg-subtle: 148 163 184;
-    --color-fg-on-primary: 255 255 255;
-    --color-fg-inverse: 248 250 252;
-
-    --color-primary: 37 99 235;
-    --color-primary-hover: 29 78 216;
-    --color-primary-active: 30 64 175;
-    --color-primary-subtle: 219 234 254;
-
-    --color-success: 22 163 74;
-    --color-success-subtle: 220 252 231;
-    --color-success-fg: 21 128 61;
-
-    --color-warning: 217 119 6;
-    --color-warning-subtle: 254 243 199;
-    --color-warning-fg: 180 83 9;
-
-    --color-danger: 220 38 38;
-    --color-danger-subtle: 254 226 226;
-    --color-danger-fg: 185 28 28;
-
-    --color-info: 37 99 235;
-    --color-info-subtle: 219 234 254;
-    --color-info-fg: 29 78 216;
-  }
-
-  /* Console — petrol-dark instrument palette, amber signal accent. */
-  .dark {
-    --color-bg: 10 20 24;
-    --color-bg-subtle: 15 30 36;
-    --color-bg-muted: 19 42 49;
-    --color-bg-elevated: 15 30 36;
-    --color-bg-inverse: 231 240 241;
-
-    --color-surface: 15 30 36;
-    --color-surface-hover: 19 42 49;
-    --color-surface-active: 29 59 68;
-
-    --color-border: 29 59 68;
-    --color-border-strong: 42 79 89;
-    --color-border-subtle: 19 42 49;
-
-    --color-fg: 231 240 241;
-    --color-fg-muted: 127 160 166;
-    --color-fg-subtle: 79 113 120;
-    --color-fg-on-primary: 26 18 6;
-    --color-fg-inverse: 10 20 24;
-
-    --color-primary: 255 180 84;
-    --color-primary-hover: 255 192 111;
-    --color-primary-active: 255 202 133;
-    --color-primary-subtle: 58 42 18;
-
-    --color-success: 57 215 195;
-    --color-success-subtle: 15 46 43;
-    --color-success-fg: 111 240 224;
-
-    --color-warning: 255 180 84;
-    --color-warning-subtle: 58 42 18;
-    --color-warning-fg: 255 202 133;
-
-    --color-danger: 255 107 107;
-    --color-danger-subtle: 58 26 26;
-    --color-danger-fg: 255 179 179;
-
-    --color-info: 155 140 255;
-    --color-info-subtle: 40 34 74;
-    --color-info-fg: 190 182 255;
-  }
-
   html {
     color-scheme: light;
   }
@@ -100,25 +14,27 @@
     color-scheme: dark;
   }
 
+  /* The shell owns scrolling: each pane scrolls on its own so the sidebar,
+     page header and build log stay put. `data-scroll` marks those panes. */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     @apply bg-bg text-fg antialiased;
-    /* Console ambience: two soft off-screen washes (violet top-right, teal
-       bottom-left) over the base background. */
-    background-image: radial-gradient(
-        900px 500px at 82% -8%,
-        rgb(var(--color-info) / 0.1),
-        transparent 60%
-      ),
-      radial-gradient(
-        700px 400px at -5% 110%,
-        rgb(var(--color-success) / 0.08),
-        transparent 55%
-      );
-    background-attachment: fixed;
-    font-family: "Inter", ui-sans-serif, system-ui, -apple-system,
-      BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-      sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    margin: 0;
+    font-family: "Geist", ui-sans-serif, system-ui, -apple-system,
+      BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  /* Compact row height, chosen in Settings; see useDensity. */
+  html[data-density="compact"] body {
+    font-size: 13px;
   }
 
   *,
@@ -128,7 +44,20 @@
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-bg;
+    outline: 1.5px solid rgb(var(--color-fg));
+    outline-offset: 1px;
+  }
+
+  /* Native controls follow the theme instead of the OS default. */
+  input,
+  textarea,
+  select {
+    color: inherit;
+    accent-color: rgb(var(--color-fg));
+  }
+
+  ::placeholder {
+    color: rgb(var(--color-fg-subtle));
   }
 }
 
@@ -139,8 +68,8 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
@@ -148,17 +77,21 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgb(var(--color-border-strong));
-    border-radius: 4px;
+    background-color: rgb(var(--color-border));
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(var(--color-fg-subtle));
+    background-color: rgb(var(--color-border-strong));
   }
 }
 
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Small all-caps section label, used above tables and in rails. */
+  .caption {
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.07em] text-fg-subtle;
   }
 }

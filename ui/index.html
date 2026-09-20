@@ -5,8 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>Lute · Worker management</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <title>Lute · Build panel</title>
     <script>
+      // Applies the stored theme and row density before first paint, so the
+      // panel never flashes the wrong palette on reload.
       (function () {
         try {
           var mode = localStorage.getItem("lute.theme") || "system";
@@ -15,6 +19,9 @@
             (mode === "system" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (dark) document.documentElement.classList.add("dark");
+          if (localStorage.getItem("lute.density") === "compact") {
+            document.documentElement.dataset.density = "compact";
+          }
         } catch (e) {
           /* ignore */
         }

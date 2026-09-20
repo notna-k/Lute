@@ -13,12 +13,14 @@ export const workerKeys = {
   detail: (id: string) => [...workerKeys.details(), id] as const,
 };
 
-export const useUserWorkers = () => {
+/** `enabled: false` defers the fetch — used by the palette, which only needs it while open. */
+export const useUserWorkers = (options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: workerKeys.list('user'),
     queryFn: workerService.getUserWorkers,
     staleTime: 30000,
     gcTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 };
 

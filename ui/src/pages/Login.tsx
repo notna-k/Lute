@@ -37,15 +37,15 @@ const Login = () => {
   return (
     <div className='flex min-h-screen items-center justify-center bg-bg px-4 py-12'>
       <div className='w-full max-w-md'>
-        <div className='mb-6 flex flex-col items-center gap-2 text-center'>
-          <span className='flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-fg-onPrimary shadow-card'>
-            <Terminal className='h-6 w-6' />
+        <div className='mb-6 flex flex-col items-center gap-2.5 text-center'>
+          <span className='flex h-10 w-10 items-center justify-center border border-fg bg-primary text-fg-onPrimary'>
+            <Terminal className='h-5 w-5' />
           </span>
-          <h1 className='text-2xl font-bold tracking-tight text-fg'>
-            Welcome to Lute
+          <h1 className='font-mono text-xl font-semibold tracking-[-0.02em] text-fg'>
+            Lute
           </h1>
-          <p className='text-sm text-fg-muted'>
-            Sign in to manage your distributed workers.
+          <p className='text-[12.5px] text-fg-muted'>
+            Sign in to the build panel.
           </p>
         </div>
 
@@ -75,6 +75,7 @@ const Login = () => {
             </Field>
             <Button
               type='submit'
+              variant='primary'
               loading={loading}
               size='lg'
               fullWidth

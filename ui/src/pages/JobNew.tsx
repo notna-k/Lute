@@ -8,9 +8,19 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 
-import { Alert, Button, Card, Input, PageHeader } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  Field,
+  Input,
+  PageHeader,
+} from '@/components/ui';
+import { PageBody, PageScroll } from '@/components/layout';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
 import { createJob } from '@/services/jobDefService';
 import type { JobDefinition, ParameterField } from '@/types/jobs';
@@ -80,17 +90,18 @@ export default function JobNew() {
     <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
       <Button
         type='button'
+        variant='primary'
         disabled={missing || save.isPending}
         onClick={() => save.mutate(fields)}
       >
-        <Save className='mr-1.5 h-4 w-4' />
+        <Save className='h-3.5 w-3.5' />
         {save.isPending ? 'Saving…' : 'Save template'}
       </Button>
-      <Link to='/jobs' className='text-sm text-fg-muted hover:text-fg'>
+      <Link to='/jobs' className='text-[12.5px] text-fg-muted hover:text-fg'>
         Cancel
       </Link>
       {missing && (
-        <span className='text-sm text-fg-muted'>
+        <span className='text-[12.5px] text-fg-subtle'>
           Name, runtime, and command are required.
         </span>
       )}
@@ -99,88 +110,77 @@ export default function JobNew() {
 
   return (
     <>
-      <Link
-        to='/jobs'
-        className='mb-4 inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg'
-      >
-        <ArrowLeft className='h-4 w-4' /> Jobs
-      </Link>
-
       <PageHeader
+        breadcrumb={
+          <Link to='/jobs' className='hover:text-fg'>
+            Jobs
+          </Link>
+        }
         title='New template'
         description='Author a template and save it to the panel. It is not in Git — export the YAML from the schema editor and commit it if you want Git to own it.'
       />
 
-      <Card className='mb-6 border-border bg-surface p-4 sm:p-5'>
-        <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>Template</h2>
-        <div className='mt-3 grid gap-4 sm:grid-cols-2'>
-          <label className='block'>
-            <span className='mb-1 block text-sm font-medium text-fg'>
-              Name <span className='text-danger-fg'>*</span>
-            </span>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder='Nightly rollup'
-            />
-          </label>
-          <label className='block'>
-            <span className='mb-1 block text-sm font-medium text-fg'>Queue</span>
-            <Input value={queue} onChange={(e) => setQueue(e.target.value)} placeholder='default' />
-          </label>
-          <label className='block'>
-            <span className='mb-1 block text-sm font-medium text-fg'>
-              Runtime <span className='text-danger-fg'>*</span>
-            </span>
-            <Input
-              value={runtime}
-              onChange={(e) => setRuntime(e.target.value)}
-              placeholder='python:3.12-slim'
-            />
-          </label>
-          <label className='block'>
-            <span className='mb-1 block text-sm font-medium text-fg'>Source repo</span>
-            <Input
-              value={sourceRepo}
-              onChange={(e) => setSourceRepo(e.target.value)}
-              placeholder='https://github.com/acme/etl (optional)'
-            />
-          </label>
-          <label className='block sm:col-span-2'>
-            <span className='mb-1 block text-sm font-medium text-fg'>
-              Command <span className='text-danger-fg'>*</span>
-            </span>
-            <Input
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              placeholder='python -m etl.rollup'
-            />
-          </label>
-          <label className='block sm:col-span-2'>
-            <span className='mb-1 block text-sm font-medium text-fg'>Description</span>
-            <Input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder='What this job does'
-            />
-          </label>
-        </div>
-      </Card>
+      <PageScroll>
+        <PageBody>
+          <Card className='mb-6'>
+            <CardHeader>
+              <CardTitle>Template</CardTitle>
+            </CardHeader>
+            <div className='grid gap-4 p-4 sm:grid-cols-2'>
+              <Field label='Name' required>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder='Nightly rollup'
+                />
+              </Field>
+              <Field label='Queue'>
+                <Input
+                  value={queue}
+                  onChange={(e) => setQueue(e.target.value)}
+                  placeholder='default'
+                />
+              </Field>
+              <Field label='Runtime' required hint='Container image the command runs in'>
+                <Input
+                  value={runtime}
+                  onChange={(e) => setRuntime(e.target.value)}
+                  placeholder='python:3.12-slim'
+                />
+              </Field>
+              <Field label='Source repo'>
+                <Input
+                  value={sourceRepo}
+                  onChange={(e) => setSourceRepo(e.target.value)}
+                  placeholder='https://github.com/acme/etl (optional)'
+                />
+              </Field>
+              <Field label='Command' required className='sm:col-span-2'>
+                <Input
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  placeholder='python -m etl.rollup'
+                />
+              </Field>
+              <Field label='Description' className='sm:col-span-2'>
+                <Input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder='What this job does'
+                />
+              </Field>
+            </div>
+          </Card>
 
-      {saveError && (
-        <Alert tone='danger' className='mb-4'>
-          {saveError}
-        </Alert>
-      )}
+          {saveError && (
+            <Alert tone='danger' className='mb-4'>
+              {saveError}
+            </Alert>
+          )}
 
-      <BuildWorkbench
-        job={draftJob}
-        builds={[]}
-        authorOnly
-        footer={footer}
-        onRun={() => undefined}
-        running={false}
-      />
+          <BuildWorkbench job={draftJob} builds={[]} mode='edit' footer={footer} />
+        </PageBody>
+      </PageScroll>
     </>
   );
 }

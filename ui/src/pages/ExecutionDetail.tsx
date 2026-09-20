@@ -1,80 +1,54 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+/**
+ * One execution — the engine-level view of a run.
+ *
+ * Same shape as a build page and for the same reason: the frame stays put and
+ * the log gets the remaining height. The facts live in a strip above it, because
+ * the question on this page is almost always "what does the log say".
+ */
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { RefreshCw, RotateCcw, X } from 'lucide-react';
 import {
   Alert,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  PageHeader,
+  KeyValueList,
   Skeleton,
-  Tooltip,
+  type BadgeTone,
+  type KeyValueRow,
 } from '@/components/ui';
-import { jobService, type Job } from '@/services/jobService';
+import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
 import { LogViewer } from '@/features/jobs/LogViewer';
-import type { BadgeTone } from '@/components/ui';
-
-const JOB_LOG_PAGE = 200;
+import { useJobLogs } from '@/hooks/useJobLogs';
+import { jobService, type Job } from '@/services/jobService';
+import { duration, relativeTime, timestamp } from '@/lib/format';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   done: 'success',
-  running: 'info',
+  running: 'warning',
   pending: 'warning',
   dead: 'danger',
   cancelled: 'neutral',
 };
 
-function formatTs(unix: number | undefined): string {
-  if (!unix) return '—';
-  return new Date(unix * 1000).toLocaleString();
-}
+/** The engine stamps unix seconds; every formatter here speaks milliseconds. */
+const ms = (unix?: number) => (unix ? unix * 1000 : undefined);
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className='flex flex-col gap-1'>
-      <span className='text-xxs font-semibold uppercase tracking-wider text-fg-muted'>
-        {label}
-      </span>
-      <div className='text-sm text-fg'>{children}</div>
-    </div>
-  );
-}
-
-const ExecutionDetail = () => {
+export default function ExecutionDetail() {
   const { id } = useParams<{ id: string }>();
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-
-  const logBoxRef = useRef<HTMLDivElement>(null);
-  const loadingOlderRef = useRef(false);
-  const [logLines, setLogLines] = useState<string[]>([]);
-  const [logNextCursor, setLogNextCursor] = useState<string | null>(null);
-  const [logHasMore, setLogHasMore] = useState(false);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [logsError, setLogsError] = useState<string | null>(null);
-  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [busy, setBusy] = useState<'retry' | 'cancel' | null>(null);
 
   const fetchJob = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
     try {
-      const j = await jobService.getJob(id);
-      setJob(j);
+      setJob(await jobService.getJob(id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load job');
     } finally {
@@ -83,290 +57,159 @@ const ExecutionDetail = () => {
   }, [id]);
 
   useEffect(() => {
-    fetchJob();
+    void fetchJob();
   }, [fetchJob]);
 
-  const loadLogsTail = useCallback(
-    async (cursor?: string) => {
-      if (!id) return;
-      const prepend = Boolean(cursor);
-      if (prepend) {
-        if (loadingOlderRef.current) return;
-        loadingOlderRef.current = true;
-        setLoadingOlder(true);
-      } else {
-        setLogsLoading(true);
-      }
-      setLogsError(null);
-      try {
-        const r = await jobService.getJobLogs(id, {
-          direction: 'tail',
-          limit: JOB_LOG_PAGE,
-          cursor,
-        });
-        const el = logBoxRef.current;
-        const prevScrollHeight = prepend && el ? el.scrollHeight : 0;
-        const prevScrollTop = prepend && el ? el.scrollTop : 0;
+  const logs = useJobLogs(id, {
+    live: job?.status === 'running' || job?.status === 'pending',
+  });
 
-        const chunk = Array.isArray(r.lines) ? r.lines : [];
-        if (prepend) {
-          setLogLines((prev) => [...chunk, ...prev]);
-        } else {
-          setLogLines(chunk);
-        }
-        setLogNextCursor(r.next_cursor ?? null);
-        setLogHasMore(r.has_more);
-        if (r.error) setLogsError(r.error);
-
-        requestAnimationFrame(() => {
-          const box = logBoxRef.current;
-          if (!box) return;
-          if (prepend) {
-            box.scrollTop =
-              box.scrollHeight - prevScrollHeight + prevScrollTop;
-          } else {
-            box.scrollTop = box.scrollHeight;
-          }
-        });
-      } catch (e) {
-        setLogsError(e instanceof Error ? e.message : 'Failed to load logs');
-        if (!prepend) {
-          setLogLines([]);
-          setLogHasMore(false);
-          setLogNextCursor(null);
-        }
-      } finally {
-        setLogsLoading(false);
-        setLoadingOlder(false);
-        loadingOlderRef.current = false;
-      }
-    },
-    [id]
-  );
-
-  useEffect(() => {
+  async function act(kind: 'retry' | 'cancel') {
     if (!id) return;
-    setLogLines([]);
-    setLogNextCursor(null);
-    setLogHasMore(false);
-    setLogsError(null);
-    void loadLogsTail();
-  }, [id, loadLogsTail]);
-
-  const onLogScroll = () => {
-    const el = logBoxRef.current;
-    if (!el || logsLoading || loadingOlderRef.current || !logHasMore || !logNextCursor)
-      return;
-    if (el.scrollTop < 64) {
-      void loadLogsTail(logNextCursor);
-    }
-  };
-
-  const handleRetry = async () => {
-    if (!id) return;
-    setRetrying(true);
+    setBusy(kind);
     setActionError(null);
     try {
-      await jobService.retryJob(id);
+      if (kind === 'retry') await jobService.retryJob(id);
+      else await jobService.cancelJob(id);
       await fetchJob();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Retry failed');
+      setActionError(e instanceof Error ? e.message : `${kind} failed`);
     } finally {
-      setRetrying(false);
+      setBusy(null);
     }
-  };
+  }
 
-  const handleCancel = async () => {
-    if (!id) return;
-    setCancelling(true);
-    setActionError(null);
-    try {
-      await jobService.cancelJob(id);
-      await fetchJob();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Cancel failed');
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  if (loading) {
+  if (loading && !job) {
     return (
-      <div className='space-y-4'>
-        <Skeleton className='h-6 w-48' />
-        <Skeleton className='h-10 w-80' />
-        <Skeleton className='h-40 w-full rounded-lg' />
-      </div>
+      <PageScroll>
+        <PageBody className='space-y-3'>
+          <Skeleton className='h-6 w-48' />
+          <Skeleton className='h-40 w-full' />
+        </PageBody>
+      </PageScroll>
     );
   }
 
   if (error || !job) {
     return (
-      <>
-        <Link
-          to='/executions'
-          className='mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg'
-        >
-          <ArrowLeft className='h-4 w-4' />
-          Back to executions
-        </Link>
-        <Alert tone='danger'>{error ?? 'Job not found'}</Alert>
-      </>
+      <PageScroll>
+        <PageBody>
+          <Alert tone='danger' title='Execution not found'>
+            {error ?? 'This run is no longer in the engine.'}{' '}
+            <Link to='/executions' className='underline'>
+              Back to executions
+            </Link>
+          </Alert>
+        </PageBody>
+      </PageScroll>
     );
   }
 
-  const canRetry = job.status === 'dead' || job.status === 'done';
-  const canCancel = job.status === 'pending';
+  const rows: KeyValueRow[] = [
+    { key: 'queue', value: job.queue },
+    { key: 'type', value: <span className='font-mono'>{job.type}</span> },
+    { key: 'enqueued', value: ms(job.enqueued_at) ? timestamp(ms(job.enqueued_at)!) : '—' },
+    { key: 'started', value: ms(job.started_at) ? timestamp(ms(job.started_at)!) : '—' },
+    { key: 'finished', value: ms(job.done_at) ? timestamp(ms(job.done_at)!) : '—' },
+    { key: 'attempts', value: `${job.attempts} / ${job.max_retries}` },
+    { key: 'timeout', value: `${job.timeout_sec}s` },
+    ...(job.worker_id
+      ? [
+          {
+            key: 'worker',
+            value: (
+              <Link
+                to={`/workers/${job.worker_id}`}
+                className='font-mono hover:underline'
+              >
+                {job.worker_id}
+              </Link>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const elapsedMs =
+    ms(job.done_at) && ms(job.started_at)
+      ? ms(job.done_at)! - ms(job.started_at)!
+      : undefined;
 
   return (
     <>
-      <Link
-        to='/executions'
-        className='mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg'
-      >
-        <ArrowLeft className='h-4 w-4' />
-        Back to executions
-      </Link>
-
-      <PageHeader
-        title={<span className='font-mono text-xl sm:text-2xl'>{job.id}</span>}
-        description={
-          <span>
-            {job.type} · {job.queue}
-          </span>
+      <DetailHeader
+        crumbs={[{ label: 'Builds', to: '/executions' }]}
+        title={job.id}
+        tags={
+          <Badge tone={STATUS_TONE[job.status] ?? 'neutral'} size='sm' dot>
+            {job.status}
+          </Badge>
         }
+        subtitle={`${job.type} · ${job.queue}`}
         actions={
-          <div className='flex items-center gap-2'>
-            <Badge tone={STATUS_TONE[job.status] ?? 'neutral'} dot>
-              {job.status}
-            </Badge>
-            <Tooltip content='Refresh job and logs'>
+          <>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={async () => {
+                await fetchJob();
+                logs.reload();
+              }}
+            >
+              <RefreshCw className='h-3.5 w-3.5' /> Refresh
+            </Button>
+            {(job.status === 'dead' || job.status === 'done') && (
               <Button
                 variant='outline'
                 size='sm'
-                leftIcon={<RefreshCw className='h-4 w-4' />}
-                onClick={async () => {
-                  await fetchJob();
-                  void loadLogsTail();
-                }}
+                disabled={busy === 'retry'}
+                onClick={() => void act('retry')}
               >
-                Refresh
-              </Button>
-            </Tooltip>
-            {canRetry && (
-              <Button
-                variant='outline'
-                size='sm'
-                leftIcon={<RotateCcw className='h-4 w-4' />}
-                loading={retrying}
-                onClick={handleRetry}
-              >
-                Retry
+                <RotateCcw className='h-3.5 w-3.5' /> Retry
               </Button>
             )}
-            {canCancel && (
+            {job.status === 'pending' && (
               <Button
                 variant='danger'
                 size='sm'
-                leftIcon={<X className='h-4 w-4' />}
-                loading={cancelling}
-                onClick={handleCancel}
+                disabled={busy === 'cancel'}
+                onClick={() => void act('cancel')}
               >
-                Cancel
+                <X className='h-3.5 w-3.5' /> Cancel
               </Button>
             )}
-          </div>
+          </>
+        }
+        meta={
+          <>
+            {elapsedMs != null && <span className='tabular-nums'>{duration(elapsedMs)}</span>}
+            {ms(job.enqueued_at) && (
+              <span className='tabular-nums'>{relativeTime(ms(job.enqueued_at)!)}</span>
+            )}
+          </>
         }
       />
 
-      {actionError && (
-        <Alert tone='danger' className='mb-4'>
-          {actionError}
-        </Alert>
-      )}
-
-      <Card className='mb-4'>
-        <CardHeader>
-          <CardTitle>Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className='grid gap-4 sm:grid-cols-2 md:grid-cols-3'>
-            <Field label='Queue'>{job.queue}</Field>
-            <Field label='Type'>
-              <span className='font-mono text-sm'>{job.type}</span>
-            </Field>
-            <Field label='Status'>
-              <Badge tone={STATUS_TONE[job.status] ?? 'neutral'} dot>
-                {job.status}
-              </Badge>
-            </Field>
-            <Field label='Enqueued'>{formatTs(job.enqueued_at)}</Field>
-            <Field label='Started'>{formatTs(job.started_at)}</Field>
-            <Field label='Completed'>{formatTs(job.done_at)}</Field>
-            <Field label='Attempts'>
-              {job.attempts} / {job.max_retries}
-            </Field>
-            <Field label='Timeout'>{job.timeout_sec}s</Field>
-            {job.worker_id && (
-              <Field label='Worker'>
-                <span className='font-mono text-sm'>{job.worker_id}</span>
-              </Field>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {job.error && (
-        <Card className='mb-4'>
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Alert tone='danger'>
-              <pre className='whitespace-pre-wrap break-all font-mono text-xs'>
-                {job.error}
-              </pre>
-            </Alert>
-          </CardContent>
-        </Card>
-      )}
-
-      {job.payload != null && (
-        <Card className='mb-4'>
-          <CardHeader>
-            <CardTitle>Payload</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className='overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-bg-subtle p-3 font-mono text-xs text-fg'>
-              {JSON.stringify(job.payload, null, 2)}
+      <div className='shrink-0 border-b border-border px-7 py-3'>
+        {actionError && (
+          <Alert tone='danger' className='mb-3'>
+            {actionError}
+          </Alert>
+        )}
+        {job.error && (
+          <Alert tone='danger' title='Error' className='mb-3'>
+            <pre className='whitespace-pre-wrap break-all font-mono text-[12px]'>
+              {job.error}
             </pre>
-          </CardContent>
-        </Card>
-      )}
+          </Alert>
+        )}
+        <KeyValueList
+          rows={rows}
+          className='max-h-28 overflow-auto scrollbar-thin md:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]'
+        />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Logs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {logsError && (
-            <Alert tone='warning' className='mb-3'>
-              {logsError}
-            </Alert>
-          )}
-          <LogViewer
-            lines={logLines}
-            logBoxRef={logBoxRef}
-            onScroll={onLogScroll}
-            hideScrollArea={logLines.length === 0 && logsLoading}
-            logsLoading={logsLoading}
-            loadingOlder={loadingOlder}
-            logHasMore={logHasMore}
-          />
-        </CardContent>
-      </Card>
+      <LogViewer logs={logs} title={`jobs/${job.id}.log`} className='min-h-0 flex-1' />
     </>
   );
-};
-
-export default ExecutionDetail;
+}

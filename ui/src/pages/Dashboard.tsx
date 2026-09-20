@@ -1,205 +1,297 @@
+/**
+ * The overview: what is running, what is broken, what the fleet looks like.
+ *
+ * Built from the same three queries the other pages use, so it costs nothing
+ * extra and can never disagree with them. Ordered by urgency — in-flight builds
+ * first, then failures, then the fleet — because that is the order an operator
+ * reads a panel in.
+ */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ArrowRight,
-  Plus,
-  Server,
-  Terminal,
-} from 'lucide-react';
+import { ArrowRight, Plus, Server } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserWorkers } from '@/hooks/useWorkers';
+import type { Worker } from '@/types';
+import { listJobs } from '@/services/jobDefService';
+import { executionService } from '@/services/executionService';
 import {
   Alert,
+  Button,
   Card,
-  CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   EmptyState,
+  LinkButton,
   PageHeader,
+  RowLink,
   Skeleton,
+  Slots,
+  StatusText,
+  TBody,
+  Table,
+  Tape,
+  Td,
+  Th,
+  THead,
+  Tr,
 } from '@/components/ui';
+import { PageBody, PageScroll, Section } from '@/components/layout';
 import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
+import { workerState } from '@/features/workers/utils';
+import { duration, relativeTime, toEpochMs } from '@/lib/format';
 
-interface StatCardProps {
+/** One headline number. Deliberately flat: the figure is the emphasis. */
+function Stat({
+  label,
+  value,
+  hint,
+  tone,
+  loading,
+}: {
   label: string;
-  value: string | number;
-  tone?: 'neutral' | 'success' | 'danger' | 'primary';
+  value: React.ReactNode;
+  hint?: React.ReactNode;
+  tone?: 'danger' | 'warning';
   loading?: boolean;
-  hint?: string;
-}
-
-const TONE_STYLES: Record<NonNullable<StatCardProps['tone']>, string> = {
-  neutral: 'text-fg',
-  success: 'text-success-fg',
-  danger: 'text-danger-fg',
-  primary: 'text-info-fg',
-};
-
-function StatCard({ label, value, tone = 'neutral', loading, hint }: StatCardProps) {
+}) {
   return (
-    <Card>
-      <CardContent className='flex flex-col gap-2 py-5'>
-        <p className='text-xs font-medium uppercase tracking-wide text-fg-muted'>
-          {label}
+    <div className='border border-border bg-surface px-4 py-3.5'>
+      <p className='caption'>{label}</p>
+      {loading ? (
+        <Skeleton className='mt-1.5 h-7 w-14' />
+      ) : (
+        <p
+          className={`mt-1 font-mono text-[26px] font-semibold leading-none tabular-nums ${
+            tone === 'danger'
+              ? 'text-danger'
+              : tone === 'warning'
+                ? 'text-warning'
+                : 'text-fg'
+          }`}
+        >
+          {value}
         </p>
-        {loading ? (
-          <Skeleton className='h-9 w-16' />
-        ) : (
-          <p className={`text-3xl font-bold tabular-nums ${TONE_STYLES[tone]}`}>
-            {value}
-          </p>
-        )}
-        {hint && <p className='text-xs text-fg-muted'>{hint}</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface QuickActionProps {
-  title: string;
-  description: string;
-  icon: typeof Server;
-  to?: string;
-  onClick?: () => void;
-}
-
-function QuickAction({ title, description, icon: Icon, to, onClick }: QuickActionProps) {
-  const inner = (
-    <div className='group flex h-full items-start gap-4 rounded-lg border border-border bg-surface p-5 shadow-card transition-colors hover:border-primary hover:bg-surface-hover'>
-      <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-info-fg transition-colors group-hover:bg-primary group-hover:text-fg-onPrimary'>
-        <Icon className='h-5 w-5' />
-      </span>
-      <div className='min-w-0 flex-1'>
-        <div className='flex items-center justify-between gap-2'>
-          <h3 className='text-sm font-semibold text-fg'>{title}</h3>
-          <ArrowRight className='h-4 w-4 text-fg-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-primary' />
-        </div>
-        <p className='mt-1 text-sm text-fg-muted'>{description}</p>
-      </div>
+      )}
+      {hint && <p className='mt-1.5 text-[11.5px] text-fg-subtle'>{hint}</p>}
     </div>
   );
-
-  if (to) {
-    return (
-      <Link to={to} className='block h-full'>
-        {inner}
-      </Link>
-    );
-  }
-  return (
-    <button type='button' onClick={onClick} className='block h-full w-full text-left'>
-      {inner}
-    </button>
-  );
 }
 
-const Dashboard = () => {
+/** Stable empty list, so the fleet memo does not re-run on every render. */
+const NO_WORKERS: Worker[] = [];
+
+export default function Dashboard() {
   const { user } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
-  const { data: userWorkers = [], isLoading: loading, isError: hasError } =
-    useUserWorkers();
 
-  const stats = useMemo(() => {
-    const alive = userWorkers.filter((w) => w.status === 'alive').length;
-    const dead = userWorkers.filter((w) => w.status === 'dead').length;
-    const total = userWorkers.length;
-    return {
-      total,
-      alive,
-      dead,
-    };
-  }, [userWorkers]);
+  const workersQuery = useUserWorkers();
+  const jobsQuery = useQuery({ queryKey: ['jobs'], queryFn: listJobs });
+  const recentQuery = useQuery({
+    queryKey: ['executions', 'recent'],
+    queryFn: () => executionService.list({ limit: 8, sort: 'finished_at_desc' }),
+    refetchInterval: 15000,
+  });
+
+  const workers = workersQuery.data ?? NO_WORKERS;
+  const jobs = jobsQuery.data ?? [];
+  const recent = recentQuery.data?.executions ?? [];
+
+  const fleet = useMemo(() => {
+    const online = workers.filter((w) => workerState(w.status) !== 'offline');
+    return { total: workers.length, online: online.length };
+  }, [workers]);
+
+  const inFlight = jobs.filter(
+    (j) => j.lastBuild?.status === 'running' || j.lastBuild?.status === 'queued'
+  );
+  const failing = jobs.filter((j) => j.lastBuild?.status === 'failed');
 
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${user?.display_name || user?.email?.split('@')[0] || 'there'}`}
-        description="Here's an overview of your distributed compute fleet."
+        title={`Welcome back, ${
+          user?.display_name || user?.email?.split('@')[0] || 'there'
+        }`}
+        description='What the fleet is doing right now.'
+        actions={
+          <>
+            <Button variant='secondary' size='sm' onClick={() => setAddOpen(true)}>
+              <Plus className='h-3.5 w-3.5' /> Add worker
+            </Button>
+            <LinkButton to='/jobs' variant='primary' size='sm'>
+              Run a job
+            </LinkButton>
+          </>
+        }
       />
 
-      {hasError && (
-        <Alert tone='danger' className='mb-4'>
-          Failed to load worker stats. Please refresh the page.
-        </Alert>
-      )}
+      <PageScroll>
+        <PageBody>
+          {workersQuery.isError && (
+            <Alert tone='danger' className='mb-6'>
+              Failed to load the worker fleet. Refresh to try again.
+            </Alert>
+          )}
 
-      <div className='grid gap-4 sm:grid-cols-3'>
-        <StatCard label='Total workers' value={stats.total} loading={loading} />
-        <StatCard
-          label='Running'
-          value={stats.alive}
-          tone='success'
-          loading={loading}
-        />
-        <StatCard
-          label='Stopped'
-          value={stats.dead}
-          tone={stats.dead > 0 ? 'danger' : 'neutral'}
-          loading={loading}
-        />
-      </div>
-
-      <Card className='mt-6'>
-        <CardHeader>
-          <CardTitle>Quick actions</CardTitle>
-          <CardDescription>Jump into the most common workflows.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className='grid gap-4 sm:grid-cols-2'>
-            <QuickAction
-              title='My workers'
-              description='View and manage your registered agents.'
-              icon={Server}
-              to='/workers'
+          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+            <Stat
+              label='In flight'
+              value={inFlight.length}
+              tone={inFlight.length ? 'warning' : undefined}
+              hint={
+                inFlight.length
+                  ? inFlight.map((j) => j.name).slice(0, 2).join(', ')
+                  : 'nothing queued or running'
+              }
+              loading={jobsQuery.isLoading}
             />
-            <QuickAction
-              title='Add a worker'
-              description='Install the agent on a new host.'
-              icon={Plus}
-              onClick={() => setAddOpen(true)}
+            <Stat
+              label='Failing jobs'
+              value={failing.length}
+              tone={failing.length ? 'danger' : undefined}
+              hint='last build did not pass'
+              loading={jobsQuery.isLoading}
+            />
+            <Stat
+              label='Definitions'
+              value={jobs.length}
+              hint='synced from Git'
+              loading={jobsQuery.isLoading}
+            />
+            <Stat
+              label='Workers online'
+              value={`${fleet.online}/${fleet.total}`}
+              tone={fleet.total && !fleet.online ? 'danger' : undefined}
+              hint={<Slots total={fleet.total} used={fleet.online} />}
+              loading={workersQuery.isLoading}
             />
           </div>
-        </CardContent>
-      </Card>
 
-      <Card className='mt-6'>
-        <CardHeader className='flex flex-row items-center justify-between'>
-          <div>
-            <CardTitle>Recent activity</CardTitle>
-            <CardDescription>
-              Latest job executions across your workers.
-            </CardDescription>
-          </div>
-          <Link
-            to='/executions'
-            className='inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline'
-          >
-            View all
-            <ArrowRight className='h-4 w-4' />
-          </Link>
-        </CardHeader>
-        <CardContent>
-          <EmptyState
-            icon={<Terminal className='h-5 w-5' />}
-            title='No recent activity'
-            description='Trigger a job from the executions page to see it appear here.'
-            action={
-              <Link
-                to='/executions'
-                className='inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-fg-onPrimary hover:bg-primary-hover'
-              >
-                Go to executions
-                <ArrowRight className='h-4 w-4' />
+          <Section
+            title='Needs attention'
+            aside={
+              <Link to='/jobs' className='inline-flex items-center gap-1 hover:text-fg'>
+                All jobs <ArrowRight className='h-3 w-3' />
               </Link>
             }
-          />
-        </CardContent>
-      </Card>
+          >
+            <Card>
+              {failing.length === 0 && inFlight.length === 0 ? (
+                <div className='py-10'>
+                  <EmptyState
+                    title='Everything is green'
+                    description='No job’s last build failed, and nothing is in flight.'
+                  />
+                </div>
+              ) : (
+                <Table className='[&_td:first-child]:pl-4 [&_th:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:last-child]:pr-4'>
+                  <THead>
+                    <Tr>
+                      <Th>Job</Th>
+                      <Th>Last build</Th>
+                      <Th>When</Th>
+                      <Th>History</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {[...inFlight, ...failing].map((job) => (
+                      <RowLink key={job.slug} to={`/jobs/${job.slug}`}>
+                        <Td>
+                          <Link
+                            to={`/jobs/${job.slug}`}
+                            className='font-mono font-medium hover:underline'
+                          >
+                            {job.name}
+                          </Link>
+                        </Td>
+                        <Td>
+                          {job.lastBuild && (
+                            <StatusText state={job.lastBuild.status}>
+                              <span className='font-mono'>#{job.lastBuild.id}</span>
+                            </StatusText>
+                          )}
+                        </Td>
+                        <Td className='text-fg-muted tabular-nums'>
+                          {job.lastBuild ? relativeTime(job.lastBuild.startedAt) : '—'}
+                        </Td>
+                        <Td>{job.recent?.length ? <Tape states={job.recent} /> : '—'}</Td>
+                      </RowLink>
+                    ))}
+                  </TBody>
+                </Table>
+              )}
+            </Card>
+          </Section>
+
+          <Section
+            title='Latest runs'
+            aside={
+              <Link
+                to='/executions'
+                className='inline-flex items-center gap-1 hover:text-fg'
+              >
+                All builds <ArrowRight className='h-3 w-3' />
+              </Link>
+            }
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Across every job</CardTitle>
+              </CardHeader>
+              {recentQuery.isLoading ? (
+                <div className='space-y-2 p-4'>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className='h-8 w-full' />
+                  ))}
+                </div>
+              ) : recent.length === 0 ? (
+                <div className='py-10'>
+                  <EmptyState
+                    icon={<Server className='h-5 w-5' />}
+                    title='Nothing has run yet'
+                    description='Trigger a job and its run will show up here.'
+                  />
+                </div>
+              ) : (
+                <Table className='[&_td:first-child]:pl-4 [&_th:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:last-child]:pr-4'>
+                  <THead>
+                    <Tr>
+                      <Th>Status</Th>
+                      <Th>Type</Th>
+                      <Th>Queue</Th>
+                      <Th>Finished</Th>
+                      <Th className='text-right'>Duration</Th>
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {recent.map((ex) => {
+                      const finished = toEpochMs(ex.finished_at);
+                      return (
+                        <RowLink key={ex.id} to={`/executions/${ex.job_id}`}>
+                          <Td>
+                            <StatusText state={ex.success ? 'passed' : 'failed'} />
+                          </Td>
+                          <Td className='font-mono text-fg-muted'>{ex.type}</Td>
+                          <Td className='text-fg-muted'>{ex.queue}</Td>
+                          <Td className='text-fg-muted tabular-nums'>
+                            {finished ? relativeTime(finished) : '—'}
+                          </Td>
+                          <Td className='text-right tabular-nums'>
+                            {duration(ex.elapsed_ms)}
+                          </Td>
+                        </RowLink>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              )}
+            </Card>
+          </Section>
+        </PageBody>
+      </PageScroll>
 
       <AddWorkerDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </>
   );
-};
-
-export default Dashboard;
+}

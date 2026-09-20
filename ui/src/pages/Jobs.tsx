@@ -1,117 +1,308 @@
+/**
+ * The job list — the panel's home for "what can I run, and is it healthy".
+ *
+ * Rows are grouped by the folder their definition lives in, because that is how
+ * the Git repo is organised and how operators already talk about jobs ("the
+ * release ones"). Each row answers three questions without a click: what did it
+ * last do, has it been failing (the history strip), and how long does it take.
+ */
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { GitBranch, PenLine, Plus, Timer } from 'lucide-react';
+import { ChevronRight, FolderOpen, GitBranch, PenLine, Play, Plus } from 'lucide-react';
 import { listJobs } from '@/services/jobDefService';
-import { EmptyState, Spinner } from '@/components/ui';
-import type { JobDefinition } from '@/types/jobs';
+import {
+  Badge,
+  EmptyState,
+  LinkButton,
+  PageHeader,
+  RowLink,
+  SearchInput,
+  SegmentedControl,
+  Skeleton,
+  StatusText,
+  TBody,
+  Table,
+  Tape,
+  Td,
+  Th,
+  THead,
+  Toolbar,
+  Tr,
+} from '@/components/ui';
+import { PageScroll } from '@/components/layout';
+import { duration, percent, relativeTime } from '@/lib/format';
+import type { BuildStatus, JobDefinition } from '@/types/jobs';
 
-function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+type Health = 'all' | 'failing' | 'running' | 'panel';
+
+/** The folder a definition lives in — `jobdefs/release/api.yaml` → `release`. */
+function folderOf(job: JobDefinition): string {
+  const path = job.source.path ?? '';
+  const parts = path.split('/').filter(Boolean);
+  parts.pop(); // the file itself
+  return parts.length ? parts.join('/') : 'root';
 }
 
-function JobCard({ job }: { job: JobDefinition }) {
+function matchesHealth(job: JobDefinition, health: Health): boolean {
+  switch (health) {
+    case 'failing':
+      return job.lastBuild?.status === 'failed';
+    case 'running':
+      return job.lastBuild?.status === 'running' || job.lastBuild?.status === 'queued';
+    case 'panel':
+      return job.origin === 'panel';
+    default:
+      return true;
+  }
+}
+
+function RateCell({ job }: { job: JobDefinition }) {
   const hasBuilds = job.medianDurationMs > 0 || job.successRate > 0;
-  const rate = Math.round(job.successRate * 100);
-  const rateTone = !hasBuilds
-    ? 'text-fg-subtle'
-    : rate >= 97
-      ? 'text-success'
-      : rate >= 90
-        ? 'text-warning'
-        : 'text-danger';
+  if (!hasBuilds) return <span className='text-fg-subtle'>—</span>;
+  const rate = job.successRate;
   return (
-    <Link
-      to={`/jobs/${job.slug}`}
-      className='group flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-surface-hover'
+    <span
+      className={
+        rate >= 0.97 ? 'text-fg' : rate >= 0.9 ? 'text-warning' : 'text-danger'
+      }
+      title='Success rate over the trailing 30 days'
     >
-      <div className='flex items-start gap-3'>
-        <div className='min-w-0'>
-          <div className='flex items-center gap-2'>
-            <h3 className='truncate font-mono text-sm font-semibold text-fg'>
-              {job.name}
-            </h3>
-            {job.origin === 'panel' ? (
-              <span
-                className='inline-flex items-center gap-1 rounded border border-warning/30 bg-warning-subtle px-1.5 py-0.5 text-xxs font-medium uppercase tracking-wide text-warning-fg'
-                title='Authored in the panel — not committed to Git'
-              >
-                <PenLine className='h-3 w-3' /> panel
-              </span>
-            ) : (
-              <span className='inline-flex items-center gap-1 rounded border border-success/30 bg-success-subtle px-1.5 py-0.5 text-xxs font-medium uppercase tracking-wide text-success-fg'>
-                <GitBranch className='h-3 w-3' /> git
-              </span>
-            )}
-          </div>
-          <p className='mt-1 line-clamp-2 text-xs text-fg-muted'>{job.description}</p>
-        </div>
-        <div className='ml-auto text-right'>
-          <div className={`font-mono text-lg font-bold ${rateTone}`}>
-            {hasBuilds ? `${rate}%` : '—'}
-          </div>
-          <div className='text-xxs text-fg-subtle'>{hasBuilds ? '30d' : 'no builds'}</div>
-        </div>
-      </div>
-      <div className='flex items-center gap-4 border-t border-border-subtle pt-3 font-mono text-xxs text-fg-subtle'>
-        <span className='rounded bg-bg-muted px-1.5 py-0.5 text-fg-muted'>
-          {job.queue}
-        </span>
-        <span className='truncate'>{job.runtime}</span>
-        <span className='ml-auto inline-flex items-center gap-1'>
-          <Timer className='h-3 w-3' />{' '}
-          {job.medianDurationMs > 0 ? formatDuration(job.medianDurationMs) : '—'}
-        </span>
-      </div>
-    </Link>
+      {percent(rate)}
+    </span>
   );
 }
 
+function JobRow({ job }: { job: JobDefinition }) {
+  const last = job.lastBuild;
+  return (
+    <RowLink to={`/jobs/${job.slug}`}>
+      <Td className='pl-12'>
+        <div className='flex items-center gap-2'>
+          <Link
+            to={`/jobs/${job.slug}`}
+            className='truncate font-mono font-medium text-fg hover:underline'
+          >
+            {job.name}
+          </Link>
+          {job.origin === 'panel' && (
+            <Badge tone='warning' size='sm' title='Authored here — not in Git'>
+              <PenLine className='h-3 w-3' /> panel
+            </Badge>
+          )}
+          {job.origin === 'git' && !job.source.inSync && (
+            <Badge tone='warning' size='sm' title='Differs from the committed file'>
+              drift
+            </Badge>
+          )}
+        </div>
+        {job.description && (
+          <p className='mt-0.5 max-w-[46ch] truncate text-xs text-fg-subtle'>
+            {job.description}
+          </p>
+        )}
+      </Td>
+      <Td>
+        {last ? (
+          <StatusText state={last.status}>
+            <span className='font-mono'>#{last.id}</span>
+          </StatusText>
+        ) : (
+          <span className='text-fg-subtle'>never run</span>
+        )}
+      </Td>
+      <Td className='tabular-nums text-fg-muted'>
+        {last ? relativeTime(last.startedAt) : '—'}
+      </Td>
+      <Td className='tabular-nums text-fg-muted'>
+        {duration(last?.durationMs ?? (job.medianDurationMs || null))}
+      </Td>
+      <Td>
+        {job.recent?.length ? (
+          <Tape states={job.recent as BuildStatus[]} />
+        ) : (
+          <span className='text-fg-subtle'>—</span>
+        )}
+      </Td>
+      <Td className='tabular-nums'>
+        <RateCell job={job} />
+      </Td>
+      <Td className='text-right'>
+        <LinkButton to={`/jobs/${job.slug}/run`} variant='outline' size='xs'>
+          <Play className='h-3 w-3' /> Run
+        </LinkButton>
+      </Td>
+    </RowLink>
+  );
+}
+
+/** Stable empty list, so the memos below do not re-run on every render. */
+const NO_JOBS: JobDefinition[] = [];
+
 export default function Jobs() {
-  const { data: jobs, isLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: listJobs,
-  });
+  const { data: jobs, isLoading } = useQuery({ queryKey: ['jobs'], queryFn: listJobs });
+  const [query, setQuery] = useState('');
+  const [health, setHealth] = useState<Health>('all');
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const all = jobs ?? NO_JOBS;
+
+  const counts = useMemo(
+    () => ({
+      all: all.length,
+      failing: all.filter((j) => matchesHealth(j, 'failing')).length,
+      running: all.filter((j) => matchesHealth(j, 'running')).length,
+      panel: all.filter((j) => matchesHealth(j, 'panel')).length,
+    }),
+    [all]
+  );
+
+  const groups = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const filtered = all.filter(
+      (job) =>
+        matchesHealth(job, health) &&
+        (!needle ||
+          job.name.toLowerCase().includes(needle) ||
+          job.slug.toLowerCase().includes(needle) ||
+          job.source.path.toLowerCase().includes(needle))
+    );
+    const byFolder = new Map<string, JobDefinition[]>();
+    for (const job of filtered) {
+      const folder = folderOf(job);
+      const bucket = byFolder.get(folder);
+      if (bucket) bucket.push(job);
+      else byFolder.set(folder, [job]);
+    }
+    return [...byFolder.entries()]
+      .map(([folder, rows]) => ({
+        folder,
+        rows: rows.sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => a.folder.localeCompare(b.folder));
+  }, [all, health, query]);
+
+  const shown = groups.reduce((n, g) => n + g.rows.length, 0);
 
   return (
-    <div>
-      <div className='mb-6 flex items-end justify-between'>
-        <div>
-          <h1 className='text-xl font-bold tracking-tight text-fg'>Jobs</h1>
-          <p className='mt-1 text-sm text-fg-muted'>
-            Reusable, Git-managed definitions. Trigger a build and watch it run.
-          </p>
-        </div>
-        <div className='flex items-center gap-4'>
-          <span className='font-mono text-xs text-fg-subtle'>
-            {jobs ? `${jobs.length} definitions` : ''}
-          </span>
-          <Link
-            to='/jobs/new'
-            className='inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-fg hover:bg-surface-hover'
-          >
-            <Plus className='h-4 w-4' /> New template
-          </Link>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title='Jobs'
+        description='Definitions synced from Git. Pick one to run it or read its last builds.'
+        facts={
+          <>
+            <span className='tabular-nums'>{counts.all} definitions</span>
+            {counts.failing > 0 && (
+              <span className='text-danger tabular-nums'>{counts.failing} failing</span>
+            )}
+            {counts.running > 0 && (
+              <span className='text-warning tabular-nums'>{counts.running} in flight</span>
+            )}
+          </>
+        }
+        actions={
+          <LinkButton to='/jobs/new' variant='secondary' size='sm'>
+            <Plus className='h-3.5 w-3.5' /> New template
+          </LinkButton>
+        }
+      />
 
-      {isLoading ? (
-        <div className='flex justify-center py-20'>
-          <Spinner size={28} />
-        </div>
-      ) : jobs && jobs.length > 0 ? (
-        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-          {jobs.map((job) => <JobCard key={job.slug} job={job} />)}
-        </div>
-      ) : (
-        <EmptyState
-          icon={<GitBranch className='h-5 w-5' />}
-          title='No job definitions'
-          description='Job definitions are synced from Git. Add a YAML file to the job-definitions source (JOB_DEFS_DIR) and restart Core to see it here — or author one from scratch with New template.'
+      <Toolbar>
+        <SearchInput
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='Filter by name or path'
+          aria-label='Filter jobs'
         />
-      )}
-    </div>
+        <SegmentedControl<Health>
+          label='Filter jobs'
+          value={health}
+          onChange={setHealth}
+          options={[
+            { value: 'all', label: 'All', count: counts.all },
+            { value: 'failing', label: 'Failing', count: counts.failing },
+            { value: 'running', label: 'In flight', count: counts.running },
+            { value: 'panel', label: 'Panel', count: counts.panel },
+          ]}
+        />
+        <span className='ml-auto font-mono text-[11.5px] text-fg-subtle tabular-nums'>
+          {shown}/{counts.all}
+        </span>
+      </Toolbar>
+
+      <PageScroll>
+        {isLoading ? (
+          <div className='space-y-2 px-7 py-6'>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className='h-9 w-full' />
+            ))}
+          </div>
+        ) : all.length === 0 ? (
+          <div className='py-16'>
+            <EmptyState
+              icon={<GitBranch className='h-5 w-5' />}
+              title='No job definitions'
+              description='Definitions are synced from Git. Add a YAML file under the job-definitions directory and run Sync from Git in Settings — or author one here with New template.'
+            />
+          </div>
+        ) : shown === 0 ? (
+          <div className='py-16'>
+            <EmptyState
+              title='Nothing matches'
+              description='Loosen the filter or clear the search box.'
+            />
+          </div>
+        ) : (
+          <Table>
+            <THead>
+              <Tr>
+                <Th>Job</Th>
+                <Th>Last build</Th>
+                <Th>When</Th>
+                <Th>Duration</Th>
+                <Th>History</Th>
+                <Th>30d</Th>
+                <Th className='text-right'>Run</Th>
+              </Tr>
+            </THead>
+            {groups.map((group) => {
+              const isCollapsed = collapsed[group.folder] ?? false;
+              return (
+                <TBody key={group.folder}>
+                  <Tr>
+                    {/* The folder header doubles as the collapse control: one
+                        row per folder rather than a separate tree pane. */}
+                    <Td colSpan={7} className='border-b-border bg-bg-subtle py-1.5'>
+                      <button
+                        type='button'
+                        onClick={() =>
+                          setCollapsed((prev) => ({
+                            ...prev,
+                            [group.folder]: !isCollapsed,
+                          }))
+                        }
+                        aria-expanded={!isCollapsed}
+                        className='inline-flex items-center gap-1.5 font-mono text-[11.5px] text-fg-muted hover:text-fg'
+                      >
+                        <ChevronRight
+                          className={`h-3.5 w-3.5 transition-transform ${
+                            isCollapsed ? '' : 'rotate-90'
+                          }`}
+                        />
+                        <FolderOpen className='h-3.5 w-3.5 text-fg-subtle' />
+                        {group.folder}
+                        <span className='text-fg-subtle'>{group.rows.length}</span>
+                      </button>
+                    </Td>
+                  </Tr>
+                  {!isCollapsed &&
+                    group.rows.map((job) => <JobRow key={job.slug} job={job} />)}
+                </TBody>
+              );
+            })}
+          </Table>
+        )}
+      </PageScroll>
+    </>
   );
 }

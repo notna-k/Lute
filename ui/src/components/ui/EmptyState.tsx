@@ -9,6 +9,11 @@ export interface EmptyStateProps {
   className?: string;
 }
 
+/**
+ * The nothing-here state. Centred, unboxed and quiet: it usually sits inside a
+ * table or panel that already has a border, and a second dashed box around it
+ * reads as a broken layout rather than an explanation.
+ */
 export function EmptyState({
   icon,
   title,
@@ -19,20 +24,14 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-bg-subtle px-6 py-12 text-center',
+        'grid justify-items-center gap-2.5 px-5 py-10 text-center text-fg-subtle',
         className
       )}
     >
-      {icon && (
-        <div className='flex h-10 w-10 items-center justify-center rounded-full bg-bg-muted text-fg-muted'>
-          {icon}
-        </div>
-      )}
-      <h3 className='text-base font-semibold text-fg'>{title}</h3>
-      {description && (
-        <p className='max-w-md text-sm text-fg-muted'>{description}</p>
-      )}
-      {action && <div className='mt-1'>{action}</div>}
+      {icon}
+      <b className='text-sm font-medium text-fg'>{title}</b>
+      {description && <span className='max-w-md text-[13px]'>{description}</span>}
+      {action}
     </div>
   );
 }

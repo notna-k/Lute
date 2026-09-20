@@ -17,27 +17,32 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   dot?: boolean;
 }
 
+/**
+ * A small labelled tag. For build and worker state use StatusBadge instead —
+ * those have a fixed shape vocabulary, and this one is for everything else
+ * (an environment, a queue, an origin).
+ */
 const TONE_STYLES: Record<BadgeTone, string> = {
-  neutral: 'bg-bg-muted text-fg-muted border-border',
-  primary: 'bg-primary-subtle text-info-fg border-primary/20',
-  success: 'bg-success-subtle text-success-fg border-success/20',
-  warning: 'bg-warning-subtle text-warning-fg border-warning/20',
-  danger: 'bg-danger-subtle text-danger-fg border-danger/20',
-  info: 'bg-info-subtle text-info-fg border-info/20',
+  neutral: 'border-border bg-bg-subtle text-fg-muted',
+  primary: 'border-border bg-bg-subtle text-fg',
+  success: 'border-success/30 bg-success-subtle text-success',
+  warning: 'border-warning/30 bg-warning-subtle text-warning',
+  danger: 'border-danger/30 bg-danger-subtle text-danger',
+  info: 'border-border bg-bg-subtle text-fg-muted',
 };
 
 const TONE_DOT: Record<BadgeTone, string> = {
   neutral: 'bg-fg-subtle',
-  primary: 'bg-primary',
+  primary: 'bg-fg',
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-danger',
-  info: 'bg-info',
+  info: 'bg-fg-subtle',
 };
 
 const SIZES: Record<BadgeSize, string> = {
-  sm: 'text-xxs px-1.5 py-0.5',
-  md: 'text-xs px-2 py-0.5',
+  sm: 'text-[11px] px-1.5 h-[18px]',
+  md: 'text-xs px-2 h-[22px]',
 };
 
 export function Badge({
@@ -51,7 +56,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border font-medium capitalize',
+        'inline-flex items-center gap-1.5 border font-medium',
         TONE_STYLES[tone],
         SIZES[size],
         className
@@ -59,10 +64,7 @@ export function Badge({
       {...rest}
     >
       {dot && (
-        <span
-          aria-hidden
-          className={cn('h-1.5 w-1.5 rounded-full', TONE_DOT[tone])}
-        />
+        <span aria-hidden className={cn('h-[5px] w-[5px]', TONE_DOT[tone])} />
       )}
       {children}
     </span>

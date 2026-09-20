@@ -1,0 +1,117 @@
+/**
+ * Design tokens.
+ *
+ * One flat, high-contrast instrument palette: paper-white light mode, near-black
+ * dark mode, no chrome gradients, and colour reserved for build status. Values
+ * are raw `r g b` triplets so Tailwind can apply opacity (`bg-fg/10`).
+ *
+ * Light is the default; `html.dark` (set by ThemeContext before paint) switches.
+ */
+
+@layer base {
+  :root {
+    /* Surfaces, from furthest back to nearest front. */
+    --color-bg: 246 246 247;
+    --color-bg-subtle: 242 242 244;
+    --color-bg-muted: 231 231 234;
+    --color-bg-elevated: 255 255 255;
+    --color-bg-inverse: 15 16 18;
+
+    --color-surface: 255 255 255;
+    --color-surface-hover: 239 239 241;
+    --color-surface-active: 231 231 234;
+
+    /* Hairlines: `border` separates regions, `border-subtle` separates rows. */
+    --color-border: 221 221 225;
+    --color-border-strong: 147 150 158;
+    --color-border-subtle: 236 236 239;
+
+    --color-fg: 15 16 18;
+    --color-fg-muted: 88 92 100;
+    --color-fg-subtle: 147 150 158;
+    --color-fg-on-primary: 255 255 255;
+    --color-fg-inverse: 246 246 247;
+
+    /* There is no brand hue: the primary action is simply inverted. */
+    --color-primary: 15 16 18;
+    --color-primary-hover: 40 42 46;
+    --color-primary-active: 58 60 66;
+    --color-primary-subtle: 231 231 234;
+
+    /* Status. success = passed, warning = running, danger = failed. */
+    --color-success: 29 138 86;
+    --color-success-subtle: 230 243 236;
+    --color-success-fg: 24 116 72;
+
+    --color-warning: 168 111 7;
+    --color-warning-subtle: 248 239 220;
+    --color-warning-fg: 140 92 6;
+
+    --color-danger: 207 58 48;
+    --color-danger-subtle: 251 233 231;
+    --color-danger-fg: 176 46 38;
+
+    --color-info: 15 16 18;
+    --color-info-subtle: 231 231 234;
+    --color-info-fg: 88 92 100;
+
+    /* The log pane keeps its own dark scale in both themes: build output is
+       read as a terminal, and a white one is unreadable next to ANSI colour. */
+    --color-log-bg: 17 18 20;
+    --color-log-fg: 214 217 221;
+    --color-log-dim: 106 110 118;
+    --color-log-line: 31 32 36;
+
+    --shadow-overlay: 0 12px 40px rgb(20 22 28 / 0.18);
+  }
+
+  html.dark {
+    --color-bg: 13 14 16;
+    --color-bg-subtle: 23 24 27;
+    --color-bg-muted: 34 35 40;
+    --color-bg-elevated: 18 19 22;
+    --color-bg-inverse: 236 237 239;
+
+    --color-surface: 18 19 22;
+    --color-surface-hover: 27 28 32;
+    --color-surface-active: 34 35 40;
+
+    --color-border: 38 40 45;
+    --color-border-strong: 102 106 115;
+    --color-border-subtle: 28 29 33;
+
+    --color-fg: 236 237 239;
+    --color-fg-muted: 160 164 172;
+    --color-fg-subtle: 102 106 115;
+    --color-fg-on-primary: 13 14 16;
+    --color-fg-inverse: 13 14 16;
+
+    --color-primary: 236 237 239;
+    --color-primary-hover: 214 215 218;
+    --color-primary-active: 193 194 198;
+    --color-primary-subtle: 34 35 40;
+
+    --color-success: 69 192 138;
+    --color-success-subtle: 20 43 35;
+    --color-success-fg: 111 214 168;
+
+    --color-warning: 229 180 84;
+    --color-warning-subtle: 47 40 24;
+    --color-warning-fg: 240 200 124;
+
+    --color-danger: 242 100 95;
+    --color-danger-subtle: 54 26 26;
+    --color-danger-fg: 245 138 132;
+
+    --color-info: 236 237 239;
+    --color-info-subtle: 34 35 40;
+    --color-info-fg: 160 164 172;
+
+    --color-log-bg: 9 9 11;
+    --color-log-fg: 207 210 214;
+    --color-log-dim: 91 95 103;
+    --color-log-line: 27 28 32;
+
+    --shadow-overlay: 0 12px 40px rgb(0 0 0 / 0.5);
+  }
+}

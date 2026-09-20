@@ -1,27 +1,42 @@
 import { type HTMLAttributes, type ReactNode } from 'react';
-import { AlertCircle, CheckCircle2, Info, XCircle } from 'lucide-react';
+import { AlertTriangle, GitBranch, Info } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export type AlertTone = 'info' | 'success' | 'warning' | 'danger';
 
-const TONE_STYLES: Record<AlertTone, string> = {
-  info: 'bg-info-subtle border-info/30 text-info-fg',
-  success: 'bg-success-subtle border-success/30 text-success-fg',
-  warning: 'bg-warning-subtle border-warning/30 text-warning-fg',
-  danger: 'bg-danger-subtle border-danger/30 text-danger-fg',
+/**
+ * A banner about the state of the thing on the page, not a coloured box.
+ *
+ * The tone lives in a 2px left edge and the icon; the body stays on the panel
+ * background. A full-bleed tint at the top of a page competes with the build
+ * status markers below it, which are the colours that actually carry data.
+ */
+const EDGE: Record<AlertTone, string> = {
+  info: 'border-l-border-strong',
+  success: 'border-l-success',
+  warning: 'border-l-warning',
+  danger: 'border-l-danger',
+};
+
+const ICON_TONE: Record<AlertTone, string> = {
+  info: 'text-fg-subtle',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
 };
 
 const TONE_ICONS: Record<AlertTone, typeof Info> = {
   info: Info,
-  success: CheckCircle2,
-  warning: AlertCircle,
-  danger: XCircle,
+  success: GitBranch,
+  warning: AlertTriangle,
+  danger: AlertTriangle,
 };
 
 export interface AlertProps
   extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   tone?: AlertTone;
   title?: ReactNode;
+  /** Buttons that act on what the banner reports, aligned to the right. */
   action?: ReactNode;
   icon?: ReactNode;
 }
@@ -40,20 +55,21 @@ export function Alert({
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
       className={cn(
-        'flex items-start gap-3 rounded-md border px-4 py-3 text-sm',
-        TONE_STYLES[tone],
+        'flex flex-wrap items-center gap-2.5 border border-l-2 border-border bg-surface px-3 py-2.5 text-[13px]',
+        EDGE[tone],
         className
       )}
       {...rest}
     >
-      <span className='mt-0.5 shrink-0'>
-        {icon ?? <Icon className='h-4 w-4' />}
+      <span className={cn('shrink-0', ICON_TONE[tone])}>
+        {icon ?? <Icon className='h-3.5 w-3.5' />}
       </span>
-      <div className='min-w-0 flex-1'>
-        {title && <div className='font-semibold'>{title}</div>}
-        {children && <div className={cn(title && 'mt-0.5')}>{children}</div>}
+      <div className='min-w-0 flex-[1_1_280px]'>
+        {title && <b className='font-medium'>{title}</b>}
+        {title && children ? ' ' : null}
+        {children && <span className='text-fg-muted'>{children}</span>}
       </div>
-      {action && <div className='shrink-0'>{action}</div>}
+      {action && <div className='ml-auto flex shrink-0 gap-1.5'>{action}</div>}
     </div>
   );
 }

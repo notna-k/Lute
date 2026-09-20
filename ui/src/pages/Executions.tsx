@@ -1,64 +1,50 @@
+/**
+ * Every run the engine has recorded, newest first.
+ *
+ * This is the cross-job view: the same rows a job's Builds tab shows, without
+ * the job filter. Status is the first thing the eye needs, so it leads the row
+ * and carries the shape vocabulary rather than a colour alone.
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw } from 'lucide-react';
 import {
   Alert,
-  Badge,
   Button,
-  Card,
   EmptyState,
-  Field,
   IconButton,
-  Input,
-  PageHeader,
+  NativeSelect,
   Pagination,
-  Select,
+  RowLink,
+  SearchInput,
+  SegmentedControl,
   Skeleton,
+  StatusText,
   TBody,
+  Table,
   Td,
   Th,
   THead,
-  Table,
-  Tooltip,
+  PageHeader,
+  Toolbar,
   Tr,
 } from '@/components/ui';
+import { PageScroll } from '@/components/layout';
 import { EnqueueJobDialog } from '@/features/jobs/EnqueueJobDialog';
-import {
-  executionService,
-  type JobExecution,
-} from '@/services/executionService';
+import { executionService, type JobExecution } from '@/services/executionService';
+import { duration, relativeTime, timestamp, toEpochMs } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 const PAGE_SIZE = 25;
 
-function formatFinished(iso: string): string {
-  if (!iso) return '—';
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return iso;
-  return new Date(ms).toLocaleString();
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
-  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
-}
-
 type StatusFilter = '' | 'success' | 'failed';
 type SortOption = 'finished_at_desc' | 'finished_at_asc';
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'success', label: 'Success' },
-  { value: 'failed', label: 'Failed' },
-] as const;
+/** Shortens an opaque id to something a row can hold without wrapping. */
+const shortId = (id: string, keep = 10) =>
+  id.length > keep + 2 ? `${id.slice(0, keep)}…` : id;
 
-const SORT_OPTIONS = [
-  { value: 'finished_at_desc', label: 'Newest first' },
-  { value: 'finished_at_asc', label: 'Oldest first' },
-] as const;
-
-const Executions = () => {
+export default function Executions() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<JobExecution[]>([]);
   const [total, setTotal] = useState(0);
@@ -75,14 +61,16 @@ const Executions = () => {
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const loadFilterOptions = useCallback(async () => {
-    try {
-      const o = await executionService.filterOptions();
-      setQueueOptions(o.queues ?? []);
-      setTypeOptions(o.types ?? []);
-    } catch {
-      /* optional */
-    }
+  useEffect(() => {
+    void (async () => {
+      try {
+        const o = await executionService.filterOptions();
+        setQueueOptions(o.queues ?? []);
+        setTypeOptions(o.types ?? []);
+      } catch {
+        /* the filters degrade to free text */
+      }
+    })();
   }, []);
 
   const fetchExecutions = useCallback(async () => {
@@ -109,208 +97,194 @@ const Executions = () => {
   }, [queueFilter, typeFilter, statusFilter, sort, page]);
 
   useEffect(() => {
-    loadFilterOptions();
-  }, [loadFilterOptions]);
-
-  useEffect(() => {
-    fetchExecutions();
+    void fetchExecutions();
   }, [fetchExecutions]);
 
   return (
     <>
       <PageHeader
-        title='Executions'
-        description='Completed job runs (newest first by default).'
+        title='Builds'
+        description='Every run the engine has recorded, across all jobs.'
+        facts={<span className='tabular-nums'>{total} recorded</span>}
         actions={
-          <div className='flex items-center gap-2'>
-            <Tooltip content='Refresh'>
-              <IconButton
-                label='Refresh'
-                variant='outline'
-                onClick={() => void fetchExecutions()}
-                disabled={loading}
-              >
-                <RefreshCw
-                  className={cn('h-4 w-4', loading && 'animate-spin')}
-                />
-              </IconButton>
-            </Tooltip>
-            <Button
-              leftIcon={<Plus className='h-4 w-4' />}
-              onClick={() => setDialogOpen(true)}
-            >
-              Trigger job
-            </Button>
-          </div>
+          <Button variant='primary' size='sm' onClick={() => setDialogOpen(true)}>
+            <Plus className='h-3.5 w-3.5' /> Trigger job
+          </Button>
         }
       />
 
-      <Card className='mb-4 p-4'>
-        <div className='grid gap-3 md:grid-cols-4'>
-          <Field label='Status'>
-            <Select<StatusFilter>
-              value={statusFilter}
-              onChange={(v) => {
-                setStatusFilter(v);
-                setPage(0);
-              }}
-              options={STATUS_OPTIONS.map((o) => ({
-                value: o.value,
-                label: o.label,
-              }))}
-            />
-          </Field>
-          <Field label='Queue'>
-            <Input
-              value={queueFilter}
-              placeholder='Exact match'
-              onChange={(e) => {
-                setQueueFilter(e.target.value);
-                setPage(0);
-              }}
-              list='exec-queue-options'
-            />
-            <datalist id='exec-queue-options'>
-              {queueOptions.map((q) => (
-                <option key={q} value={q} />
-              ))}
-            </datalist>
-          </Field>
-          <Field label='Type'>
-            <Input
-              value={typeFilter}
-              placeholder='Exact match'
-              onChange={(e) => {
-                setTypeFilter(e.target.value);
-                setPage(0);
-              }}
-              list='exec-type-options'
-            />
-            <datalist id='exec-type-options'>
-              {typeOptions.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
-          </Field>
-          <Field label='Sort'>
-            <Select<SortOption>
-              value={sort}
-              onChange={(v) => {
-                setSort(v);
-                setPage(0);
-              }}
-              options={SORT_OPTIONS.map((o) => ({
-                value: o.value,
-                label: o.label,
-              }))}
-            />
-          </Field>
-        </div>
-      </Card>
-
-      {error && (
-        <Alert tone='danger' className='mb-4'>
-          {error}
-        </Alert>
-      )}
-
-      {loading && rows.length === 0 ? (
-        <Card>
-          <div className='p-4'>
-            <div className='space-y-2'>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className='h-10 w-full' />
-              ))}
-            </div>
-          </div>
-        </Card>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title='No executions match your filters'
-          description='Try loosening the filters or trigger a new job.'
-          action={
-            <Button
-              leftIcon={<Plus className='h-4 w-4' />}
-              onClick={() => setDialogOpen(true)}
-            >
-              Trigger job
-            </Button>
-          }
+      <Toolbar>
+        <SegmentedControl<StatusFilter>
+          label='Filter by status'
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(0);
+          }}
+          options={[
+            { value: '', label: 'All' },
+            { value: 'success', label: 'Passed' },
+            { value: 'failed', label: 'Failed' },
+          ]}
         />
-      ) : (
-        <Card className='overflow-hidden'>
-          <Table>
-            <THead>
-              <Tr>
-                <Th>Finished</Th>
-                <Th>Status</Th>
-                <Th>Job</Th>
-                <Th>Queue</Th>
-                <Th>Type</Th>
-                <Th>Worker</Th>
-                <Th className='text-right'>Duration</Th>
-                <Th>Error</Th>
-              </Tr>
-            </THead>
-            <TBody>
-              {rows.map((ex) => (
-                <Tr
-                  key={ex.id}
-                  className='cursor-pointer'
-                  onClick={() => navigate(`/executions/${ex.job_id}`)}
-                >
-                  <Td className='whitespace-nowrap tabular-nums'>
-                    {formatFinished(ex.finished_at)}
-                  </Td>
-                  <Td>
-                    <Badge tone={ex.success ? 'success' : 'danger'} dot>
-                      {ex.success ? 'Success' : 'Failed'}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <Link
-                      to={`/executions/${ex.job_id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className='font-mono text-primary hover:underline'
-                    >
-                      {ex.job_id.length > 12
-                        ? `${ex.job_id.slice(0, 10)}…`
-                        : ex.job_id}
-                    </Link>
-                  </Td>
-                  <Td>{ex.queue}</Td>
-                  <Td className='font-mono text-xs'>{ex.type}</Td>
-                  <Td className='font-mono text-xs text-fg-muted'>
-                    {ex.worker_id
-                      ? ex.worker_id.length > 10
-                        ? `${ex.worker_id.slice(0, 8)}…`
-                        : ex.worker_id
-                      : '—'}
-                  </Td>
-                  <Td className='text-right tabular-nums'>
-                    {formatDuration(ex.elapsed_ms)}
-                  </Td>
-                  <Td
-                    className={cn(
-                      'max-w-[220px] truncate',
-                      ex.error ? 'text-danger-fg' : 'text-fg-subtle'
-                    )}
-                    title={ex.error || ''}
-                  >
-                    {ex.error || '—'}
-                  </Td>
+        <SearchInput
+          value={queueFilter}
+          onChange={(e) => {
+            setQueueFilter(e.target.value);
+            setPage(0);
+          }}
+          placeholder='Queue (exact)'
+          aria-label='Filter by queue'
+          className='w-[180px]'
+          list='exec-queue-options'
+        />
+        <datalist id='exec-queue-options'>
+          {queueOptions.map((q) => (
+            <option key={q} value={q} />
+          ))}
+        </datalist>
+        <SearchInput
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value);
+            setPage(0);
+          }}
+          placeholder='Type (exact)'
+          aria-label='Filter by type'
+          className='w-[180px]'
+          list='exec-type-options'
+        />
+        <datalist id='exec-type-options'>
+          {typeOptions.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+        <NativeSelect
+          value={sort}
+          aria-label='Sort order'
+          className='w-[150px]'
+          onChange={(e) => {
+            setSort(e.target.value as SortOption);
+            setPage(0);
+          }}
+        >
+          <option value='finished_at_desc'>Newest first</option>
+          <option value='finished_at_asc'>Oldest first</option>
+        </NativeSelect>
+        <IconButton
+          label='Refresh'
+          variant='outline'
+          className='ml-auto'
+          onClick={() => void fetchExecutions()}
+          disabled={loading}
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+        </IconButton>
+      </Toolbar>
+
+      <PageScroll>
+        {error && (
+          <div className='px-7 pt-4'>
+            <Alert tone='danger'>{error}</Alert>
+          </div>
+        )}
+
+        {loading && rows.length === 0 ? (
+          <div className='space-y-2 px-7 py-6'>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className='h-9 w-full' />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className='py-16'>
+            <EmptyState
+              title='No runs match these filters'
+              description='Loosen the filters, or trigger a job to produce one.'
+              action={
+                <Button size='sm' onClick={() => setDialogOpen(true)}>
+                  <Plus className='h-3.5 w-3.5' /> Trigger job
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <Tr>
+                  <Th>Status</Th>
+                  <Th>Run</Th>
+                  <Th>Type</Th>
+                  <Th>Queue</Th>
+                  <Th>Worker</Th>
+                  <Th>Finished</Th>
+                  <Th className='text-right'>Duration</Th>
+                  <Th>Error</Th>
                 </Tr>
-              ))}
-            </TBody>
-          </Table>
-          <Pagination
-            total={total}
-            page={page}
-            pageSize={PAGE_SIZE}
-            onPageChange={setPage}
-          />
-        </Card>
-      )}
+              </THead>
+              <TBody>
+                {rows.map((ex) => {
+                  const finished = toEpochMs(ex.finished_at);
+                  return (
+                    <RowLink key={ex.id} to={`/executions/${ex.job_id}`}>
+                      <Td>
+                        <StatusText state={ex.success ? 'passed' : 'failed'} />
+                      </Td>
+                      <Td>
+                        <Link
+                          to={`/executions/${ex.job_id}`}
+                          className='font-mono font-medium hover:underline'
+                          title={ex.job_id}
+                        >
+                          {shortId(ex.job_id)}
+                        </Link>
+                      </Td>
+                      <Td className='font-mono text-fg-muted'>{ex.type}</Td>
+                      <Td className='text-fg-muted'>{ex.queue}</Td>
+                      <Td className='font-mono text-fg-muted' title={ex.worker_id}>
+                        {ex.worker_id ? (
+                          <Link
+                            to={`/workers/${ex.worker_id}`}
+                            className='hover:underline'
+                          >
+                            {shortId(ex.worker_id, 8)}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                      <Td
+                        className='text-fg-muted tabular-nums'
+                        title={finished ? timestamp(finished) : undefined}
+                      >
+                        {finished ? relativeTime(finished) : '—'}
+                      </Td>
+                      <Td className='text-right tabular-nums'>
+                        {duration(ex.elapsed_ms)}
+                      </Td>
+                      <Td
+                        className={cn(
+                          'max-w-[220px] truncate',
+                          ex.error ? 'text-danger' : 'text-fg-subtle'
+                        )}
+                        title={ex.error || ''}
+                      >
+                        {ex.error || '—'}
+                      </Td>
+                    </RowLink>
+                  );
+                })}
+              </TBody>
+            </Table>
+            <Pagination
+              total={total}
+              page={page}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
+          </>
+        )}
+      </PageScroll>
 
       <EnqueueJobDialog
         open={dialogOpen}
@@ -320,6 +294,4 @@ const Executions = () => {
       />
     </>
   );
-};
-
-export default Executions;
+}

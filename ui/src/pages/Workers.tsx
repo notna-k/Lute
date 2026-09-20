@@ -1,16 +1,36 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, Server } from 'lucide-react';
+/**
+ * The worker fleet.
+ *
+ * Filtering is by label rather than by name, because that is how jobs are routed
+ * — "which machines would `gpu=true` land on" is the question an operator
+ * actually asks here.
+ */
+import { useMemo, useState } from 'react';
+import { Plus, Server } from 'lucide-react';
 import {
   useDeleteWorker,
   useReEnableWorker,
   useUserWorkers,
 } from '@/hooks/useWorkers';
 import type { Worker } from '@/types';
-import { Alert, Button, EmptyState, Input, PageHeader } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  EmptyState,
+  PageHeader,
+  SearchInput,
+  SegmentedControl,
+  Toolbar,
+} from '@/components/ui';
+import { PageScroll } from '@/components/layout';
 import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
 import { DeleteWorkerDialog } from '@/features/workers/DeleteWorkerDialog';
 import { WorkerList } from '@/features/workers/WorkerList';
+import { workerState } from '@/features/workers/utils';
 
+type Availability = 'all' | 'online' | 'offline';
+
+/** `gpu=true, zone=eu` → `{gpu: 'true', zone: 'eu'}`. */
 function parseLabelFilter(raw: string): Record<string, string> {
   const out: Record<string, string> = {};
   raw.split(',').forEach((part) => {
@@ -20,124 +40,135 @@ function parseLabelFilter(raw: string): Record<string, string> {
   return out;
 }
 
-function workerMatchesFilter(w: Worker, filter: Record<string, string>): boolean {
-  for (const [k, v] of Object.entries(filter)) {
-    if (!k) continue;
-    if ((w.labels ?? {})[k] !== v) return false;
-  }
-  return true;
+function matchesLabels(w: Worker, filter: Record<string, string>): boolean {
+  return Object.entries(filter).every(
+    ([k, v]) => !k || (w.labels ?? {})[k] === v
+  );
 }
 
-const Workers = () => {
+/** Stable empty list, so the filter memo does not re-run on every render. */
+const NO_WORKERS: Worker[] = [];
+
+export default function Workers() {
   const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Worker | null>(null);
   const [labelFilter, setLabelFilter] = useState('');
+  const [availability, setAvailability] = useState<Availability>('all');
 
   const userQuery = useUserWorkers();
   const reEnable = useReEnableWorker();
   const remove = useDeleteWorker();
 
+  const all = userQuery.data ?? NO_WORKERS;
+  const online = all.filter((w) => workerState(w.status) !== 'offline').length;
+
   const parsedFilter = useMemo(() => parseLabelFilter(labelFilter), [labelFilter]);
   const workers = useMemo(() => {
-    const all = userQuery.data ?? [];
-    return labelFilter.trim() ? all.filter((w) => workerMatchesFilter(w, parsedFilter)) : all;
-  }, [userQuery.data, labelFilter, parsedFilter]);
-
-  const handleDeleteConfirm = () => {
-    if (!deleteTarget) return;
-    remove.mutate(deleteTarget.id, {
-      onSuccess: () => {
-        setDeleteTarget(null);
-      },
+    return all.filter((w) => {
+      if (labelFilter.trim() && !matchesLabels(w, parsedFilter)) return false;
+      const offline = workerState(w.status) === 'offline';
+      if (availability === 'online') return !offline;
+      if (availability === 'offline') return offline;
+      return true;
     });
-  };
+  }, [all, availability, labelFilter, parsedFilter]);
 
   return (
     <>
       <PageHeader
         title='Workers'
-        description='Register, monitor, and manage compute agents.'
+        description='The machines builds are dispatched to. Labels decide what lands where.'
+        facts={
+          <>
+            <span className='tabular-nums'>
+              {online}/{all.length} online
+            </span>
+          </>
+        }
         actions={
-          <Button
-            leftIcon={<Plus className='h-4 w-4' />}
-            onClick={() => setAddOpen(true)}
-          >
-            Add worker
+          <Button variant='primary' size='sm' onClick={() => setAddOpen(true)}>
+            <Plus className='h-3.5 w-3.5' /> Add worker
           </Button>
         }
       />
 
-      <div className='mb-4 flex items-center gap-2'>
-        <div className='relative flex-1 max-w-xs'>
-          <Search className='absolute left-2.5 top-2.5 h-4 w-4 text-fg-muted pointer-events-none' />
-          <Input
-            placeholder='Filter by label, e.g. gpu=true'
-            value={labelFilter}
-            onChange={(e) => setLabelFilter(e.target.value)}
-            className='pl-8'
-          />
-        </div>
-        {labelFilter && (
-          <button
-            type='button'
-            onClick={() => setLabelFilter('')}
-            className='text-xs text-fg-muted hover:text-fg'
-          >
-            Clear
-          </button>
+      <Toolbar>
+        <SearchInput
+          value={labelFilter}
+          onChange={(e) => setLabelFilter(e.target.value)}
+          placeholder='Filter by label, e.g. gpu=true'
+          aria-label='Filter workers by label'
+        />
+        <SegmentedControl<Availability>
+          label='Filter by availability'
+          value={availability}
+          onChange={setAvailability}
+          options={[
+            { value: 'all', label: 'All', count: all.length },
+            { value: 'online', label: 'Online', count: online },
+            { value: 'offline', label: 'Offline', count: all.length - online },
+          ]}
+        />
+        <span className='ml-auto font-mono text-[11.5px] text-fg-subtle tabular-nums'>
+          {workers.length}/{all.length}
+        </span>
+      </Toolbar>
+
+      <PageScroll>
+        {userQuery.isError && (
+          <div className='px-7 pt-4'>
+            <Alert tone='danger' title='Failed to load workers'>
+              {userQuery.error instanceof Error
+                ? userQuery.error.message
+                : 'Unknown error'}
+            </Alert>
+          </div>
         )}
-      </div>
 
-      {userQuery.isError && (
-        <Alert tone='danger' className='mb-4'>
-          Failed to load workers:{' '}
-          {userQuery.error instanceof Error
-            ? userQuery.error.message
-            : 'Unknown error'}
-        </Alert>
-      )}
-
-      <WorkerList
-        workers={workers}
-        loading={userQuery.isLoading}
-        onReEnable={(w) =>
-          reEnable.mutate(w.id, {
-            onSuccess: () => userQuery.refetch(),
-          })
-        }
-        onDelete={(w) => setDeleteTarget(w)}
-        reEnablingId={
-          reEnable.isPending ? (reEnable.variables as string | undefined) : undefined
-        }
-        deletingId={
-          remove.isPending ? (remove.variables as string | undefined) : undefined
-        }
-        empty={
-          <EmptyState
-            icon={<Server className='h-5 w-5' />}
-            title='No workers yet'
-            description='Register your first compute agent to start running jobs.'
-            action={
-              <Button
-                leftIcon={<Plus className='h-4 w-4' />}
-                onClick={() => setAddOpen(true)}
-              >
-                Add your first worker
-              </Button>
-            }
-          />
-        }
-      />
+        <WorkerList
+          workers={workers}
+          loading={userQuery.isLoading}
+          onReEnable={(w) =>
+            reEnable.mutate(w.id, { onSuccess: () => void userQuery.refetch() })
+          }
+          onDelete={(w) => setDeleteTarget(w)}
+          reEnablingId={
+            reEnable.isPending ? (reEnable.variables as string | undefined) : undefined
+          }
+          deletingId={
+            remove.isPending ? (remove.variables as string | undefined) : undefined
+          }
+          empty={
+            <EmptyState
+              icon={<Server className='h-5 w-5' />}
+              title={all.length ? 'No workers match' : 'No workers yet'}
+              description={
+                all.length
+                  ? 'Clear the label filter to see the whole fleet.'
+                  : 'Register a machine to start running builds.'
+              }
+              action={
+                all.length ? undefined : (
+                  <Button size='sm' onClick={() => setAddOpen(true)}>
+                    <Plus className='h-3.5 w-3.5' /> Add your first worker
+                  </Button>
+                )
+              }
+            />
+          }
+        />
+      </PageScroll>
 
       <AddWorkerDialog open={addOpen} onClose={() => setAddOpen(false)} />
       <DeleteWorkerDialog
         worker={deleteTarget}
         onCancel={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() =>
+          deleteTarget &&
+          remove.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })
+        }
         pending={remove.isPending}
       />
     </>
   );
-};
-
-export default Workers;
+}
