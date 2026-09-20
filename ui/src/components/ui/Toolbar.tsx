@@ -14,7 +14,7 @@ export const Toolbar = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>
       <div
         ref={ref}
         className={cn(
-          'flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border px-7 py-3',
+          'flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border px-7 py-[var(--density-toolbar-y)]',
           className
         )}
         {...props}

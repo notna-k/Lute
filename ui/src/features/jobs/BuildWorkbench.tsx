@@ -10,10 +10,10 @@
  *   right   context  — run:  the equivalent `docker run` / `curl`
  *                      edit: the YAML you would commit, copy or download
  *
- * Editing a Git-synced definition stays read-only against the server: its
- * artifact is YAML you commit to the job-definitions repo. A drifted schema can
- * still be *run* — it goes through as an ad-hoc build carrying its own schema,
- * gated on the operator's "allow ad-hoc builds" setting.
+ * An edited schema can be saved (the caller's footer) — the definition then
+ * differs from Git until the YAML is committed — or just *run*: it goes through
+ * as an ad-hoc build carrying its own schema, gated on the operator's "allow
+ * ad-hoc builds" setting.
  *
  * The mode is owned by the caller, because for an existing job it is a route
  * (/run vs /config) and for a new template there is nothing to run at all.

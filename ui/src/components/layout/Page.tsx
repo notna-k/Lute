@@ -32,7 +32,7 @@ export const PageBody = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement
     return (
       <div
         ref={ref}
-        className={cn('px-7 pb-14 pt-6 max-md:px-4', className)}
+        className={cn('px-7 pb-14 pt-[var(--density-body-top)] max-md:px-4', className)}
         {...props}
       />
     );
@@ -48,7 +48,10 @@ export interface SectionProps extends HTMLAttributes<HTMLElement> {
 /** A titled block inside a PageBody. */
 export function Section({ title, aside, className, children, ...rest }: SectionProps) {
   return (
-    <section className={cn('mt-8 first:mt-0', className)} {...rest}>
+    <section
+      className={cn('mt-[var(--density-section-gap)] first:mt-0', className)}
+      {...rest}
+    >
       {(title || aside) && (
         <h3 className='mb-2 flex items-center gap-2.5'>
           {title && <span className='caption'>{title}</span>}

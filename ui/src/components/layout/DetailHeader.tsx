@@ -45,7 +45,10 @@ export function DetailHeader({
 }: DetailHeaderProps) {
   return (
     <header
-      className={cn('shrink-0 border-b border-border px-7 pt-3.5 max-md:px-4', className)}
+      className={cn(
+        'shrink-0 border-b border-border px-7 pt-[var(--density-toolbar-y)] max-md:px-4',
+        className
+      )}
     >
       <div className='flex flex-wrap items-center gap-3'>
         <div className='flex min-w-0 flex-1 items-baseline gap-2.5'>

@@ -30,7 +30,10 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header
-      className={cn('shrink-0 border-b border-border px-7 pb-5 pt-5', className)}
+      className={cn(
+        'shrink-0 border-b border-border px-7 py-[var(--density-gutter-y)]',
+        className
+      )}
     >
       {breadcrumb && (
         <div className='flex min-h-[18px] flex-wrap items-center gap-1 text-xs text-fg-subtle'>

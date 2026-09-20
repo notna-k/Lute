@@ -32,9 +32,9 @@
     overflow: hidden;
   }
 
-  /* Compact row height, chosen in Settings; see useDensity. */
-  html[data-density="compact"] body {
-    font-size: 13px;
+  /* Density is a vertical rhythm, not a type scale — see tokens.css. */
+  body {
+    line-height: var(--density-line);
   }
 
   *,

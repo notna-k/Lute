@@ -83,7 +83,7 @@ export default function Settings() {
   const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: getSettings });
 
   const settingsMut = useMutation({
-    mutationFn: (allowAdhocBuilds: boolean) => updateSettings({ allowAdhocBuilds }),
+    mutationFn: updateSettings,
     onSuccess: (data) => qc.setQueryData(['settings'], data),
   });
 
@@ -170,8 +170,23 @@ export default function Settings() {
                 <Switch
                   checked={settingsQuery.data?.allowAdhocBuilds ?? true}
                   disabled={settingsQuery.isLoading || settingsMut.isPending}
-                  onChange={(e) => settingsMut.mutate(e.target.checked)}
+                  onChange={(e) =>
+                    settingsMut.mutate({ allowAdhocBuilds: e.target.checked })
+                  }
                   aria-label='Allow ad-hoc builds'
+                />
+              </SettingRow>
+              <SettingRow
+                label='Prune definitions missing from Git'
+                hint='On each sync, delete every definition no YAML file defines — templates created in the panel included. Off keeps them, marked as not in Git. Build history is kept either way.'
+              >
+                <Switch
+                  checked={settingsQuery.data?.pruneDefinitions ?? false}
+                  disabled={settingsQuery.isLoading || settingsMut.isPending}
+                  onChange={(e) =>
+                    settingsMut.mutate({ pruneDefinitions: e.target.checked })
+                  }
+                  aria-label='Prune definitions missing from Git'
                 />
               </SettingRow>
             </Card>

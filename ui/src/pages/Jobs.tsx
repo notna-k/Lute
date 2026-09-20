@@ -7,12 +7,21 @@
  * last do, has it been failing (the history strip), and how long does it take.
  */
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ChevronRight, FolderOpen, GitBranch, PenLine, Play, Plus } from 'lucide-react';
-import { listJobs } from '@/services/jobDefService';
 import {
-  Badge,
+  ChevronRight,
+  FileCode2,
+  FolderOpen,
+  GitBranch,
+  Play,
+  Plus,
+  RefreshCw,
+} from 'lucide-react';
+import { listJobs, syncJobs, type SyncResult } from '@/services/jobDefService';
+import {
+  Alert,
+  Button,
   EmptyState,
   LinkButton,
   PageHeader,
@@ -31,10 +40,11 @@ import {
   Tr,
 } from '@/components/ui';
 import { PageScroll } from '@/components/layout';
+import { ConfigDialog, GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { duration, percent, relativeTime } from '@/lib/format';
 import type { BuildStatus, JobDefinition } from '@/types/jobs';
 
-type Health = 'all' | 'failing' | 'running' | 'panel';
+type Health = 'all' | 'failing' | 'running' | 'drift';
 
 /** The folder a definition lives in — `jobdefs/release/api.yaml` → `release`. */
 function folderOf(job: JobDefinition): string {
@@ -50,8 +60,8 @@ function matchesHealth(job: JobDefinition, health: Health): boolean {
       return job.lastBuild?.status === 'failed';
     case 'running':
       return job.lastBuild?.status === 'running' || job.lastBuild?.status === 'queued';
-    case 'panel':
-      return job.origin === 'panel';
+    case 'drift':
+      return job.gitState !== 'synced';
     default:
       return true;
   }
@@ -85,16 +95,7 @@ function JobRow({ job }: { job: JobDefinition }) {
           >
             {job.name}
           </Link>
-          {job.origin === 'panel' && (
-            <Badge tone='warning' size='sm' title='Authored here — not in Git'>
-              <PenLine className='h-3 w-3' /> panel
-            </Badge>
-          )}
-          {job.origin === 'git' && !job.source.inSync && (
-            <Badge tone='warning' size='sm' title='Differs from the committed file'>
-              drift
-            </Badge>
-          )}
+          {job.gitState !== 'synced' && <GitStateBadge state={job.gitState} />}
         </div>
         {job.description && (
           <p className='mt-0.5 max-w-[46ch] truncate text-xs text-fg-subtle'>
@@ -128,31 +129,55 @@ function JobRow({ job }: { job: JobDefinition }) {
         <RateCell job={job} />
       </Td>
       <Td className='text-right'>
-        <LinkButton to={`/jobs/${job.slug}/run`} variant='outline' size='xs'>
-          <Play className='h-3 w-3' /> Run
-        </LinkButton>
+        <div className='flex items-center justify-end gap-1'>
+          <LinkButton to={`/jobs/${job.slug}/run`} variant='outline' size='xs'>
+            <Play className='h-3 w-3' /> Run
+          </LinkButton>
+          <JobActionsMenu job={job} />
+        </div>
       </Td>
     </RowLink>
   );
+}
+
+/** One line of plain English for what a sync actually did. */
+function syncSummary(r: SyncResult): string {
+  const parts = [
+    r.added && `${r.added} added`,
+    r.updated && `${r.updated} updated`,
+    r.detached && `${r.detached} no longer in Git`,
+    r.pruned && `${r.pruned} pruned`,
+  ].filter(Boolean);
+  return parts.length ? `Synced — ${parts.join(', ')}.` : 'Synced — already up to date.';
 }
 
 /** Stable empty list, so the memos below do not re-run on every render. */
 const NO_JOBS: JobDefinition[] = [];
 
 export default function Jobs() {
+  const queryClient = useQueryClient();
   const { data: jobs, isLoading } = useQuery({ queryKey: ['jobs'], queryFn: listJobs });
+  const [exporting, setExporting] = useState(false);
   const [query, setQuery] = useState('');
   const [health, setHealth] = useState<Health>('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const all = jobs ?? NO_JOBS;
 
+  const sync = useMutation({
+    mutationFn: syncJobs,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      void queryClient.invalidateQueries({ queryKey: ['job'] });
+    },
+  });
+
   const counts = useMemo(
     () => ({
       all: all.length,
       failing: all.filter((j) => matchesHealth(j, 'failing')).length,
       running: all.filter((j) => matchesHealth(j, 'running')).length,
-      panel: all.filter((j) => matchesHealth(j, 'panel')).length,
+      drift: all.filter((j) => matchesHealth(j, 'drift')).length,
     }),
     [all]
   );
@@ -198,14 +223,34 @@ export default function Jobs() {
             {counts.running > 0 && (
               <span className='text-warning tabular-nums'>{counts.running} in flight</span>
             )}
+            {counts.drift > 0 && (
+              <span className='text-warning tabular-nums'>
+                {counts.drift} differ from Git
+              </span>
+            )}
           </>
         }
         actions={
-          <LinkButton to='/jobs/new' variant='secondary' size='sm'>
-            <Plus className='h-3.5 w-3.5' /> New template
-          </LinkButton>
+          <>
+            <Button
+              variant='secondary'
+              size='sm'
+              loading={sync.isPending}
+              onClick={() => sync.mutate()}
+            >
+              <RefreshCw className='h-3.5 w-3.5' /> Sync from Git
+            </Button>
+            <Button variant='secondary' size='sm' onClick={() => setExporting(true)}>
+              <FileCode2 className='h-3.5 w-3.5' /> Export config
+            </Button>
+            <LinkButton to='/jobs/new' variant='secondary' size='sm'>
+              <Plus className='h-3.5 w-3.5' /> New template
+            </LinkButton>
+          </>
         }
       />
+
+      <ConfigDialog open={exporting} onClose={() => setExporting(false)} />
 
       <Toolbar>
         <SearchInput
@@ -222,7 +267,7 @@ export default function Jobs() {
             { value: 'all', label: 'All', count: counts.all },
             { value: 'failing', label: 'Failing', count: counts.failing },
             { value: 'running', label: 'In flight', count: counts.running },
-            { value: 'panel', label: 'Panel', count: counts.panel },
+            { value: 'drift', label: 'Differs from Git', count: counts.drift },
           ]}
         />
         <span className='ml-auto font-mono text-[11.5px] text-fg-subtle tabular-nums'>
@@ -231,6 +276,18 @@ export default function Jobs() {
       </Toolbar>
 
       <PageScroll>
+        {(sync.isSuccess || sync.isError) && (
+          <div className='px-7 pt-4'>
+            <Alert tone={sync.isError ? 'danger' : 'success'}>
+              {sync.isError ? (sync.error as Error).message : syncSummary(sync.data)}
+              {sync.data?.skipped.map((s) => (
+                <span key={s} className='mt-1 block font-mono text-xs text-warning'>
+                  skipped {s}
+                </span>
+              ))}
+            </Alert>
+          </div>
+        )}
         {isLoading ? (
           <div className='space-y-2 px-7 py-6'>
             {Array.from({ length: 6 }).map((_, i) => (

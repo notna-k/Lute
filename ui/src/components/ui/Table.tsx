@@ -80,9 +80,8 @@ export const Td = forwardRef<
     <td
       ref={ref}
       className={cn(
-        'whitespace-nowrap border-b border-border-subtle px-3.5 py-3 align-middle',
-        // Row height follows the density chosen in Settings (set on <html>).
-        '[html[data-density=compact]_&]:py-[7px]',
+        // Row height follows the density chosen in Settings; see tokens.css.
+        'whitespace-nowrap border-b border-border-subtle px-3.5 py-[var(--density-row-y)] align-middle',
         className
       )}
       {...props}

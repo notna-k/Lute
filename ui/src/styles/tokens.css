@@ -9,6 +9,33 @@
  */
 
 @layer base {
+  /**
+   * Density.
+   *
+   * Compact is not a smaller font — it is a shorter vertical rhythm, so the
+   * point of it (more builds on one screen) actually lands. Everything that
+   * costs height reads these: table rows, page gutters, headers, toolbars and
+   * the gap between sections. Horizontal measure is untouched, because
+   * narrowing columns would hurt scanning rather than help it.
+   */
+  :root {
+    --density-row-y: 12px;
+    --density-gutter-y: 20px;
+    --density-section-gap: 32px;
+    --density-toolbar-y: 10px;
+    --density-body-top: 24px;
+    --density-line: 1.5;
+  }
+
+  :root[data-density="compact"] {
+    --density-row-y: 5px;
+    --density-gutter-y: 11px;
+    --density-section-gap: 20px;
+    --density-toolbar-y: 6px;
+    --density-body-top: 14px;
+    --density-line: 1.4;
+  }
+
   :root {
     /* Surfaces, from furthest back to nearest front. */
     --color-bg: 246 246 247;

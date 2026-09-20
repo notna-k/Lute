@@ -19,9 +19,10 @@ import (
 	"github.com/lute/api/internal/queue"
 )
 
-// Handler serves Git-managed job definitions and triggers builds from them.
+// Handler serves job definitions and triggers builds from them.
 type Handler struct {
 	defs       *repos.JobDefinitionRepository
+	syncer     *Syncer
 	runs       *repos.RunRepository
 	executions *repos.JobExecutionRepository
 	settings   *repos.SettingRepository
@@ -32,6 +33,7 @@ type Handler struct {
 
 func NewHandler(
 	defs *repos.JobDefinitionRepository,
+	syncer *Syncer,
 	runs *repos.RunRepository,
 	executions *repos.JobExecutionRepository,
 	settings *repos.SettingRepository,
@@ -41,6 +43,7 @@ func NewHandler(
 ) *Handler {
 	return &Handler{
 		defs:       defs,
+		syncer:     syncer,
 		runs:       runs,
 		executions: executions,
 		settings:   settings,
@@ -56,7 +59,6 @@ type sourceDTO struct {
 	Repo   string `json:"repo"`
 	Path   string `json:"path"`
 	Commit string `json:"commit"`
-	InSync bool   `json:"inSync"`
 }
 
 type jobDTO struct {
@@ -69,8 +71,8 @@ type jobDTO struct {
 	Command       string                  `json:"command"`
 	Source        sourceDTO               `json:"source"`
 	Parameters    []models.ParameterField `json:"parameters"`
-	// Origin is "git" for a synced definition, "panel" for one authored here.
-	Origin           string  `json:"origin"`
+	// GitState is one of models.GitSynced / GitModified / GitManual / GitRemoved.
+	GitState         string  `json:"gitState"`
 	SuccessRate      float64 `json:"successRate"`
 	MedianDurationMs int64   `json:"medianDurationMs"`
 	// LastBuild is the newest build of this job, so a job list can show what the
@@ -133,11 +135,8 @@ func (h *Handler) toJobDTO(def *models.JobDefinition, rate float64, median int64
 			Repo:   def.SourceRepo,
 			Path:   def.SourcePath,
 			Commit: def.SourceCommit,
-			// Sync upserts and prunes on every pass, so a Git-sourced row always
-			// matches its file. A panel-authored one has no file to match.
-			InSync: def.Origin == models.OriginGit,
 		},
-		Origin:           def.Origin,
+		GitState:         def.GitState(),
 		Parameters:       params,
 		SuccessRate:      rate,
 		MedianDurationMs: median,
@@ -426,25 +425,27 @@ func (r createRequest) validate() string {
 	return ""
 }
 
-// normalized returns the queue and parameter list with defaults applied.
-func (r createRequest) normalized() (string, []models.ParameterField) {
+// spec returns the request as a JobSpec, with defaults applied.
+func (r createRequest) spec() models.JobSpec {
 	queueName := strings.TrimSpace(r.Queue)
 	if queueName == "" {
 		queueName = "default"
 	}
-	params := r.Parameters
-	if params == nil {
-		params = []models.ParameterField{}
+	return models.JobSpec{
+		Name:          r.Name,
+		Description:   r.Description,
+		Queue:         queueName,
+		LabelSelector: r.Labels,
+		Runtime:       r.Runtime,
+		Command:       r.Command,
+		SourceRepo:    r.SourceRepo,
+		Parameters:    r.Parameters,
 	}
-	return queueName, params
 }
 
-// Create saves a panel-authored template as a job definition.
-//
-// It is stored with Origin=panel so the Git sync neither rewrites nor prunes
-// it. This is a deliberate widening of PRODUCT.md §6: Git remains the source of
-// truth for everything it owns, but the panel can now own definitions of its
-// own rather than only producing YAML to commit.
+// Create saves a panel-authored template as a job definition. It has no Git
+// snapshot, so the panel flags it as not in Git until a file with its slug is
+// committed — or until a sync with pruning on deletes it.
 func (h *Handler) Create(c *gin.Context) {
 	if _, ok := requireUserID(c); !ok {
 		return
@@ -477,20 +478,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	queueName, params := req.normalized()
-
-	def := &models.JobDefinition{
-		Slug:          slug,
-		Name:          req.Name,
-		Description:   req.Description,
-		Queue:         queueName,
-		LabelSelector: req.Labels,
-		Runtime:       req.Runtime,
-		Command:       req.Command,
-		SourceRepo:    req.SourceRepo,
-		Parameters:    params,
-		Origin:        models.OriginPanel,
-	}
+	def := &models.JobDefinition{Slug: slug, JobSpec: req.spec()}
 	if err := h.defs.Create(ctx, def); err != nil {
 		writeError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -498,10 +486,8 @@ func (h *Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, h.toJobDTO(def, 0, 0))
 }
 
-// Update rewrites a panel-authored definition.
-//
-// Git-sourced definitions are refused: the next sync would overwrite anything
-// written here, so accepting the edit would only look like it worked.
+// Update rewrites a definition's spec. For one that came from Git this makes
+// it drift: the panel flags it, and the edit stands until its file changes.
 func (h *Handler) Update(c *gin.Context) {
 	if _, ok := requireUserID(c); !ok {
 		return
@@ -513,15 +499,6 @@ func (h *Handler) Update(c *gin.Context) {
 		notFoundOrInternal(c, err)
 		return
 	}
-	if def.Origin != models.OriginPanel {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "this definition is managed in Git — edit the YAML in the " +
-				"job-definitions repo, or the next sync will overwrite the change",
-			"code": "git_managed",
-		})
-		return
-	}
-
 	var req createRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, err.Error())
@@ -532,18 +509,9 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	queueName, params := req.normalized()
-
 	// Slug is intentionally left alone: runs reference it, so renaming the
 	// template must not orphan its build history.
-	def.Name = req.Name
-	def.Description = req.Description
-	def.Queue = queueName
-	def.LabelSelector = req.Labels
-	def.Runtime = req.Runtime
-	def.Command = req.Command
-	def.SourceRepo = req.SourceRepo
-	def.Parameters = params
+	def.JobSpec = req.spec()
 
 	if err := h.defs.Update(ctx, def); err != nil {
 		notFoundOrInternal(c, err)

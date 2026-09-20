@@ -35,6 +35,7 @@ type SetupRouterDeps struct {
 	APIKeyRepo         *repos.APIKeyRepository
 	RunRepo            *repos.RunRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	JobDefSyncer       *jobdefs.Syncer
 	SettingRepo        *repos.SettingRepository
 	Hub                *websocket.Hub
 	QueueEngine        *queue.Engine
@@ -68,7 +69,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	apiKeysHandler := publicapi.NewAPIKeysHandler(d.APIKeyRepo)
 
 	jobHandler := jobs.NewJobHandler(d.QueueEngine, d.StatsAgg, d.GRPCServer, d.JobExecutionRepo)
-	jobDefHandler := jobdefs.NewHandler(d.JobDefRepo, d.RunRepo, d.JobExecutionRepo, d.SettingRepo, d.QueueEngine, d.StatsAgg, d.GRPCServer)
+	jobDefHandler := jobdefs.NewHandler(d.JobDefRepo, d.JobDefSyncer, d.RunRepo, d.JobExecutionRepo, d.SettingRepo, d.QueueEngine, d.StatsAgg, d.GRPCServer)
 	settingsHandler := settings.NewHandler(d.SettingRepo)
 	executionsHandler := jobs.NewExecutionsHandler(d.JobExecutionRepo)
 	queueHandler := jobs.NewQueueHandler(d.QueueEngine, d.StatsAgg)

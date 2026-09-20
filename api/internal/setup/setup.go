@@ -34,6 +34,7 @@ type Dependencies struct {
 	WebhookRepo        *repos.WebhookDeliveryRepository
 	RefreshTokenRepo   *repos.RefreshTokenRepository
 	JobDefRepo         *repos.JobDefinitionRepository
+	JobDefSyncer       *jobdefs.Syncer
 	SettingRepo        *repos.SettingRepository
 	TokenService       *auth.TokenService
 	AuthService        *auth.Service
@@ -68,7 +69,8 @@ func Initialize() (*Dependencies, error) {
 	}
 
 	jobDefRepo := repos.NewJobDefinitionRepository(db.DB)
-	if _, err := jobdefs.Sync(context.Background(), jobDefRepo, cfg.JobDefs.Dir); err != nil {
+	jobDefSyncer := jobdefs.NewSyncer(jobDefRepo, reposInit.SettingRepo, cfg.JobDefs.Dir)
+	if _, err := jobDefSyncer.Sync(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -89,6 +91,7 @@ func Initialize() (*Dependencies, error) {
 		WebhookRepo:        reposInit.WebhookRepo,
 		RefreshTokenRepo:   reposInit.RefreshTokenRepo,
 		JobDefRepo:         jobDefRepo,
+		JobDefSyncer:       jobDefSyncer,
 		SettingRepo:        reposInit.SettingRepo,
 		TokenService:       tokenSvc,
 		AuthService:        authSvc,

@@ -9,7 +9,7 @@
 import { useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, PenLine, Play, Save } from 'lucide-react';
+import { GitBranch, Play, Save } from 'lucide-react';
 import { getJob, listBuilds, triggerBuild, updateJob } from '@/services/jobDefService';
 import { ApiError } from '@/services/api';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
@@ -17,7 +17,6 @@ import { BuildList } from '@/features/jobs/BuildList';
 import { BuildPane } from '@/features/jobs/BuildPane';
 import {
   Alert,
-  Badge,
   Button,
   Fact,
   LinkTabs,
@@ -27,6 +26,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
+import { GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { duration, percent } from '@/lib/format';
 import type { Build, ParameterField, ParameterValues } from '@/types/jobs';
 
@@ -145,28 +145,29 @@ export default function JobDetail() {
   const runError =
     trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
 
-  // Only panel-authored definitions can be saved. A Git-managed one would be
-  // overwritten by the next sync, so it gets the export path instead.
-  const editFooter =
-    job.origin === 'panel'
-      ? (parameters: ParameterField[]) => (
-          <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
-            <Button
-              variant='primary'
-              disabled={saveEdit.isPending}
-              onClick={() => saveEdit.mutate(parameters)}
-            >
-              <Save className='h-3.5 w-3.5' />
-              {saveEdit.isPending ? 'Saving…' : 'Save changes'}
-            </Button>
-            {saveEdit.isError && (
-              <span className='text-xs text-danger'>
-                {(saveEdit.error as Error).message}
-              </span>
-            )}
-          </div>
-        )
-      : undefined;
+  // Any definition can be saved. One that came from Git then differs from it
+  // until its file changes — or until the saved config is committed.
+  const editFooter = (parameters: ParameterField[]) => (
+    <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
+      <Button
+        variant='primary'
+        disabled={saveEdit.isPending}
+        onClick={() => saveEdit.mutate(parameters)}
+      >
+        <Save className='h-3.5 w-3.5' />
+        {saveEdit.isPending ? 'Saving…' : 'Save changes'}
+      </Button>
+      {saveEdit.isSuccess && !saveEdit.isPending && (
+        <span className='text-xs text-fg-muted'>
+          Saved.{' '}
+          {job.source.path && 'Commit the config to keep it past the next change in Git.'}
+        </span>
+      )}
+      {saveEdit.isError && (
+        <span className='text-xs text-danger'>{(saveEdit.error as Error).message}</span>
+      )}
+    </div>
+  );
 
   const hasStats = job.medianDurationMs > 0 || job.successRate > 0;
 
@@ -176,21 +177,14 @@ export default function JobDetail() {
         crumbs={[{ label: 'Jobs', to: '/jobs' }]}
         title={job.name}
         subtitle={job.description}
-        tags={
-          job.origin === 'panel' ? (
-            <Badge tone='warning' size='sm' title='Authored here — not in Git'>
-              <PenLine className='h-3 w-3' /> panel
-            </Badge>
-          ) : (
-            <Badge tone='neutral' size='sm'>
-              <GitBranch className='h-3 w-3' /> git
-            </Badge>
-          )
-        }
+        tags={<GitStateBadge state={job.gitState} />}
         actions={
-          <Button variant='primary' size='sm' onClick={() => navigate(`/jobs/${slug}/run`)}>
-            <Play className='h-3.5 w-3.5' /> Run build
-          </Button>
+          <>
+            <Button variant='primary' size='sm' onClick={() => navigate(`/jobs/${slug}/run`)}>
+              <Play className='h-3.5 w-3.5' /> Run build
+            </Button>
+            <JobActionsMenu job={job} />
+          </>
         }
         tabs={
           <LinkTabs
@@ -228,14 +222,20 @@ export default function JobDetail() {
                 {job.queue} · {job.runtime}
               </span>
             </Fact>
-            {job.source.path && (
-              <Fact icon={<GitBranch className='h-3 w-3' />} title={job.source.repo}>
-                <span className='font-mono'>
+            <Fact icon={<GitBranch className='h-3 w-3' />} title={job.source.repo}>
+              {job.source.path ? (
+                <span
+                  className={
+                    job.gitState === 'removed' ? 'font-mono line-through' : 'font-mono'
+                  }
+                >
                   {job.source.path}
                   {job.source.commit ? `@${job.source.commit}` : ''}
                 </span>
-              </Fact>
-            )}
+              ) : (
+                <span className='font-mono'>not in Git</span>
+              )}
+            </Fact>
           </>
         }
       />
