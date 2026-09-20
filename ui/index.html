@@ -13,14 +13,13 @@
       // panel never flashes the wrong palette on reload.
       (function () {
         try {
-          var mode = localStorage.getItem("lute.theme") || "system";
+          var mode = localStorage.getItem('lute.theme') || 'system';
           var dark =
-            mode === "dark" ||
-            (mode === "system" &&
-              window.matchMedia("(prefers-color-scheme: dark)").matches);
-          if (dark) document.documentElement.classList.add("dark");
-          if (localStorage.getItem("lute.density") === "compact") {
-            document.documentElement.dataset.density = "compact";
+            mode === 'dark' ||
+            (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+          if (localStorage.getItem('lute.density') === 'compact') {
+            document.documentElement.dataset.density = 'compact';
           }
         } catch (e) {
           /* ignore */

@@ -50,19 +50,13 @@ export function LogViewer({ logs, title, actions, className }: LogViewerProps) {
     const q = needle.trim().toLowerCase();
     return lines
       .map((raw, i) => ({ raw, n: i + 1, p: parseSlogLogLine(raw) }))
-      .filter(
-        (row) =>
-          allowed.has(row.p.severity) &&
-          (!q || row.raw.toLowerCase().includes(q))
-      );
+      .filter((row) => allowed.has(row.p.severity) && (!q || row.raw.toLowerCase().includes(q)));
   }, [lines, filter, needle]);
 
   return (
     <div className={cn('flex min-h-0 flex-col bg-log-bg', className)}>
       <div className='flex shrink-0 flex-wrap items-center gap-2 border-b border-log-line px-3 py-2'>
-        {title && (
-          <span className='font-mono text-[11.5px] text-log-dim'>{title}</span>
-        )}
+        {title && <span className='font-mono text-[11.5px] text-log-dim'>{title}</span>}
         <div className='inline-flex border border-log-line'>
           {FILTERS.map((f, i) => (
             <button
@@ -73,9 +67,7 @@ export function LogViewer({ logs, title, actions, className }: LogViewerProps) {
               className={cn(
                 'h-[22px] px-2 text-[11.5px] transition-colors',
                 i > 0 && 'border-l border-log-line',
-                filter === i
-                  ? 'bg-log-line text-log-fg'
-                  : 'text-log-dim hover:text-log-fg'
+                filter === i ? 'bg-log-line text-log-fg' : 'text-log-dim hover:text-log-fg',
               )}
             >
               {f.label}
@@ -99,7 +91,7 @@ export function LogViewer({ logs, title, actions, className }: LogViewerProps) {
           title='Wrap long lines'
           className={cn(
             'inline-flex h-[22px] items-center gap-1 border border-log-line px-2 text-[11.5px] transition-colors',
-            wrap ? 'bg-log-line text-log-fg' : 'text-log-dim hover:text-log-fg'
+            wrap ? 'bg-log-line text-log-fg' : 'text-log-dim hover:text-log-fg',
           )}
         >
           <WrapText className='h-3 w-3' /> wrap
@@ -126,15 +118,11 @@ export function LogViewer({ logs, title, actions, className }: LogViewerProps) {
               <div className='px-3 py-1 text-[11px] text-log-dim'>Loading older…</div>
             )}
             {!hasMore && lines.length > 0 && (
-              <div className='px-3 py-1 text-[11px] text-log-dim'>
-                — start of log —
-              </div>
+              <div className='px-3 py-1 text-[11px] text-log-dim'>— start of log —</div>
             )}
             {rows.length === 0 && (
               <div className='px-3 py-6 text-[12px] text-log-dim'>
-                {lines.length === 0
-                  ? 'No output yet.'
-                  : 'No lines match the filter.'}
+                {lines.length === 0 ? 'No output yet.' : 'No lines match the filter.'}
               </div>
             )}
             {rows.map((row) => {
@@ -170,7 +158,7 @@ export function LogViewer({ logs, title, actions, className }: LogViewerProps) {
                   <span
                     className={cn(
                       'min-w-0 flex-1',
-                      wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'
+                      wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre',
                     )}
                     style={{ color: sev.color }}
                   >

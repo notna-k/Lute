@@ -7,6 +7,6 @@ type WorkerConfig struct {
 	BaseModel
 	WorkerID          id.ID             `json:"worker_id"`
 	HeartbeatInterval int               `json:"heartbeat_interval"` // seconds
-	LogLevel          string            `json:"log_level"`            // "debug", "info", "warn", "error"
+	LogLevel          string            `json:"log_level"`          // "debug", "info", "warn", "error"
 	Extra             map[string]string `json:"extra,omitempty"`
 }

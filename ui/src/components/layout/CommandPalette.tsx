@@ -110,9 +110,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   // Keep the highlighted row in view while arrowing through a long list.
   useEffect(() => {
-    listRef.current
-      ?.querySelector('[aria-selected="true"]')
-      ?.scrollIntoView({ block: 'nearest' });
+    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
 
   function run(command: Command | undefined) {
@@ -188,9 +186,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     lastGroup = command.group;
                     return (
                       <Fragment key={command.id}>
-                        {heading && (
-                          <div className='caption px-3.5 pb-1 pt-2'>{heading}</div>
-                        )}
+                        {heading && <div className='caption px-3.5 pb-1 pt-2'>{heading}</div>}
                         <button
                           type='button'
                           role='option'
@@ -199,9 +195,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                           onClick={() => run(command)}
                           className={cn(
                             'flex h-8 w-full items-center gap-2.5 px-3.5 text-left text-[13px]',
-                            i === cursor
-                              ? 'bg-surface-active text-fg'
-                              : 'text-fg-muted'
+                            i === cursor ? 'bg-surface-active text-fg' : 'text-fg-muted',
                           )}
                         >
                           {ICONS[command.icon]}

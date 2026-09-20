@@ -10,14 +10,14 @@ import (
 // Command represents a queued command for an agent to execute.
 type Command struct {
 	BaseModel
-	WorkerID id.ID                   `json:"worker_id" gorm:"column:worker_id;size:24;not null;index"`
-	Command  string                  `json:"command"`
-	Args     []string                `json:"args,omitempty" gorm:"serializer:json"`
-	Env      map[string]string       `json:"env,omitempty" gorm:"serializer:json"`
-	Status   enums.CommandStatus     `json:"status" gorm:"type:varchar(32);not null"`
-	Output   string                  `json:"output,omitempty"`
-	ExitCode int                     `json:"exit_code"`
-	Error    string                  `json:"error,omitempty"`
+	WorkerID id.ID               `json:"worker_id" gorm:"column:worker_id;size:24;not null;index"`
+	Command  string              `json:"command"`
+	Args     []string            `json:"args,omitempty" gorm:"serializer:json"`
+	Env      map[string]string   `json:"env,omitempty" gorm:"serializer:json"`
+	Status   enums.CommandStatus `json:"status" gorm:"type:varchar(32);not null"`
+	Output   string              `json:"output,omitempty"`
+	ExitCode int                 `json:"exit_code"`
+	Error    string              `json:"error,omitempty"`
 }
 
 func (*Command) TableName() string { return "commands" }

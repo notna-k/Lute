@@ -79,19 +79,19 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 
 // ChartPoint is one bucket-aligned point for charts.
 type ChartPoint struct {
-	T           int64     `json:"t"`
-	CpuLoad     *float64  `json:"cpu_load"`
-	MemUsageMb  *float64  `json:"mem_usage_mb"`
-	DiskUsedGb  *float64  `json:"disk_used_gb"`
-	DiskTotalGb *float64  `json:"disk_total_gb"`
+	T           int64    `json:"t"`
+	CpuLoad     *float64 `json:"cpu_load"`
+	MemUsageMb  *float64 `json:"mem_usage_mb"`
+	DiskUsedGb  *float64 `json:"disk_used_gb"`
+	DiskTotalGb *float64 `json:"disk_total_gb"`
 }
 
 // ChartResponse is the dashboard uptime API response.
 type ChartResponse struct {
 	Points        []ChartPoint `json:"points"`
-	PeriodStartMs int64       `json:"period_start_ms"`
-	PeriodEndMs   int64       `json:"period_end_ms"`
-	DiskYDomain   [2]float64  `json:"disk_y_domain"`
+	PeriodStartMs int64        `json:"period_start_ms"`
+	PeriodEndMs   int64        `json:"period_end_ms"`
+	DiskYDomain   [2]float64   `json:"disk_y_domain"`
 }
 
 const targetChartPoints = 80
@@ -126,7 +126,7 @@ func buildChartPerWorker(snapshots []*models.WorkerSnapshot, periodStart, period
 	periodEndMs := periodEnd.UnixMilli()
 
 	type bucketVal struct {
-		at                      time.Time
+		at                            time.Time
 		cpu, mem, diskUsed, diskTotal float64
 	}
 	byBucket := make(map[int64]*bucketVal)

@@ -201,10 +201,10 @@ func (r *JobQueueRepository) Fail(ctx context.Context, jobID string, errMsg stri
 		if err := tx.Model(&models.QueueSlot{}).
 			Where("job_id = ?", jobID).
 			Updates(map[string]interface{}{
-				"lane":             enums.QueueLaneNone,
-				"payload":          string(data),
-				"release_at_ms":    0,
-				"updated_at_ms":    nowMilli(),
+				"lane":          enums.QueueLaneNone,
+				"payload":       string(data),
+				"release_at_ms": 0,
+				"updated_at_ms": nowMilli(),
 			}).Error; err != nil {
 			return err
 		}
@@ -271,11 +271,11 @@ func (r *JobQueueRepository) CancelJob(ctx context.Context, jobID string) error 
 	res := r.q(ctx).Model(&models.QueueSlot{}).
 		Where("job_id = ? AND lane IN ?", jobID, []enums.QueueLane{enums.QueueLaneReady, enums.QueueLaneDelayed}).
 		Updates(map[string]interface{}{
-			"lane":             enums.QueueLaneNone,
-			"release_at_ms":    0,
-			"priority":         0,
-			"payload":          string(data),
-			"updated_at_ms":    nowMilli(),
+			"lane":          enums.QueueLaneNone,
+			"release_at_ms": 0,
+			"priority":      0,
+			"payload":       string(data),
+			"updated_at_ms": nowMilli(),
 		})
 	if res.Error != nil {
 		return res.Error
@@ -453,11 +453,11 @@ func (r *JobQueueRepository) PromoteDelayed(ctx context.Context) (int, []string,
 			res := tx.Model(&models.QueueSlot{}).
 				Where("job_id = ? AND lane = ? AND release_at_ms = ?", jid, enums.QueueLaneDelayed, slot.ReleaseAtMS).
 				Updates(map[string]interface{}{
-					"lane":             enums.QueueLaneReady,
-					"release_at_ms":    int64(0),
-					"priority":       float64(0),
-					"payload":          string(data),
-					"updated_at_ms":    ms,
+					"lane":          enums.QueueLaneReady,
+					"release_at_ms": int64(0),
+					"priority":      float64(0),
+					"payload":       string(data),
+					"updated_at_ms": ms,
 				})
 			if res.Error != nil {
 				continue

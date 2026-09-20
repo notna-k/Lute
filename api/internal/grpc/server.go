@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
@@ -22,6 +21,7 @@ import (
 	"github.com/lute/api/internal/db/types"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/websocket"
+	pb "github.com/lute/proto"
 )
 
 func ParseWorkerID(hex string) (id.ID, error) {
@@ -57,8 +57,8 @@ func NewServer(
 	hub *websocket.Hub,
 ) *Server {
 	return &Server{
-		config:     cfg,
-		workerRepo: workerRepo,
+		config:      cfg,
+		workerRepo:  workerRepo,
 		jobExecRepo: jobExecRepo,
 		queueEngine: queueEngine,
 		statsAgg:    statsAgg,

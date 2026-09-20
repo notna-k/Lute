@@ -38,4 +38,3 @@ export interface VM {
   createdAt: string;
   updatedAt: string;
 }
-

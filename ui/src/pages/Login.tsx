@@ -41,12 +41,8 @@ const Login = () => {
           <span className='flex h-10 w-10 items-center justify-center border border-fg bg-primary text-fg-onPrimary'>
             <Terminal className='h-5 w-5' />
           </span>
-          <h1 className='font-mono text-xl font-semibold tracking-[-0.02em] text-fg'>
-            Lute
-          </h1>
-          <p className='text-[12.5px] text-fg-muted'>
-            Sign in to the build panel.
-          </p>
+          <h1 className='font-mono text-xl font-semibold tracking-[-0.02em] text-fg'>Lute</h1>
+          <p className='text-[12.5px] text-fg-muted'>Sign in to the build panel.</p>
         </div>
 
         <Card className='p-6'>

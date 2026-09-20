@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 import { apiClient } from '@/services/api';
-import {
-  Alert,
-  Button,
-  Dialog,
-  IconButton,
-  Spinner,
-  Tooltip,
-} from '@/components/ui';
+import { Alert, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
 
 interface AddWorkerDialogProps {
   open: boolean;
@@ -44,9 +37,7 @@ function useClaimCode(open: boolean) {
     apiClient
       .post<ClaimCodeResponse>('/api/v1/workers/claim-code')
       .then((res) => setCode(res.code))
-      .catch((err: Error) =>
-        setError(err.message || 'Failed to get claim code')
-      )
+      .catch((err: Error) => setError(err.message || 'Failed to get claim code'))
       .finally(() => setLoading(false));
   }, [open]);
 
@@ -78,9 +69,7 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
   const origin = apiHttpOrigin();
   const installCommand = `curl -sSL ${origin}/api/public/v1/workers/bootstrap/install.sh | bash`;
   const setupCommand = `lute-worker setup --api ${origin}`;
-  const fullCommand = code
-    ? `${installCommand} && ${setupCommand} --claim-code ${code}`
-    : '';
+  const fullCommand = code ? `${installCommand} && ${setupCommand} --claim-code ${code}` : '';
 
   const handleCopy = async () => {
     if (!fullCommand) return;
@@ -124,15 +113,12 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
         {code && (
           <>
             <p className='text-sm text-fg-muted'>
-              Your claim code expires in 15 minutes. Run the command on the host
-              before it expires.
+              Your claim code expires in 15 minutes. Run the command on the host before it expires.
             </p>
             <div className='relative rounded-md border border-border bg-bg-inverse p-3 font-mono text-sm text-fg-inverse'>
               <div className='flex items-start gap-2 pr-8'>
                 <span className='select-none text-success'>$</span>
-                <code className='whitespace-pre-wrap break-all'>
-                  {fullCommand}
-                </code>
+                <code className='whitespace-pre-wrap break-all'>{fullCommand}</code>
               </div>
               <div className='absolute right-2 top-2'>
                 <Tooltip content={copied ? 'Copied!' : 'Copy'}>
@@ -156,8 +142,8 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
         )}
 
         <p className='text-sm text-fg-muted'>
-          The agent will prompt for a service name, collect system info, then
-          start in the background and send heartbeats to the server.
+          The agent will prompt for a service name, collect system info, then start in the
+          background and send heartbeats to the server.
         </p>
       </div>
     </Dialog>

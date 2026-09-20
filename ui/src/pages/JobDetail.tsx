@@ -61,28 +61,21 @@ export default function JobDetail() {
     // Builds move through queued → running → passed/failed on the worker, so
     // keep polling while any of them is still in flight.
     refetchInterval: (query) =>
-      query.state.data?.some((b) => b.status === 'queued' || b.status === 'running')
-        ? 2000
-        : 15000,
+      query.state.data?.some((b) => b.status === 'queued' || b.status === 'running') ? 2000 : 15000,
   });
 
   const buildRows = builds ?? NO_BUILDS;
   const selected = useMemo(
     () => buildRows.find((b) => b.id === buildId) ?? buildRows[0],
-    [buildRows, buildId]
+    [buildRows, buildId],
   );
 
   const trigger = useMutation({
     // The authored schema goes with the values: the server validates against
     // what the user actually saw, so an added parameter is applied rather than
     // silently dropped.
-    mutationFn: ({
-      values,
-      fields,
-    }: {
-      values: ParameterValues;
-      fields: ParameterField[];
-    }) => triggerBuild(slug, values, fields),
+    mutationFn: ({ values, fields }: { values: ParameterValues; fields: ParameterField[] }) =>
+      triggerBuild(slug, values, fields),
     onSuccess: (build) => {
       void queryClient.invalidateQueries({ queryKey: ['builds', slug] });
       void queryClient.invalidateQueries({ queryKey: ['job', slug] });
@@ -131,8 +124,8 @@ export default function JobDetail() {
       <PageScroll>
         <PageBody>
           <Alert tone='danger' title='Job not found'>
-            No definition is registered under <code>{slug}</code>. It may have been
-            pruned by a Git sync.
+            No definition is registered under <code>{slug}</code>. It may have been pruned by a Git
+            sync.
           </Alert>
         </PageBody>
       </PageScroll>
@@ -142,8 +135,7 @@ export default function JobDetail() {
   const fieldErrors = trigger.error instanceof ApiError ? trigger.error.fields : undefined;
   // A field-level rejection is already rendered on the inputs; repeating the
   // summary line above them would just say "invalid parameters" twice.
-  const runError =
-    trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
+  const runError = trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
 
   // Any definition can be saved. One that came from Git then differs from it
   // until its file changes — or until the saved config is committed.
@@ -159,8 +151,7 @@ export default function JobDetail() {
       </Button>
       {saveEdit.isSuccess && !saveEdit.isPending && (
         <span className='text-xs text-fg-muted'>
-          Saved.{' '}
-          {job.source.path && 'Commit the config to keep it past the next change in Git.'}
+          Saved. {job.source.path && 'Commit the config to keep it past the next change in Git.'}
         </span>
       )}
       {saveEdit.isError && (
@@ -225,9 +216,7 @@ export default function JobDetail() {
             <Fact icon={<GitBranch className='h-3 w-3' />} title={job.source.repo}>
               {job.source.path ? (
                 <span
-                  className={
-                    job.gitState === 'removed' ? 'font-mono line-through' : 'font-mono'
-                  }
+                  className={job.gitState === 'removed' ? 'font-mono line-through' : 'font-mono'}
                 >
                   {job.source.path}
                   {job.source.commit ? `@${job.source.commit}` : ''}
@@ -248,11 +237,7 @@ export default function JobDetail() {
             linkTo={(build) => `/jobs/${slug}/builds/${build.id}`}
             className='w-[248px] shrink-0 max-md:w-full'
           />
-          <BuildPane
-            job={job}
-            build={selected}
-            onRerun={() => navigate(`/jobs/${slug}/run`)}
-          />
+          <BuildPane job={job} build={selected} onRerun={() => navigate(`/jobs/${slug}/run`)} />
         </div>
       ) : (
         <PageScroll>

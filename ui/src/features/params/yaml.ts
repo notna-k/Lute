@@ -22,7 +22,8 @@ function scalar(v: unknown): string {
     if (v === '') return "''";
     // Quote anything YAML would otherwise read as a non-string.
     const bare =
-      /^[A-Za-z_][\w./-]*$/.test(v) && !['true', 'false', 'null', 'yes', 'no', 'on', 'off'].includes(v);
+      /^[A-Za-z_][\w./-]*$/.test(v) &&
+      !['true', 'false', 'null', 'yes', 'no', 'on', 'off'].includes(v);
     return bare ? v : `'${v.replace(/'/g, "''")}'`;
   }
   return String(v);
@@ -66,10 +67,7 @@ export interface YamlDoc {
 }
 
 export function toYaml(job: JobDefinition, params: ParameterField[] = job.parameters): YamlDoc {
-  const lines: string[] = [
-    `# ${job.source.repo} · ${job.source.path}`,
-    `name: ${job.name}`,
-  ];
+  const lines: string[] = [`# ${job.source.repo} · ${job.source.path}`, `name: ${job.name}`];
   if (job.description) lines.push(`description: ${scalar(job.description)}`);
   lines.push(`queue: ${job.queue}`);
 

@@ -31,7 +31,9 @@ export function ParamField({
       <div className='mb-2 flex items-baseline gap-2'>
         <span className='text-sm font-semibold text-fg'>{field.label || field.name}</span>
         {field.required && (
-          <span className='text-xxs font-medium uppercase tracking-wide text-warning'>required</span>
+          <span className='text-xxs font-medium uppercase tracking-wide text-warning'>
+            required
+          </span>
         )}
         {showEnv && (
           <span className='ml-auto truncate font-mono text-xxs text-fg-subtle'>

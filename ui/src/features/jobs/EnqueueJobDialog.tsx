@@ -1,15 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import {
-  Alert,
-  Button,
-  Dialog,
-  Field,
-  IconButton,
-  Input,
-  Select,
-  Textarea,
-} from '@/components/ui';
+import { Alert, Button, Dialog, Field, IconButton, Input, Select, Textarea } from '@/components/ui';
 import { jobService, type EnqueueRequest } from '@/services/jobService';
 
 const RUNTIME_OPTIONS = [
@@ -79,20 +70,14 @@ export function EnqueueJobDialog({
   }, [open, defaultQueue]);
 
   const addRow = () => setParamsRows((r) => [...r, makeRow()]);
-  const removeRow = (i: number) =>
-    setParamsRows((r) => r.filter((_, idx) => idx !== i));
+  const removeRow = (i: number) => setParamsRows((r) => r.filter((_, idx) => idx !== i));
   const updateRow = (i: number, field: 'key' | 'value', value: string) =>
-    setParamsRows((r) =>
-      r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row))
-    );
+    setParamsRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
 
   const addSelectorRow = () => setSelectorRows((r) => [...r, makeRow()]);
-  const removeSelectorRow = (i: number) =>
-    setSelectorRows((r) => r.filter((_, idx) => idx !== i));
+  const removeSelectorRow = (i: number) => setSelectorRows((r) => r.filter((_, idx) => idx !== i));
   const updateSelectorRow = (i: number, field: 'key' | 'value', value: string) =>
-    setSelectorRows((r) =>
-      r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row))
-    );
+    setSelectorRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
 
   const buildSelector = (): Record<string, string> | undefined => {
     const sel: Record<string, string> = {};
@@ -149,11 +134,7 @@ export function EnqueueJobDialog({
           <Button variant='ghost' onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            loading={submitting}
-            disabled={disabled}
-          >
+          <Button onClick={handleSubmit} loading={submitting} disabled={disabled}>
             Trigger
           </Button>
         </>
@@ -167,9 +148,7 @@ export function EnqueueJobDialog({
             <Input
               id='queue'
               value={form.queue}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, queue: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, queue: e.target.value }))}
             />
           </Field>
           <Field label='Type' required>
@@ -196,11 +175,7 @@ export function EnqueueJobDialog({
               />
             </Field>
             <Field label='Runtime' required>
-              <Select
-                value={runtime}
-                onChange={setRuntime}
-                options={RUNTIME_OPTIONS}
-              />
+              <Select value={runtime} onChange={setRuntime} options={RUNTIME_OPTIONS} />
             </Field>
             <Field label='Command' required htmlFor='cmd'>
               <Textarea
@@ -213,9 +188,7 @@ export function EnqueueJobDialog({
             </Field>
 
             <div>
-              <p className='mb-2 text-sm font-medium text-fg'>
-                Params (key-value → env vars)
-              </p>
+              <p className='mb-2 text-sm font-medium text-fg'>Params (key-value → env vars)</p>
               <div className='flex flex-col gap-2'>
                 {paramsRows.map((row, i) => (
                   <div key={i} className='flex items-center gap-2'>
@@ -259,7 +232,9 @@ export function EnqueueJobDialog({
         <div>
           <p className='mb-1 text-sm font-medium text-fg'>
             Worker selector{' '}
-            <span className='font-normal text-fg-muted'>(optional — route to labelled workers only)</span>
+            <span className='font-normal text-fg-muted'>
+              (optional — route to labelled workers only)
+            </span>
           </p>
           {selectorRows.length > 0 && (
             <div className='mb-2 flex flex-col gap-2'>

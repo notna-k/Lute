@@ -12,15 +12,10 @@ const metricsUpdateIntervalMs = (() => {
   return Number.isFinite(sec) && sec > 0 ? sec * 1000 : 60 * 1000;
 })();
 
-export const useDashboardUptime = (
-  period: DashboardUptimePeriod = '7d',
-  workerId?: string,
-) => {
+export const useDashboardUptime = (period: DashboardUptimePeriod = '7d', workerId?: string) => {
   const enabled = workerId === undefined || workerId.length > 0;
 
-  const [data, setData] = useState<DashboardUptimeResponse | undefined>(
-    undefined,
-  );
+  const [data, setData] = useState<DashboardUptimeResponse | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<Error | null>(null);

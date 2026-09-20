@@ -80,27 +80,14 @@ export function MetricsChart({
         <Skeleton className='h-[240px] w-full rounded-md' />
       ) : (
         <ResponsiveContainer width='100%' height={height}>
-          <AreaChart
-            data={data}
-            margin={{ top: 10, right: 12, left: 8, bottom: 0 }}
-          >
+          <AreaChart data={data} margin={{ top: 10, right: 12, left: 8, bottom: 0 }}>
             <defs>
-              <linearGradient
-                id={`gradient-${metric}`}
-                x1='0'
-                y1='0'
-                x2='0'
-                y2='1'
-              >
+              <linearGradient id={`gradient-${metric}`} x1='0' y1='0' x2='0' y2='1'>
                 <stop offset='5%' stopColor={color} stopOpacity={0.45} />
                 <stop offset='95%' stopColor={color} stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid
-              strokeDasharray='3 3'
-              stroke={tokens.grid}
-              vertical={false}
-            />
+            <CartesianGrid strokeDasharray='3 3' stroke={tokens.grid} vertical={false} />
             <XAxis
               type='number'
               dataKey='t'
@@ -126,14 +113,9 @@ export function MetricsChart({
                 fontSize: 12,
               }}
               labelStyle={{ color: tokens.tooltipText, fontWeight: 600 }}
-              formatter={(value: number | undefined) => [
-                valueFormatter(value),
-                title,
-              ]}
+              formatter={(value: number | undefined) => [valueFormatter(value), title]}
               labelFormatter={(label) =>
-                new Date(
-                  typeof label === 'number' ? label : label
-                ).toLocaleString()
+                new Date(typeof label === 'number' ? label : label).toLocaleString()
               }
             />
             <Area

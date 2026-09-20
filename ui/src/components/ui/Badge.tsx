@@ -1,13 +1,7 @@
 import { type HTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
-export type BadgeTone =
-  | 'neutral'
-  | 'primary'
-  | 'success'
-  | 'warning'
-  | 'danger'
-  | 'info';
+export type BadgeTone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 
 export type BadgeSize = 'sm' | 'md';
 
@@ -59,13 +53,11 @@ export function Badge({
         'inline-flex items-center gap-1.5 border font-medium',
         TONE_STYLES[tone],
         SIZES[size],
-        className
+        className,
       )}
       {...rest}
     >
-      {dot && (
-        <span aria-hidden className={cn('h-[5px] w-[5px]', TONE_DOT[tone])} />
-      )}
+      {dot && <span aria-hidden className={cn('h-[5px] w-[5px]', TONE_DOT[tone])} />}
       {children}
     </span>
   );

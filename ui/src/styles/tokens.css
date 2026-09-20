@@ -27,7 +27,7 @@
     --density-line: 1.5;
   }
 
-  :root[data-density="compact"] {
+  :root[data-density='compact'] {
     --density-row-y: 5px;
     --density-gutter-y: 11px;
     --density-section-gap: 20px;

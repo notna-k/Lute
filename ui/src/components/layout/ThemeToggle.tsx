@@ -22,11 +22,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       onClick={toggle}
       className={className}
     >
-      {dark ? (
-        <Sun className='h-[15px] w-[15px]' />
-      ) : (
-        <Moon className='h-[15px] w-[15px]' />
-      )}
+      {dark ? <Sun className='h-[15px] w-[15px]' /> : <Moon className='h-[15px] w-[15px]' />}
     </IconButton>
   );
 }

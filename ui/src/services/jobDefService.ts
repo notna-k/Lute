@@ -20,7 +20,7 @@ export function getJob(slug: string): Promise<JobDefinition> {
 
 export async function listBuilds(slug: string): Promise<Build[]> {
   const res = await apiClient.get<{ builds: Build[] }>(
-    `/api/v1/job-definitions/${encodeURIComponent(slug)}/builds`
+    `/api/v1/job-definitions/${encodeURIComponent(slug)}/builds`,
   );
   return res.builds ?? [];
 }
@@ -37,7 +37,7 @@ export async function listBuilds(slug: string): Promise<Build[]> {
 export function triggerBuild(
   slug: string,
   values: ParameterValues,
-  parameters?: ParameterField[]
+  parameters?: ParameterField[],
 ): Promise<Build> {
   return apiClient.post<Build>(`/api/v1/job-definitions/${encodeURIComponent(slug)}/trigger`, {
     values,
@@ -72,10 +72,9 @@ export function createJob(template: NewJobTemplate): Promise<JobDefinition> {
 export function updateJob(slug: string, template: NewJobTemplate): Promise<JobDefinition> {
   return apiClient.put<JobDefinition>(
     `/api/v1/job-definitions/${encodeURIComponent(slug)}`,
-    template
+    template,
   );
 }
-
 
 /** What one sync did (api/internal/jobdefs/sync.go SyncResult). */
 export interface SyncResult {
@@ -102,7 +101,7 @@ export async function exportJobs(): Promise<string> {
 /** One definition's YAML, as it would be committed. */
 export async function exportJob(slug: string): Promise<string> {
   const res = await apiClient.get<{ yaml: string }>(
-    `/api/v1/job-definitions/${encodeURIComponent(slug)}/yaml`
+    `/api/v1/job-definitions/${encodeURIComponent(slug)}/yaml`,
   );
   return res.yaml;
 }
@@ -116,6 +115,6 @@ export function exportJobsZip(): Promise<Blob> {
 export function revertJob(slug: string): Promise<JobDefinition> {
   return apiClient.post<JobDefinition>(
     `/api/v1/job-definitions/${encodeURIComponent(slug)}/revert`,
-    {}
+    {},
   );
 }

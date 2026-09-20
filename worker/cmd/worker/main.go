@@ -38,7 +38,7 @@ const (
 	defaultGRPCAddr    = "localhost:50051"
 	defaultQueues      = "default"
 	defaultConcurrency = 10
-	defaultJobLogsDir = "lute-job-logs"
+	defaultJobLogsDir  = "lute-job-logs"
 )
 
 type runFlags struct {

@@ -12,7 +12,7 @@ export function Kbd({ children, className }: KbdProps) {
     <kbd
       className={cn(
         'inline-block min-w-4 border border-border px-1 text-center font-mono text-[10.5px] font-medium leading-4 text-fg-subtle',
-        className
+        className,
       )}
     >
       {children}

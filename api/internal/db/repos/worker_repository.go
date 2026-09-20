@@ -124,10 +124,10 @@ func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID id.ID, me
 func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, ipAddress, version string) error {
 	nowMs := time.Now().UTC().UnixMilli()
 	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
-		"agent_ip":       ipAddress,
-		"agent_version":  version,
-		"last_seen":      nowMs,
-		"updated_at":     nowMs,
+		"agent_ip":      ipAddress,
+		"agent_version": version,
+		"last_seen":     nowMs,
+		"updated_at":    nowMs,
 	}).Error)
 }
 

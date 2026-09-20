@@ -12,22 +12,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/queue"
+	pb "github.com/lute/proto"
 )
 
 // RunsHandler exposes user-scoped run operations. All methods require an API key
 // middleware that set the "user_id" context value.
 type RunsHandler struct {
-	engine      *queue.Engine
-	stats       *queue.StatsAggregator
-	grpcSrv     *grpc.Server
-	runs        *repos.RunRepository
-	executions  *repos.JobExecutionRepository
+	engine     *queue.Engine
+	stats      *queue.StatsAggregator
+	grpcSrv    *grpc.Server
+	runs       *repos.RunRepository
+	executions *repos.JobExecutionRepository
 }
 
 func NewRunsHandler(

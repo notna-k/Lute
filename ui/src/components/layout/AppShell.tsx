@@ -72,11 +72,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className='group/sidebar flex h-full min-h-0 max-md:block max-md:h-auto max-md:min-h-screen'>
-      <Sidebar
-        expanded={sidebarExpanded}
-        onToggle={toggleSidebar}
-        onOpenCommand={openCommand}
-      />
+      <Sidebar expanded={sidebarExpanded} onToggle={toggleSidebar} onOpenCommand={openCommand} />
       <main className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden max-md:overflow-visible'>
         {children}
       </main>

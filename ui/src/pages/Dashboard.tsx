@@ -63,11 +63,7 @@ function Stat({
       ) : (
         <p
           className={`mt-1 font-mono text-[26px] font-semibold leading-none tabular-nums ${
-            tone === 'danger'
-              ? 'text-danger'
-              : tone === 'warning'
-                ? 'text-warning'
-                : 'text-fg'
+            tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-fg'
           }`}
         >
           {value}
@@ -103,16 +99,14 @@ export default function Dashboard() {
   }, [workers]);
 
   const inFlight = jobs.filter(
-    (j) => j.lastBuild?.status === 'running' || j.lastBuild?.status === 'queued'
+    (j) => j.lastBuild?.status === 'running' || j.lastBuild?.status === 'queued',
   );
   const failing = jobs.filter((j) => j.lastBuild?.status === 'failed');
 
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${
-          user?.display_name || user?.email?.split('@')[0] || 'there'
-        }`}
+        title={`Welcome back, ${user?.display_name || user?.email?.split('@')[0] || 'there'}`}
         description='What the fleet is doing right now.'
         actions={
           <>
@@ -141,7 +135,10 @@ export default function Dashboard() {
               tone={inFlight.length ? 'warning' : undefined}
               hint={
                 inFlight.length
-                  ? inFlight.map((j) => j.name).slice(0, 2).join(', ')
+                  ? inFlight
+                      .map((j) => j.name)
+                      .slice(0, 2)
+                      .join(', ')
                   : 'nothing queued or running'
               }
               loading={jobsQuery.isLoading}
@@ -227,10 +224,7 @@ export default function Dashboard() {
           <Section
             title='Latest runs'
             aside={
-              <Link
-                to='/executions'
-                className='inline-flex items-center gap-1 hover:text-fg'
-              >
+              <Link to='/executions' className='inline-flex items-center gap-1 hover:text-fg'>
                 All builds <ArrowRight className='h-3 w-3' />
               </Link>
             }
@@ -277,9 +271,7 @@ export default function Dashboard() {
                           <Td className='text-fg-muted tabular-nums'>
                             {finished ? relativeTime(finished) : '—'}
                           </Td>
-                          <Td className='text-right tabular-nums'>
-                            {duration(ex.elapsed_ms)}
-                          </Td>
+                          <Td className='text-right tabular-nums'>{duration(ex.elapsed_ms)}</Td>
                         </RowLink>
                       );
                     })}

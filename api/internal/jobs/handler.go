@@ -11,17 +11,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/queue"
+	pb "github.com/lute/proto"
 )
 
 type JobHandler struct {
-	engine       *queue.Engine
-	stats        *queue.StatsAggregator
-	grpcSrv      *grpc.Server
-	jobExecRepo  *repos.JobExecutionRepository
+	engine      *queue.Engine
+	stats       *queue.StatsAggregator
+	grpcSrv     *grpc.Server
+	jobExecRepo *repos.JobExecutionRepository
 }
 
 func NewJobHandler(engine *queue.Engine, stats *queue.StatsAggregator, grpcSrv *grpc.Server, jobExecRepo *repos.JobExecutionRepository) *JobHandler {
@@ -400,4 +400,3 @@ func (h *DLQHandler) RetryAll(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "DLQ retried", "count": count})
 }
-

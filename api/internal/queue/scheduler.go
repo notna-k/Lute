@@ -9,8 +9,8 @@ import (
 // Scheduler polls the delayed and cron ZSETs, promoting jobs whose
 // run_at/next_run timestamp has passed back into their queue.
 type Scheduler struct {
-	engine        *Engine
-	interval      time.Duration
+	engine         *Engine
+	interval       time.Duration
 	onJobsPromoted func(ctx context.Context, queueNames []string)
 }
 

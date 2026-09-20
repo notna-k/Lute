@@ -27,14 +27,9 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className='mx-auto max-w-2xl px-4 py-16'>
           <Alert tone='danger' title='Something went wrong'>
-            <p className='mb-3'>
-              {this.state.error.message || 'An unexpected error occurred.'}
-            </p>
+            <p className='mb-3'>{this.state.error.message || 'An unexpected error occurred.'}</p>
             <div className='flex gap-2'>
-              <Button
-                variant='secondary'
-                onClick={() => window.location.reload()}
-              >
+              <Button variant='secondary' onClick={() => window.location.reload()}>
                 Reload page
               </Button>
               <Button variant='outline' onClick={this.reset}>

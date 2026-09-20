@@ -9,12 +9,7 @@ export interface TooltipProps {
   className?: string;
 }
 
-export function Tooltip({
-  content,
-  children,
-  side = 'top',
-  className,
-}: TooltipProps) {
+export function Tooltip({ content, children, side = 'top', className }: TooltipProps) {
   const [open, setOpen] = useState(false);
 
   const show = () => setOpen(true);
@@ -44,7 +39,7 @@ export function Tooltip({
             'pointer-events-none absolute z-50 whitespace-nowrap rounded-md bg-bg-inverse px-2 py-1 text-xs text-fg-inverse shadow-popover',
             'animate-fade-in',
             sideClasses[side],
-            className
+            className,
           )}
         >
           {content}

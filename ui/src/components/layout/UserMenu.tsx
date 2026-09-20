@@ -63,9 +63,7 @@ export function UserMenu({ compact }: UserMenuProps) {
             <div className='truncate text-[13px] font-medium text-fg'>
               {user.display_name || 'User'}
             </div>
-            <div className='truncate font-mono text-[11px] text-fg-muted'>
-              {user.email}
-            </div>
+            <div className='truncate font-mono text-[11px] text-fg-muted'>{user.email}</div>
           </div>
           <Menu.Item>
             {({ active }) => (
@@ -74,7 +72,7 @@ export function UserMenu({ compact }: UserMenuProps) {
                 onClick={handleSignOut}
                 className={cn(
                   'flex w-full items-center gap-2 px-3 py-2 text-[13px] text-fg',
-                  active && 'bg-surface-hover'
+                  active && 'bg-surface-hover',
                 )}
               >
                 <LogOut className='h-3.5 w-3.5' />

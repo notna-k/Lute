@@ -103,13 +103,13 @@ export function ToggleInput({ value, onChange, disabled }: ParamInputProps) {
       <span
         className={cn(
           'relative h-6 w-11 rounded-full border transition-colors',
-          on ? 'border-success bg-success-subtle' : 'border-border bg-surface-hover'
+          on ? 'border-success bg-success-subtle' : 'border-border bg-surface-hover',
         )}
       >
         <span
           className={cn(
             'absolute top-0.5 h-4 w-4 rounded-full transition-all',
-            on ? 'left-[1.375rem] bg-success' : 'left-0.5 bg-fg-subtle'
+            on ? 'left-[1.375rem] bg-success' : 'left-0.5 bg-fg-subtle',
           )}
         />
       </span>
@@ -146,7 +146,7 @@ export function SelectInput({ field, value, onChange, invalid, disabled }: Param
             ? 'border-danger'
             : open
               ? 'border-primary ring-2 ring-primary/20'
-              : 'border-border hover:border-border-strong'
+              : 'border-border hover:border-border-strong',
         )}
       >
         {selected?.tone && (
@@ -157,11 +157,13 @@ export function SelectInput({ field, value, onChange, invalid, disabled }: Param
         <span className={cn('truncate', selected ? 'text-fg' : 'text-fg-subtle')}>
           {selected ? labelOf(selected) : 'Select…'}
         </span>
-        {selected?.hint && <span className='truncate text-xs text-fg-muted'>· {selected.hint}</span>}
+        {selected?.hint && (
+          <span className='truncate text-xs text-fg-muted'>· {selected.hint}</span>
+        )}
         <ChevronDown
           className={cn(
             'ml-auto h-4 w-4 shrink-0 text-fg-muted transition-transform',
-            open && 'rotate-180'
+            open && 'rotate-180',
           )}
         />
       </button>
@@ -201,7 +203,7 @@ export function SelectInput({ field, value, onChange, invalid, disabled }: Param
                   <span
                     className={cn(
                       'grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border',
-                      active ? 'border-primary' : 'border-fg-subtle'
+                      active ? 'border-primary' : 'border-fg-subtle',
                     )}
                   >
                     {active && <span className='h-1.5 w-1.5 rounded-full bg-primary' />}
@@ -212,7 +214,7 @@ export function SelectInput({ field, value, onChange, invalid, disabled }: Param
                     <span
                       className={cn(
                         'ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-xxs',
-                        TONE_TAG[opt.tone]
+                        TONE_TAG[opt.tone],
                       )}
                     >
                       {opt.value}
@@ -248,8 +250,12 @@ export function MultiSelectInput({ field, value, onChange, invalid, disabled }: 
       <div
         className={cn(
           'flex min-h-[2.5rem] flex-wrap items-center gap-1.5 rounded-md border bg-bg px-2 py-1.5',
-          invalid ? 'border-danger' : open ? 'border-primary ring-2 ring-primary/20' : 'border-border',
-          disabled && 'opacity-60'
+          invalid
+            ? 'border-danger'
+            : open
+              ? 'border-primary ring-2 ring-primary/20'
+              : 'border-border',
+          disabled && 'opacity-60',
         )}
       >
         {chosen.map((v) => (
@@ -294,7 +300,7 @@ export function MultiSelectInput({ field, value, onChange, invalid, disabled }: 
                 <span
                   className={cn(
                     'grid h-3.5 w-3.5 shrink-0 place-items-center rounded border',
-                    active ? 'border-primary bg-primary' : 'border-fg-subtle'
+                    active ? 'border-primary bg-primary' : 'border-fg-subtle',
                   )}
                 >
                   {active && <Check className='h-2.5 w-2.5 text-fg-onPrimary' />}
@@ -340,7 +346,7 @@ function MonthGrid({ value, onPick }: { value: string; onPick: (iso: string) => 
     const start = new Date(view.getFullYear(), view.getMonth(), 1 - offset);
     return Array.from(
       { length: 42 },
-      (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
+      (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i),
     );
   }, [view]);
 
@@ -389,7 +395,7 @@ function MonthGrid({ value, onPick }: { value: string; onPick: (iso: string) => 
                     ? 'text-primary ring-1 ring-inset ring-primary/40 hover:bg-surface-hover'
                     : inMonth
                       ? 'text-fg-muted hover:bg-surface-hover'
-                      : 'text-fg-subtle/50 hover:bg-surface-hover'
+                      : 'text-fg-subtle/50 hover:bg-surface-hover',
               )}
             >
               {day.getDate()}
@@ -426,7 +432,7 @@ export function DateInput({ value, onChange, invalid, disabled }: ParamInputProp
               ? 'border-danger'
               : open
                 ? 'border-primary ring-2 ring-primary/20'
-                : 'border-border hover:border-border-strong'
+                : 'border-border hover:border-border-strong',
           )}
         >
           <Calendar className='h-4 w-4 text-primary' />
@@ -495,7 +501,7 @@ export function DateTimeInput({ value, onChange, invalid, disabled }: ParamInput
               ? 'border-danger'
               : open
                 ? 'border-primary ring-2 ring-primary/20'
-                : 'border-border hover:border-border-strong'
+                : 'border-border hover:border-border-strong',
           )}
         >
           <Calendar className='h-4 w-4 text-primary' />
@@ -504,7 +510,7 @@ export function DateTimeInput({ value, onChange, invalid, disabled }: ParamInput
         <div
           className={cn(
             'flex items-center gap-2 rounded-md border border-border bg-bg px-3 py-2',
-            !datePart && 'opacity-50'
+            !datePart && 'opacity-50',
           )}
         >
           <Clock className='h-4 w-4 text-fg-muted' />

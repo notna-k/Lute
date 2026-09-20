@@ -25,10 +25,7 @@ export function BuildList({ builds, selectedId, linkTo, className }: BuildListPr
     <div className={cn('flex min-h-0 flex-col border-r border-border', className)}>
       <div className='flex shrink-0 items-center gap-2 border-b border-border px-3.5 py-2.5'>
         <span className='caption'>Builds</span>
-        <Tape
-          states={builds.map((b) => b.status).reverse()}
-          className='ml-auto'
-        />
+        <Tape states={builds.map((b) => b.status).reverse()} className='ml-auto' />
       </div>
       <div className='scrollbar-thin min-h-0 flex-1 overflow-auto'>
         {builds.length === 0 && (
@@ -44,15 +41,13 @@ export function BuildList({ builds, selectedId, linkTo, className }: BuildListPr
               'flex items-start gap-2.5 border-b border-border-subtle px-3.5 py-2.5 transition-colors',
               build.id === selectedId
                 ? 'bg-surface-active shadow-[inset_2px_0_0_rgb(var(--color-fg))]'
-                : 'hover:bg-surface-hover'
+                : 'hover:bg-surface-hover',
             )}
           >
             <StatusMark state={build.status} className='mt-[5px]' />
             <span className='min-w-0 flex-1'>
               <span className='flex items-baseline gap-2'>
-                <span className='font-mono text-[12.5px] font-medium'>
-                  #{build.id}
-                </span>
+                <span className='font-mono text-[12.5px] font-medium'>#{build.id}</span>
                 <span className='ml-auto font-mono text-[11px] text-fg-subtle tabular-nums'>
                   {duration(build.durationMs)}
                 </span>
