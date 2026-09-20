@@ -1,72 +1,119 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CornerDownLeft, Play, Search } from 'lucide-react';
+import { ChevronRight, Play, Search, Server } from 'lucide-react';
 import { listJobs } from '@/services/jobDefService';
+import { useUserWorkers } from '@/hooks/useWorkers';
+import { Kbd } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { NAV_ITEMS } from './nav';
 
 interface Command {
   id: string;
+  /** Results are shown under this heading, in first-seen order. */
+  group: string;
   label: string;
-  hint: string;
+  hint?: string;
   to: string;
-  kind: 'page' | 'job';
+  icon: 'page' | 'run' | 'worker';
+  mono?: boolean;
 }
 
-interface CommandPaletteProps {
+export interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
 }
 
+const ICONS = {
+  page: <ChevronRight className='h-3.5 w-3.5 text-fg-subtle' />,
+  run: <Play className='h-3.5 w-3.5 text-fg-subtle' />,
+  worker: <Server className='h-3.5 w-3.5 text-fg-subtle' />,
+};
+
 /**
- * ⌘K launcher: jump to a page or straight to a job's trigger form. Backs the
- * command affordance the rail and top bar advertise.
+ * The keyboard route to anything: a page, a job, a job's run form, a worker.
+ *
+ * It is the only navigation that reaches individual records, which is why the
+ * rail can stay as short as it is.
  */
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // Only fetch the job list while the palette is actually open.
+  // Only fetched while the palette is open.
   const { data: jobs } = useQuery({
     queryKey: ['jobs'],
     queryFn: listJobs,
     enabled: open,
   });
+  const { data: workers } = useUserWorkers({ enabled: open });
 
   const commands = useMemo<Command[]>(() => {
-    const pages: Command[] = NAV_ITEMS.map((i) => ({
-      id: `page:${i.to}`,
-      label: i.label,
-      hint: 'Go to',
-      to: i.to,
-      kind: 'page',
+    const items: Command[] = NAV_ITEMS.map((item) => ({
+      id: `page:${item.to}`,
+      group: 'Go to',
+      label: item.label,
+      to: item.to,
+      icon: 'page',
     }));
-    const jobCommands: Command[] = (jobs ?? []).map((j) => ({
-      id: `job:${j.slug}`,
-      label: j.name,
-      hint: `Run · ${j.queue}`,
-      to: `/jobs/${j.slug}`,
-      kind: 'job',
-    }));
-    return [...pages, ...jobCommands];
-  }, [jobs]);
+    for (const job of jobs ?? []) {
+      items.push({
+        id: `job:${job.slug}`,
+        group: 'Jobs',
+        label: job.name,
+        hint: job.queue,
+        to: `/jobs/${job.slug}`,
+        icon: 'page',
+        mono: true,
+      });
+    }
+    for (const job of jobs ?? []) {
+      items.push({
+        id: `run:${job.slug}`,
+        group: 'Run',
+        label: `Run ${job.name}`,
+        to: `/jobs/${job.slug}/run`,
+        icon: 'run',
+        mono: true,
+      });
+    }
+    for (const worker of workers ?? []) {
+      items.push({
+        id: `worker:${worker.id}`,
+        group: 'Workers',
+        label: worker.name,
+        hint: worker.status,
+        to: `/workers/${worker.id}`,
+        icon: 'worker',
+        mono: true,
+      });
+    }
+    return items;
+  }, [jobs, workers]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return commands;
-    return commands.filter((c) => c.label.toLowerCase().includes(q));
+    // With no query, "Run x" for every job would bury the rest of the list.
+    if (!q) return commands.filter((c) => c.group !== 'Run').slice(0, 30);
+    return commands
+      .filter((c) => `${c.label} ${c.hint ?? ''}`.toLowerCase().includes(q))
+      .slice(0, 40);
   }, [commands, query]);
 
-  useEffect(() => {
-    setCursor(0);
-  }, [query, open]);
-
+  useEffect(() => setCursor(0), [query, open]);
   useEffect(() => {
     if (!open) setQuery('');
   }, [open]);
+
+  // Keep the highlighted row in view while arrowing through a long list.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [cursor]);
 
   function run(command: Command | undefined) {
     if (!command) return;
@@ -74,18 +121,20 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     navigate(command.to);
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
+  function onKeyDown(event: React.KeyboardEvent) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
       setCursor((c) => Math.min(c + 1, results.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
       setCursor((c) => Math.max(c - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
       run(results[cursor]);
     }
   }
+
+  let lastGroup = '';
 
   return (
     <Transition.Root show={open} as={Fragment}>
@@ -99,64 +148,88 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-black/60 backdrop-blur-sm' />
+          <div className='fixed inset-0 bg-black/45' aria-hidden />
         </Transition.Child>
 
-        <div className='fixed inset-0 overflow-y-auto p-4 pt-[15vh]'>
+        <div className='fixed inset-0 overflow-y-auto px-4 pb-4 pt-[12vh]'>
           <Transition.Child
             as={Fragment}
             enter='ease-out duration-150'
-            enterFrom='opacity-0 scale-95'
-            enterTo='opacity-100 scale-100'
+            enterFrom='opacity-0 translate-y-1'
+            enterTo='opacity-100 translate-y-0'
             leave='ease-in duration-100'
-            leaveFrom='opacity-100 scale-100'
-            leaveTo='opacity-0 scale-95'
+            leaveFrom='opacity-100'
+            leaveTo='opacity-0'
           >
-            <Dialog.Panel className='mx-auto max-w-xl overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-popover'>
-              <div className='flex items-center gap-2.5 border-b border-border px-4'>
-                <Search className='h-4 w-4 shrink-0 text-fg-subtle' />
+            <Dialog.Panel className='mx-auto w-full max-w-[620px] border border-border bg-surface shadow-overlay'>
+              <Dialog.Title className='sr-only'>Command palette</Dialog.Title>
+              <div className='flex h-[46px] items-center gap-2.5 border-b border-border px-3.5 text-fg-subtle'>
+                <Search className='h-4 w-4 shrink-0' />
                 <input
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder='Run any job, jump to a page…'
-                  className='w-full bg-transparent py-3.5 text-sm text-fg placeholder:text-fg-subtle focus:outline-none'
+                  placeholder='Jobs, workers, actions…'
+                  autoComplete='off'
+                  className='w-full bg-transparent text-sm text-fg outline-none'
                 />
-                <kbd className='shrink-0 rounded border border-b-2 border-border bg-surface px-1.5 py-px font-mono text-[10px] text-fg-muted'>
-                  esc
-                </kbd>
+                <Kbd>Esc</Kbd>
               </div>
 
-              <div className='scrollbar-thin max-h-80 overflow-auto p-1.5'>
+              <div ref={listRef} className='scrollbar-thin max-h-[380px] overflow-y-auto py-1'>
                 {results.length === 0 ? (
-                  <p className='px-3 py-6 text-center text-sm text-fg-muted'>
+                  <p className='px-3.5 py-7 text-center text-[13px] text-fg-subtle'>
                     Nothing matches “{query}”.
                   </p>
                 ) : (
-                  results.map((c, i) => (
-                    <button
-                      key={c.id}
-                      type='button'
-                      onMouseEnter={() => setCursor(i)}
-                      onClick={() => run(c)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm',
-                        i === cursor ? 'bg-surface-hover text-fg' : 'text-fg-muted'
-                      )}
-                    >
-                      {c.kind === 'job' ? (
-                        <Play className='h-3.5 w-3.5 text-primary' />
-                      ) : (
-                        <CornerDownLeft className='h-3.5 w-3.5 text-fg-subtle' />
-                      )}
-                      <span className='truncate text-fg'>{c.label}</span>
-                      <span className='ml-auto shrink-0 font-mono text-[11px] text-fg-subtle'>
-                        {c.hint}
-                      </span>
-                    </button>
-                  ))
+                  results.map((command, i) => {
+                    const heading = command.group !== lastGroup ? command.group : null;
+                    lastGroup = command.group;
+                    return (
+                      <Fragment key={command.id}>
+                        {heading && (
+                          <div className='caption px-3.5 pb-1 pt-2'>{heading}</div>
+                        )}
+                        <button
+                          type='button'
+                          role='option'
+                          aria-selected={i === cursor}
+                          onMouseEnter={() => setCursor(i)}
+                          onClick={() => run(command)}
+                          className={cn(
+                            'flex h-8 w-full items-center gap-2.5 px-3.5 text-left text-[13px]',
+                            i === cursor
+                              ? 'bg-surface-active text-fg'
+                              : 'text-fg-muted'
+                          )}
+                        >
+                          {ICONS[command.icon]}
+                          <span className={cn('truncate', command.mono && 'font-mono text-xs')}>
+                            {command.label}
+                          </span>
+                          {command.hint && (
+                            <span className='ml-auto shrink-0 font-mono text-[11.5px] text-fg-subtle'>
+                              {command.hint}
+                            </span>
+                          )}
+                        </button>
+                      </Fragment>
+                    );
+                  })
                 )}
+              </div>
+
+              <div className='flex gap-3.5 border-t border-border px-3.5 py-2 text-[11.5px] text-fg-subtle'>
+                <span className='flex items-center gap-1'>
+                  <Kbd>↑</Kbd> <Kbd>↓</Kbd> move
+                </span>
+                <span className='flex items-center gap-1'>
+                  <Kbd>↵</Kbd> open
+                </span>
+                <span className='flex items-center gap-1'>
+                  <Kbd>Esc</Kbd> close
+                </span>
               </div>
             </Dialog.Panel>
           </Transition.Child>

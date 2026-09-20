@@ -75,7 +75,16 @@ type jobDTO struct {
 	GitState         string  `json:"gitState"`
 	SuccessRate      float64 `json:"successRate"`
 	MedianDurationMs int64   `json:"medianDurationMs"`
+	// LastBuild is the newest build of this job, so a job list can show what the
+	// job is doing right now without a request per row.
+	LastBuild *buildDTO `json:"lastBuild,omitempty"`
+	// Recent is the trailing run of build statuses, oldest first, for the
+	// history strip in the job list.
+	Recent []string `json:"recent,omitempty"`
 }
+
+// recentWindow caps how many trailing statuses a job list carries per job.
+const recentWindow = 16
 
 type buildDTO struct {
 	// ID is the short, human-facing build reference (#a1b2c3d4).
@@ -134,6 +143,45 @@ func (h *Handler) toJobDTO(def *models.JobDefinition, rate float64, median int64
 	}
 }
 
+// withHistory attaches the newest build and the trailing status strip. runs must
+// be newest-first, as the repositories return them.
+func (h *Handler) withHistory(ctx context.Context, dto jobDTO, runs []models.Run, execs map[string]*models.JobExecution) jobDTO {
+	if len(runs) == 0 {
+		return dto
+	}
+	last := h.buildDTO(ctx, &runs[0], execs[runs[0].JobID])
+	dto.LastBuild = &last
+	dto.Recent = recentStatuses(runs, execs, last.Status)
+	return dto
+}
+
+// recentStatuses renders a job's trailing builds as a strip of statuses, oldest
+// first so it reads left to right.
+//
+// Only the newest build's status is resolved against the queue — that one is
+// passed in. For the rest an execution record is the only thing that separates a
+// pass from a failure, and a missing one means the build never finished.
+func recentStatuses(runs []models.Run, execs map[string]*models.JobExecution, lastStatus string) []string {
+	window := runs
+	if len(window) > recentWindow {
+		window = window[:recentWindow]
+	}
+	out := make([]string, 0, len(window))
+	for i := len(window) - 1; i >= 0; i-- {
+		switch {
+		case i == 0:
+			out = append(out, lastStatus)
+		case execs[window[i].JobID] == nil:
+			out = append(out, "queued")
+		case execs[window[i].JobID].Success:
+			out = append(out, "passed")
+		default:
+			out = append(out, "failed")
+		}
+	}
+	return out
+}
+
 // List returns all definitions with per-user build stats.
 func (h *Handler) List(c *gin.Context) {
 	userID, ok := requireUserID(c)
@@ -163,8 +211,9 @@ func (h *Handler) List(c *gin.Context) {
 
 	out := make([]jobDTO, 0, len(defs))
 	for i := range defs {
-		rate, median := statsOf(runsBySlug[defs[i].Slug], execs)
-		out = append(out, h.toJobDTO(&defs[i], rate, median))
+		runs := runsBySlug[defs[i].Slug]
+		rate, median := statsOf(runs, execs)
+		out = append(out, h.withHistory(ctx, h.toJobDTO(&defs[i], rate, median), runs, execs))
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": out})
 }
@@ -192,7 +241,7 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 	rate, median := statsOf(runs, execs)
-	c.JSON(http.StatusOK, h.toJobDTO(def, rate, median))
+	c.JSON(http.StatusOK, h.withHistory(ctx, h.toJobDTO(def, rate, median), runs, execs))
 }
 
 // Builds returns the recent builds (runs) for a job.

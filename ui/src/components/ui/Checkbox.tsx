@@ -1,14 +1,14 @@
-import { forwardRef, type InputHTMLAttributes } from 'react';
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
-  label?: string;
+  label?: ReactNode;
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
-  function Checkbox({ className, label, id, checked, ...props }, ref) {
+  function Checkbox({ className, label, id, ...props }, ref) {
     return (
       <label
         htmlFor={id}
@@ -18,31 +18,20 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           className
         )}
       >
-        <span className='relative inline-flex h-4 w-4 items-center justify-center'>
+        <span className='relative inline-flex h-3.5 w-3.5 items-center justify-center'>
           <input
             ref={ref}
             id={id}
             type='checkbox'
-            checked={checked}
-            className='peer sr-only'
+            className='peer h-3.5 w-3.5 cursor-pointer appearance-none border border-border bg-surface transition-colors checked:border-fg checked:bg-fg'
             {...props}
           />
-          <span
+          <Check
             aria-hidden
-            className={cn(
-              'h-4 w-4 rounded border border-border bg-surface transition-colors',
-              'peer-checked:border-primary peer-checked:bg-primary',
-              'peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30'
-            )}
+            className='pointer-events-none absolute h-2.5 w-2.5 text-bg opacity-0 peer-checked:opacity-100'
           />
-          {checked && (
-            <Check
-              className='pointer-events-none absolute h-3 w-3 text-fg-onPrimary'
-              aria-hidden
-            />
-          )}
         </span>
-        {label && <span className='text-sm text-fg'>{label}</span>}
+        {label && <span className='text-[13px] text-fg'>{label}</span>}
       </label>
     );
   }

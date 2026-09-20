@@ -71,9 +71,13 @@ export interface JobDefinition {
   /** Success ratio over the trailing 30 days, 0..1. */
   successRate: number;
   medianDurationMs: number;
+  /** Newest build of this job, so a list row can show what it is doing now. */
+  lastBuild?: Build;
+  /** Trailing build statuses, oldest first, for the history strip. */
+  recent?: BuildStatus[];
 }
 
-export type BuildStatus = 'running' | 'passed' | 'failed' | 'queued';
+export type BuildStatus = 'running' | 'passed' | 'failed' | 'queued' | 'aborted';
 
 export interface Build {
   id: string;

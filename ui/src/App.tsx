@@ -6,12 +6,12 @@ import {
   Routes,
   useLocation,
 } from 'react-router-dom';
-import { AuthProvider, AuthBridgeUpdater } from './contexts/AuthContext';
+import { AuthProvider, AuthBridgeUpdater, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { AppShell } from './components/layout/AppShell';
+import { UiPreferencesProvider } from './contexts/UiPreferencesContext';
+import { AppShell } from './components/layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useAuth } from './contexts/AuthContext';
-import { Spinner } from './components/ui';
+import { Spinner, ToastProvider } from './components/ui';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Workers from './pages/Workers';
@@ -30,7 +30,7 @@ function AuthGuard() {
 
   if (loading) {
     return (
-      <div className='flex min-h-screen items-center justify-center'>
+      <div className='flex h-full items-center justify-center'>
         <Spinner size={28} />
       </div>
     );
@@ -66,7 +66,12 @@ function AppRoutes() {
           <Route path='/settings' element={<Settings />} />
           <Route path='/jobs' element={<Jobs />} />
           <Route path='/jobs/new' element={<JobNew />} />
+          {/* A job's views are routes, not local tab state, so a build or a
+              half-filled run form can be linked to and reloaded. */}
           <Route path='/jobs/:slug' element={<JobDetail />} />
+          <Route path='/jobs/:slug/run' element={<JobDetail />} />
+          <Route path='/jobs/:slug/config' element={<JobDetail />} />
+          <Route path='/jobs/:slug/builds/:buildId' element={<JobDetail />} />
           <Route path='*' element={<Navigate to='/' replace />} />
         </Route>
       </Route>
@@ -77,14 +82,18 @@ function AppRoutes() {
 function App() {
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <AuthProvider>
-          <AuthBridgeUpdater />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </AuthProvider>
-      </ErrorBoundary>
+      <UiPreferencesProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AuthBridgeUpdater />
+            <BrowserRouter>
+              <ToastProvider>
+                <AppRoutes />
+              </ToastProvider>
+            </BrowserRouter>
+          </AuthProvider>
+        </ErrorBoundary>
+      </UiPreferencesProvider>
     </ThemeProvider>
   );
 }

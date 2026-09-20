@@ -1,82 +1,60 @@
-import { useParams, Link } from 'react-router-dom';
+/**
+ * One job: its builds, a form to run it, and the definition behind it.
+ *
+ * The three views are routes rather than local tab state, so a build, a
+ * half-filled run form or the YAML can all be linked to and reloaded. The header
+ * is fixed; only the view below it scrolls, which is what lets a log stream
+ * without the page drifting.
+ */
+import { useMemo } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, GitBranch, Save } from 'lucide-react';
+import { GitBranch, Play, Save } from 'lucide-react';
 import { getJob, listBuilds, triggerBuild, updateJob } from '@/services/jobDefService';
 import { ApiError } from '@/services/api';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
+import { BuildList } from '@/features/jobs/BuildList';
+import { BuildPane } from '@/features/jobs/BuildPane';
+import {
+  Alert,
+  Button,
+  Fact,
+  LinkTabs,
+  Spinner,
+  Tape,
+  toastSubject,
+  useToast,
+} from '@/components/ui';
+import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
 import { GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
-import { Button, Spinner } from '@/components/ui';
-import { cn } from '@/lib/cn';
+import { duration, percent } from '@/lib/format';
 import type { Build, ParameterField, ParameterValues } from '@/types/jobs';
 
-function relativeTime(ts: number): string {
-  const s = Math.round((Date.now() - ts) / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
+type View = 'builds' | 'run' | 'config';
 
-function formatDuration(ms?: number): string {
-  if (!ms) return '—';
-  const s = Math.round(ms / 1000);
-  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
-}
+/** Stable empty list, so the selected-build memo has stable dependencies. */
+const NO_BUILDS: Build[] = [];
 
-const BUILD_TONE: Record<Build['status'], string> = {
-  running: 'text-warning bg-warning-subtle',
-  passed: 'text-success bg-success-subtle',
-  failed: 'text-danger bg-danger-subtle',
-  queued: 'text-fg-muted bg-surface-hover',
-};
-
-function BuildHistory({ builds }: { builds: Build[] }) {
-  return (
-    <div className='mt-6 rounded-xl border border-border bg-surface'>
-      <div className='border-b border-border px-4 py-3'>
-        <h2 className='font-mono text-xs uppercase tracking-wider text-fg-muted'>Build history</h2>
-      </div>
-      <div className='px-4 py-1'>
-        {builds.map((b) => (
-          <div
-            key={b.id}
-            className='flex flex-wrap items-center gap-3 border-b border-border-subtle py-2.5 text-sm last:border-b-0'
-          >
-            <span
-              className={cn(
-                'rounded px-1.5 py-0.5 font-mono text-xxs uppercase tracking-wide',
-                BUILD_TONE[b.status]
-              )}
-            >
-              {b.status === 'running' && <span className='mr-1 animate-pulse'>●</span>}
-              {b.status}
-            </span>
-            <span className='font-mono text-xs text-fg-muted'>#{b.id}</span>
-            {b.environment && (
-              <span className='rounded bg-surface-hover px-1.5 py-0.5 font-mono text-xxs text-fg-muted'>
-                {b.environment}
-              </span>
-            )}
-            <span className='ml-auto font-mono text-xxs text-fg-subtle'>
-              {relativeTime(b.startedAt)} · {formatDuration(b.durationMs)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+/** Which of the three views the current URL selects. */
+function viewOf(pathname: string, slug: string): View {
+  const rest = pathname.replace(`/jobs/${slug}`, '');
+  if (rest.startsWith('/run')) return 'run';
+  if (rest.startsWith('/config')) return 'config';
+  return 'builds';
 }
 
 export default function JobDetail() {
-  const { slug = '' } = useParams();
+  const { slug = '', buildId } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const view = viewOf(useLocation().pathname, slug);
 
   const { data: job, isLoading } = useQuery({
     queryKey: ['job', slug],
     queryFn: () => getJob(slug),
   });
+
   const { data: builds } = useQuery({
     queryKey: ['builds', slug],
     queryFn: () => listBuilds(slug),
@@ -88,15 +66,36 @@ export default function JobDetail() {
         : 15000,
   });
 
+  const buildRows = builds ?? NO_BUILDS;
+  const selected = useMemo(
+    () => buildRows.find((b) => b.id === buildId) ?? buildRows[0],
+    [buildRows, buildId]
+  );
+
   const trigger = useMutation({
     // The authored schema goes with the values: the server validates against
     // what the user actually saw, so an added parameter is applied rather than
     // silently dropped.
-    mutationFn: ({ values, fields }: { values: ParameterValues; fields: ParameterField[] }) =>
-      triggerBuild(slug, values, fields),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['builds', slug] });
-      queryClient.invalidateQueries({ queryKey: ['job', slug] });
+    mutationFn: ({
+      values,
+      fields,
+    }: {
+      values: ParameterValues;
+      fields: ParameterField[];
+    }) => triggerBuild(slug, values, fields),
+    onSuccess: (build) => {
+      void queryClient.invalidateQueries({ queryKey: ['builds', slug] });
+      void queryClient.invalidateQueries({ queryKey: ['job', slug] });
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      toast({
+        message: (
+          <>
+            Queued <span className={toastSubject}>#{build.id}</span>
+          </>
+        ),
+        link: { to: `/jobs/${slug}/builds/${build.id}`, label: 'Watch' },
+      });
+      navigate(`/jobs/${slug}/builds/${build.id}`);
     },
   });
 
@@ -115,43 +114,13 @@ export default function JobDetail() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['job', slug] });
       void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      toast({ message: 'Definition saved' });
     },
   });
 
-  // Any definition can be saved. One from Git then differs from it until its
-  // file changes — or until the saved config is committed.
-  const editFooter = (parameters: ParameterField[]) => (
-          <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
-            <Button
-              type='button'
-              disabled={saveEdit.isPending}
-              onClick={() => saveEdit.mutate(parameters)}
-            >
-              <Save className='mr-1.5 h-4 w-4' />
-              {saveEdit.isPending ? 'Saving…' : 'Save changes'}
-            </Button>
-            {saveEdit.isSuccess && !saveEdit.isPending && (
-              <span className='text-sm text-success'>
-                Saved. {job?.source.path && 'Commit the config to keep it past the next change in Git.'}
-              </span>
-            )}
-            {saveEdit.isError && (
-              <span className='text-sm text-danger-fg'>
-                {(saveEdit.error as Error).message}
-              </span>
-            )}
-          </div>
-        );
-
-  const fieldErrors = trigger.error instanceof ApiError ? trigger.error.fields : undefined;
-  // A field-level rejection is already rendered on the inputs; repeating the
-  // summary line above them would just say "invalid parameters" twice.
-  const runError =
-    trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
-
   if (isLoading) {
     return (
-      <div className='flex justify-center py-20'>
+      <div className='flex h-full items-center justify-center'>
         <Spinner size={28} />
       </div>
     );
@@ -159,63 +128,148 @@ export default function JobDetail() {
 
   if (!job) {
     return (
-      <div className='py-20 text-center'>
-        <p className='text-fg-muted'>Job not found.</p>
-        <Link to='/jobs' className='mt-2 inline-block text-sm text-primary hover:underline'>
-          Back to jobs
-        </Link>
-      </div>
+      <PageScroll>
+        <PageBody>
+          <Alert tone='danger' title='Job not found'>
+            No definition is registered under <code>{slug}</code>. It may have been
+            pruned by a Git sync.
+          </Alert>
+        </PageBody>
+      </PageScroll>
     );
   }
 
-  return (
-    <div>
-      <Link
-        to='/jobs'
-        className='mb-4 inline-flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg'
+  const fieldErrors = trigger.error instanceof ApiError ? trigger.error.fields : undefined;
+  // A field-level rejection is already rendered on the inputs; repeating the
+  // summary line above them would just say "invalid parameters" twice.
+  const runError =
+    trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
+
+  // Any definition can be saved. One that came from Git then differs from it
+  // until its file changes — or until the saved config is committed.
+  const editFooter = (parameters: ParameterField[]) => (
+    <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
+      <Button
+        variant='primary'
+        disabled={saveEdit.isPending}
+        onClick={() => saveEdit.mutate(parameters)}
       >
-        <ArrowLeft className='h-3.5 w-3.5' /> Jobs
-      </Link>
+        <Save className='h-3.5 w-3.5' />
+        {saveEdit.isPending ? 'Saving…' : 'Save changes'}
+      </Button>
+      {saveEdit.isSuccess && !saveEdit.isPending && (
+        <span className='text-xs text-fg-muted'>
+          Saved.{' '}
+          {job.source.path && 'Commit the config to keep it past the next change in Git.'}
+        </span>
+      )}
+      {saveEdit.isError && (
+        <span className='text-xs text-danger'>{(saveEdit.error as Error).message}</span>
+      )}
+    </div>
+  );
 
-      <div className='mb-6 flex flex-wrap items-start gap-4'>
-        <div className='min-w-0'>
-          <div className='flex items-center gap-3'>
-            <h1 className='font-mono text-2xl font-bold tracking-tight text-fg'>{job.name}</h1>
-            <GitStateBadge state={job.gitState} />
-          </div>
-          <p className='mt-1.5 max-w-2xl text-sm text-fg-muted'>{job.description}</p>
-        </div>
-        <div className='ml-auto flex items-center gap-2'>
-          <div className='flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs text-fg-muted'>
-            <GitBranch className='h-3.5 w-3.5' />
-            {job.source.path ? (
-              <>
-                {job.source.repo && `${job.source.repo} · `}
-                <span className={job.gitState === 'removed' ? 'text-fg line-through' : 'text-fg'}>
-                  {job.source.path}
-                </span>
-                {job.source.commit && <span className='text-success'>@{job.source.commit}</span>}
-              </>
-            ) : (
-              'not in Git'
+  const hasStats = job.medianDurationMs > 0 || job.successRate > 0;
+
+  return (
+    <>
+      <DetailHeader
+        crumbs={[{ label: 'Jobs', to: '/jobs' }]}
+        title={job.name}
+        subtitle={job.description}
+        tags={<GitStateBadge state={job.gitState} />}
+        actions={
+          <>
+            <Button variant='primary' size='sm' onClick={() => navigate(`/jobs/${slug}/run`)}>
+              <Play className='h-3.5 w-3.5' /> Run build
+            </Button>
+            <JobActionsMenu job={job} />
+          </>
+        }
+        tabs={
+          <LinkTabs
+            items={[
+              {
+                to: `/jobs/${slug}`,
+                label: 'Builds',
+                count: buildRows.length,
+                active: view === 'builds',
+              },
+              { to: `/jobs/${slug}/run`, label: 'Run', active: view === 'run' },
+              {
+                to: `/jobs/${slug}/config`,
+                label: 'Definition',
+                active: view === 'config',
+              },
+            ]}
+          />
+        }
+        meta={
+          <>
+            {job.recent?.length ? <Tape states={job.recent} /> : null}
+            {hasStats && (
+              <Fact title='Success rate over the trailing 30 days'>
+                <span className='tabular-nums'>{percent(job.successRate)} · 30d</span>
+              </Fact>
             )}
-          </div>
-          <JobActionsMenu job={job} />
-        </div>
-      </div>
-
-      <BuildWorkbench
-        job={job}
-        builds={builds ?? []}
-        onRun={(values, fields) => trigger.mutate({ values, fields })}
-        running={trigger.isPending}
-        serverErrors={fieldErrors}
-        runError={runError}
-        queuedBuildId={trigger.isSuccess ? trigger.data.id : undefined}
-        footer={editFooter}
+            {job.medianDurationMs > 0 && (
+              <Fact title='Median build duration'>
+                <span className='tabular-nums'>~{duration(job.medianDurationMs)}</span>
+              </Fact>
+            )}
+            <Fact title='Queue and runtime'>
+              <span className='font-mono'>
+                {job.queue} · {job.runtime}
+              </span>
+            </Fact>
+            <Fact icon={<GitBranch className='h-3 w-3' />} title={job.source.repo}>
+              {job.source.path ? (
+                <span
+                  className={
+                    job.gitState === 'removed' ? 'font-mono line-through' : 'font-mono'
+                  }
+                >
+                  {job.source.path}
+                  {job.source.commit ? `@${job.source.commit}` : ''}
+                </span>
+              ) : (
+                <span className='font-mono'>not in Git</span>
+              )}
+            </Fact>
+          </>
+        }
       />
 
-      {builds && builds.length > 0 && <BuildHistory builds={builds} />}
-    </div>
+      {view === 'builds' ? (
+        <div className='flex min-h-0 flex-1 max-md:flex-col'>
+          <BuildList
+            builds={buildRows}
+            selectedId={selected?.id}
+            linkTo={(build) => `/jobs/${slug}/builds/${build.id}`}
+            className='w-[248px] shrink-0 max-md:w-full'
+          />
+          <BuildPane
+            job={job}
+            build={selected}
+            onRerun={() => navigate(`/jobs/${slug}/run`)}
+          />
+        </div>
+      ) : (
+        <PageScroll>
+          <PageBody>
+            <BuildWorkbench
+              job={job}
+              builds={buildRows}
+              mode={view === 'run' ? 'run' : 'edit'}
+              onRun={(values, fields) => trigger.mutate({ values, fields })}
+              running={trigger.isPending}
+              serverErrors={fieldErrors}
+              runError={runError}
+              footer={view === 'config' ? editFooter : undefined}
+            />
+          </PageBody>
+        </PageScroll>
+      )}
+    </>
   );
 }

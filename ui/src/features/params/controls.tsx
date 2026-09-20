@@ -21,13 +21,15 @@ import { TONE_TAG } from './tones';
 import type { ParamInputProps } from './types';
 import type { ParameterOption } from '@/types/jobs';
 
+// Matches the design system's Input: monospace, square, one hairline border.
+// Parameter values are identifiers and paths, so they read best fixed-width.
 const FIELD_BASE =
-  'w-full rounded-md border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60';
+  'w-full border bg-bg px-2.5 py-[6px] font-mono text-[12.5px] text-fg placeholder:text-fg-subtle transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60';
 
 function ring(invalid?: boolean) {
   return invalid
-    ? 'border-danger focus-visible:ring-2 focus-visible:ring-danger/20'
-    : 'border-border hover:border-border-strong focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20';
+    ? 'border-danger'
+    : 'border-border hover:border-border-strong focus-visible:border-fg';
 }
 
 function labelOf(o: ParameterOption) {

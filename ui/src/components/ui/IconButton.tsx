@@ -8,35 +8,27 @@ export interface IconButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: IconButtonVariant;
   size?: IconButtonSize;
+  /** Required: icon-only controls need an accessible name, and it doubles as the tooltip. */
   label: string;
 }
 
 const VARIANTS: Record<IconButtonVariant, string> = {
-  ghost: 'bg-transparent text-fg-muted hover:bg-surface-hover hover:text-fg',
+  ghost: 'bg-transparent text-fg-subtle hover:bg-surface-hover hover:text-fg',
   outline:
-    'bg-transparent text-fg-muted border border-border hover:bg-surface-hover hover:text-fg',
+    'border border-border bg-transparent text-fg-muted hover:border-border-strong hover:text-fg',
   solid:
-    'bg-surface text-fg border border-border hover:bg-surface-hover shadow-sm',
-  danger:
-    'bg-transparent text-danger hover:bg-danger/10',
+    'border border-border bg-surface text-fg hover:bg-surface-hover',
+  danger: 'bg-transparent text-danger hover:bg-danger/10',
 };
 
 const SIZES: Record<IconButtonSize, string> = {
-  sm: 'h-7 w-7',
-  md: 'h-8 w-8',
+  sm: 'h-[22px] w-[22px]',
+  md: 'h-[26px] w-[26px]',
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   function IconButton(
-    {
-      variant = 'ghost',
-      size = 'md',
-      label,
-      className,
-      type = 'button',
-      children,
-      ...rest
-    },
+    { variant = 'ghost', size = 'md', label, className, type = 'button', children, ...rest },
     ref
   ) {
     return (
@@ -46,7 +38,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={label}
         title={label}
         className={cn(
-          'inline-flex items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
+          'inline-grid shrink-0 place-items-center transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-45',
           VARIANTS[variant],
           SIZES[size],
           className

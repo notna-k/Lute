@@ -1,19 +1,7 @@
 import { authBridge } from '../contexts/AuthContext';
+import { API_URL } from './apiBase';
 
-/** Empty string = same-origin (embedded UI + API). */
-function resolveApiBaseURL(): string {
-  const raw = import.meta.env.VITE_API_URL;
-  if (raw === undefined || raw === null) {
-    return 'http://localhost:8080';
-  }
-  const s = String(raw).trim();
-  if (s === '') {
-    return '';
-  }
-  return s.replace(/\/$/, '');
-}
 
-const API_URL = resolveApiBaseURL();
 
 /**
  * An error response from the API. `fields` carries per-input messages when the

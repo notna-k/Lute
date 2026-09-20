@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
 export interface TabItem<T extends string = string> {
@@ -13,67 +14,33 @@ export interface TabsProps<T extends string = string> {
   onChange: (value: T) => void;
   items: TabItem<T>[];
   className?: string;
-  variant?: 'underline' | 'pill';
 }
 
+const TAB_BASE =
+  'inline-flex items-center gap-1.5 border-b-[1.5px] pb-2.5 pt-3 text-[13px] font-medium transition-colors -mb-px';
+
+const tabTone = (active: boolean) =>
+  active
+    ? 'border-fg text-fg'
+    : 'border-transparent text-fg-subtle hover:text-fg-muted';
+
+function Count({ value }: { value: number }) {
+  return (
+    <span className='font-mono text-[11px] text-fg-subtle tabular-nums'>{value}</span>
+  );
+}
+
+/** Underlined tabs for local state — a view switch that is not a route. */
 export function Tabs<T extends string = string>({
   value,
   onChange,
   items,
   className,
-  variant = 'underline',
 }: TabsProps<T>) {
-  if (variant === 'pill') {
-    return (
-      <div
-        role='tablist'
-        className={cn(
-          'inline-flex items-center gap-1 rounded-md border border-border bg-bg-subtle p-1',
-          className
-        )}
-      >
-        {items.map((item) => {
-          const active = item.value === value;
-          return (
-            <button
-              key={item.value}
-              type='button'
-              role='tab'
-              aria-selected={active}
-              disabled={item.disabled}
-              onClick={() => onChange(item.value)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                active
-                  ? 'bg-surface text-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg',
-                item.disabled && 'cursor-not-allowed opacity-50'
-              )}
-            >
-              {item.label}
-              {typeof item.count === 'number' && (
-                <span
-                  className={cn(
-                    'rounded-full px-1.5 py-px text-xxs font-semibold',
-                    active
-                      ? 'bg-primary text-fg-onPrimary'
-                      : 'bg-bg-muted text-fg-muted'
-                  )}
-                >
-                  {item.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
-
   return (
     <div
       role='tablist'
-      className={cn('flex border-b border-border', className)}
+      className={cn('flex gap-6 border-b border-border', className)}
     >
       {items.map((item) => {
         const active = item.value === value;
@@ -86,35 +53,52 @@ export function Tabs<T extends string = string>({
             disabled={item.disabled}
             onClick={() => onChange(item.value)}
             className={cn(
-              'relative inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors',
-              active
-                ? 'text-fg'
-                : 'text-fg-muted hover:text-fg',
+              TAB_BASE,
+              tabTone(active),
               item.disabled && 'cursor-not-allowed opacity-50'
             )}
           >
             {item.label}
-            {typeof item.count === 'number' && (
-              <span
-                className={cn(
-                  'rounded-full px-1.5 py-px text-xxs font-semibold',
-                  active
-                    ? 'bg-primary-subtle text-info-fg'
-                    : 'bg-bg-muted text-fg-muted'
-                )}
-              >
-                {item.count}
-              </span>
-            )}
-            {active && (
-              <span
-                aria-hidden
-                className='absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary'
-              />
-            )}
+            {typeof item.count === 'number' && <Count value={item.count} />}
           </button>
         );
       })}
     </div>
+  );
+}
+
+export interface LinkTabItem {
+  to: string;
+  label: ReactNode;
+  count?: number;
+  /** Matches nested routes too, e.g. the Builds tab on /jobs/x/builds/412. */
+  active: boolean;
+}
+
+export interface LinkTabsProps {
+  items: LinkTabItem[];
+  className?: string;
+}
+
+/**
+ * The same tabs as links. A job's Builds / Run / Definition views are separate
+ * URLs so they can be shared and reloaded, which local tab state cannot do.
+ */
+export function LinkTabs({ items, className }: LinkTabsProps) {
+  return (
+    <nav className={cn('flex gap-6', className)}>
+      {items.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end
+          aria-current={item.active ? 'page' : undefined}
+          className={cn(TAB_BASE, tabTone(item.active))}
+        >
+          {item.label}
+          {typeof item.count === 'number' && <Count value={item.count} />}
+        </NavLink>
+      ))}
+    </nav>
   );
 }

@@ -10,7 +10,7 @@ import { Fragment, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Download, FileCode2, GitBranch, MoreVertical, Undo2 } from 'lucide-react';
-import { Button, Dialog, Spinner, Tooltip } from '@/components/ui';
+import { Badge, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { downloadYaml } from '@/features/params/yaml';
 import { exportJob, exportJobs, revertJob } from '@/services/jobDefService';
@@ -32,7 +32,7 @@ export function GitStateDot({ state, className }: { state: GitState; className?:
         <span
           tabIndex={0}
           aria-label={label}
-          className='block h-3 w-3 rounded-full bg-warning ring-2 ring-bg'
+          className='block h-2.5 w-2.5 bg-warning ring-2 ring-bg'
         />
       </Tooltip>
     </span>
@@ -41,20 +41,17 @@ export function GitStateDot({ state, className }: { state: GitState; className?:
 
 /** The state as a labelled chip, for a job's header. */
 export function GitStateBadge({ state }: { state: GitState }) {
-  const chip =
-    'inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xxs font-medium uppercase tracking-wide';
   if (state === 'synced') {
     return (
-      <span className={cn(chip, 'border-success/30 bg-success-subtle text-success-fg')}>
-        <GitBranch className='h-3 w-3' /> in sync with Git
-      </span>
+      <Badge tone='neutral' size='sm' title='Matches its YAML file'>
+        <GitBranch className='h-3 w-3' /> in sync
+      </Badge>
     );
   }
   return (
-    <span className={cn(chip, 'border-warning/30 bg-warning-subtle text-warning-fg')}>
-      <span className='h-2 w-2 rounded-full bg-warning' />
+    <Badge tone='warning' size='sm' dot title={GIT_STATE_LABEL[state]}>
       {GIT_STATE_LABEL[state]}
-    </span>
+    </Badge>
   );
 }
 
@@ -128,9 +125,9 @@ export function ConfigDialog({
           <Spinner />
         </div>
       ) : error ? (
-        <p className='text-sm text-danger-fg'>{(error as Error).message}</p>
+        <p className='text-sm text-danger'>{(error as Error).message}</p>
       ) : (
-        <pre className='max-h-[60vh] overflow-auto rounded-md bg-bg p-3 font-mono text-xs leading-relaxed text-fg'>
+        <pre className='max-h-[60vh] overflow-auto border border-log-line bg-log-bg p-3 font-mono text-xs leading-relaxed text-log-fg'>
           {yaml}
         </pre>
       )}
@@ -173,10 +170,7 @@ export function JobActionsMenu({ job, className }: { job: JobDefinition; classNa
   return (
     <>
       <Menu as='div' className={cn('relative', className)}>
-        <Menu.Button
-          className='inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-hover hover:text-fg'
-          aria-label={`More actions for ${job.name}`}
-        >
+        <Menu.Button as={IconButton} size='sm' label={`More actions for ${job.name}`}>
           <MoreVertical className='h-4 w-4' />
         </Menu.Button>
         <Transition
@@ -188,7 +182,7 @@ export function JobActionsMenu({ job, className }: { job: JobDefinition; classNa
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <Menu.Items className='absolute right-0 z-30 mt-1 w-44 origin-top-right rounded-md border border-border bg-surface py-1 shadow-popover focus:outline-none'>
+          <Menu.Items className='absolute right-0 z-30 mt-1 w-48 origin-top-right border border-border bg-surface py-1 text-left shadow-popover focus:outline-none'>
             {items.map((item) => {
               const Icon = item.icon;
               return (
@@ -198,7 +192,7 @@ export function JobActionsMenu({ job, className }: { job: JobDefinition; classNa
                       type='button'
                       onClick={item.onClick}
                       className={cn(
-                        'flex w-full items-center gap-2 px-3 py-2 text-sm text-fg',
+                        'flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-fg',
                         active && 'bg-surface-hover'
                       )}
                     >

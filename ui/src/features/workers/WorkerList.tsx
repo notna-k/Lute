@@ -1,7 +1,32 @@
+/**
+ * The worker fleet as a table.
+ *
+ * A fleet is read by comparing rows — who is busy, who is behind on load, who
+ * stopped reporting — and a table is the only layout where the numbers line up
+ * for that. The per-row menu is gone: re-enable and delete sit in the row, since
+ * they are the only two actions and hiding them behind a kebab saved nothing.
+ */
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { Power, Trash2 } from 'lucide-react';
 import type { Worker } from '@/types';
-import { Card, Skeleton } from '@/components/ui';
-import { WorkerRow } from './WorkerRow';
+import {
+  Button,
+  IconButton,
+  LabelChips,
+  Meter,
+  RowLink,
+  Skeleton,
+  StatusText,
+  TBody,
+  Table,
+  Td,
+  Th,
+  THead,
+  Tr,
+} from '@/components/ui';
+import { relativeTime, toEpochMs } from '@/lib/format';
+import { metric, workerState } from './utils';
 
 export interface WorkerListProps {
   workers: Worker[];
@@ -24,42 +49,100 @@ export function WorkerList({
 }: WorkerListProps) {
   if (loading) {
     return (
-      <Card>
-        <div className='divide-y divide-border'>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className='flex items-center gap-3 px-4 py-3'
-            >
-              <Skeleton className='h-10 w-10 rounded-md' />
-              <div className='flex-1 space-y-1.5'>
-                <Skeleton className='h-4 w-1/3' />
-                <Skeleton className='h-3 w-1/2' />
-              </div>
-              <Skeleton className='h-6 w-16 rounded-full' />
-            </div>
-          ))}
-        </div>
-      </Card>
+      <div className='space-y-2 px-7 py-6'>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className='h-9 w-full' />
+        ))}
+      </div>
     );
   }
 
-  if (!workers.length) {
-    return <>{empty}</>;
-  }
+  if (!workers.length) return <div className='py-16'>{empty}</div>;
 
   return (
-    <Card>
-      {workers.map((w) => (
-        <WorkerRow
-          key={w.id}
-          worker={w}
-          onReEnable={onReEnable}
-          onDelete={onDelete}
-          reEnablePending={reEnablingId === w.id}
-          deletePending={deletingId === w.id}
-        />
-      ))}
-    </Card>
+    <Table>
+      <THead>
+        <Tr>
+          <Th>Worker</Th>
+          <Th>State</Th>
+          <Th>CPU</Th>
+          <Th>Memory</Th>
+          <Th>Labels</Th>
+          <Th>Last seen</Th>
+          <Th>Version</Th>
+          <Th className='text-right'>Actions</Th>
+        </Tr>
+      </THead>
+      <TBody>
+        {workers.map((w) => {
+          const seen = toEpochMs(w.last_seen);
+          const cpu = metric(w, 'cpu_load');
+          const memMb = metric(w, 'mem_usage_mb');
+          return (
+            <RowLink key={w.id} to={`/workers/${w.id}`}>
+              <Td>
+                <Link
+                  to={`/workers/${w.id}`}
+                  className='font-mono font-medium hover:underline'
+                >
+                  {w.name}
+                </Link>
+                {w.description && (
+                  <p className='row-subtext max-w-[40ch]'>
+                    {w.description}
+                  </p>
+                )}
+              </Td>
+              <Td>
+                <StatusText state={workerState(w.status)}>{w.status}</StatusText>
+              </Td>
+              <Td>
+                {cpu == null ? (
+                  <span className='text-fg-subtle'>—</span>
+                ) : (
+                  // cpu_load is a 0..1 ratio of the worker's capacity.
+                  <Meter value={cpu} label={`CPU ${Math.round(cpu * 100)}%`} />
+                )}
+              </Td>
+              <Td className='text-fg-muted tabular-nums'>
+                {memMb == null ? '—' : `${Math.round(memMb)} MB`}
+              </Td>
+              <Td>
+                <LabelChips labels={w.labels} emptyText='none' />
+              </Td>
+              <Td className='text-fg-muted tabular-nums'>
+                {seen ? relativeTime(seen) : '—'}
+              </Td>
+              <Td className='font-mono text-fg-subtle'>{w.agent_version || '—'}</Td>
+              <Td className='text-right'>
+                <span className='inline-flex items-center gap-1.5'>
+                  {w.status === 'dead' && onReEnable && (
+                    <Button
+                      variant='outline'
+                      size='xs'
+                      disabled={reEnablingId === w.id}
+                      onClick={() => onReEnable(w)}
+                    >
+                      <Power className='h-3 w-3' />
+                      {reEnablingId === w.id ? 'Re-enabling…' : 'Re-enable'}
+                    </Button>
+                  )}
+                  {onDelete && (
+                    <IconButton
+                      label={`Delete ${w.name}`}
+                      variant='ghost'
+                      disabled={deletingId === w.id}
+                      onClick={() => onDelete(w)}
+                    >
+                      <Trash2 className='h-3.5 w-3.5' />
+                    </IconButton>
+                  )}
+                </span>
+              </Td>
+            </RowLink>
+          );
+        })}
+      </TBody>
+    </Table>
   );
 }

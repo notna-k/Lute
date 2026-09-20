@@ -1,11 +1,9 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
-import { Brand, Rail, RailFooter, RailNav } from './Rail';
-import { TopBar } from './TopBar';
 import { CommandPalette } from './CommandPalette';
+import { Sidebar } from './Sidebar';
 import { NAV_ITEMS } from './nav';
+import { useUiPreferences } from '@/contexts/UiPreferencesContext';
 
 /** True when the keystroke belongs to whatever the user is typing into. */
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -20,99 +18,69 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Global keyboard shortcuts: ⌘K / Ctrl+K opens the command palette, and the
- * single letters shown in the rail jump to their section.
+ * Global keys: the palette on Ctrl/⌘ K or `/`, the rail width on `[`, and one
+ * letter per nav entry. Bare keys are ignored while the user is typing.
  */
-function useHotkeys(openCommand: () => void) {
+function useHotkeys(openCommand: () => void, toggleSidebar: () => void) {
   const navigate = useNavigate();
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
+    function onKeyDown(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
         openCommand();
         return;
       }
-      if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
-      const item = NAV_ITEMS.find((i) => i.hotkey === e.key.toLowerCase());
+      if (mod || event.altKey || isTypingTarget(event.target)) return;
+      if (event.key === '/') {
+        event.preventDefault();
+        openCommand();
+        return;
+      }
+      if (event.key === '[') {
+        event.preventDefault();
+        toggleSidebar();
+        return;
+      }
+      const item = NAV_ITEMS.find((i) => i.hotkey === event.key.toLowerCase());
       if (item) {
-        e.preventDefault();
+        event.preventDefault();
         navigate(item.to);
       }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [navigate, openCommand]);
+  }, [navigate, openCommand, toggleSidebar]);
 }
 
-interface AppShellProps {
+export interface AppShellProps {
   children: ReactNode;
 }
 
 /**
- * Console shell (see poc/console.html): a fixed left rail, a breadcrumb top bar,
- * and the page body. Below `lg` the rail collapses into a drawer.
+ * The application frame: a collapsible rail and one full-height page column.
+ *
+ * Nothing here scrolls. Each page owns its own scrolling regions, which is what
+ * lets a job's header and tabs stay fixed while its build log streams, and lets
+ * the build list and the log scroll past each other independently.
  */
 export function AppShell({ children }: AppShellProps) {
-  const [navOpen, setNavOpen] = useState(false);
+  const { sidebarExpanded, toggleSidebar } = useUiPreferences();
   const [commandOpen, setCommandOpen] = useState(false);
-  useHotkeys(() => setCommandOpen(true));
+  const openCommand = useCallback(() => setCommandOpen(true), []);
+  useHotkeys(openCommand, toggleSidebar);
 
   return (
-    <div className='min-h-screen bg-bg lg:grid lg:grid-cols-[232px_minmax(0,1fr)]'>
-      <Rail />
-
-      <main className='flex min-w-0 flex-col'>
-        <TopBar
-          onOpenNav={() => setNavOpen(true)}
-          onOpenCommand={() => setCommandOpen(true)}
-        />
-        <div className='flex-1 px-4 py-6 sm:px-6'>{children}</div>
+    <div className='group/sidebar flex h-full min-h-0 max-md:block max-md:h-auto max-md:min-h-screen'>
+      <Sidebar
+        expanded={sidebarExpanded}
+        onToggle={toggleSidebar}
+        onOpenCommand={openCommand}
+      />
+      <main className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden max-md:overflow-visible'>
+        {children}
       </main>
-
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
-
-      <Transition.Root show={navOpen} as={Fragment}>
-        <Dialog as='div' className='relative z-50 lg:hidden' onClose={setNavOpen}>
-          <Transition.Child
-            as={Fragment}
-            enter='ease-out duration-150'
-            enterFrom='opacity-0'
-            enterTo='opacity-100'
-            leave='ease-in duration-100'
-            leaveFrom='opacity-100'
-            leaveTo='opacity-0'
-          >
-            <div className='fixed inset-0 bg-black/60 backdrop-blur-sm' />
-          </Transition.Child>
-          <div className='fixed inset-0 flex'>
-            <Transition.Child
-              as={Fragment}
-              enter='transition ease-out duration-150'
-              enterFrom='-translate-x-full'
-              enterTo='translate-x-0'
-              leave='transition ease-in duration-100'
-              leaveFrom='translate-x-0'
-              leaveTo='-translate-x-full'
-            >
-              <Dialog.Panel className='relative flex w-full max-w-[232px] flex-col gap-5 border-r border-border bg-bg px-3.5 py-4'>
-                <div className='flex items-center justify-between'>
-                  <Brand />
-                  <button
-                    type='button'
-                    onClick={() => setNavOpen(false)}
-                    className='inline-flex h-8 w-8 items-center justify-center rounded-md text-fg-muted hover:bg-surface-hover hover:text-fg'
-                    aria-label='Close navigation'
-                  >
-                    <X className='h-5 w-5' />
-                  </button>
-                </div>
-                <RailNav onNavigate={() => setNavOpen(false)} />
-                <RailFooter />
-              </Dialog.Panel>
-            </Transition.Child>
-          </div>
-        </Dialog>
-      </Transition.Root>
     </div>
   );
 }
