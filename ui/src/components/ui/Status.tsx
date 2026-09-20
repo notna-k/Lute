@@ -69,7 +69,7 @@ export function StatusMark({ state, size = 10, className }: StatusMarkProps) {
         <span
           className={cn(
             'absolute inset-[1.5px] bg-warning',
-            state === 'running' && 'animate-breathe motion-reduce:animate-none'
+            state === 'running' && 'animate-breathe motion-reduce:animate-none',
           )}
         />
       )}
@@ -106,7 +106,7 @@ export function StatusText({ state, children, className }: StatusTextProps) {
       className={cn(
         'inline-flex items-center gap-[7px] whitespace-nowrap font-medium',
         TEXT_TONE[state],
-        className
+        className,
       )}
     >
       <StatusMark state={state} />
@@ -134,7 +134,7 @@ export function StatusBadge({ state, children, className }: StatusTextProps) {
       className={cn(
         'inline-flex h-[22px] items-center gap-[7px] whitespace-nowrap px-2 text-xs font-medium',
         BADGE_TONE[state],
-        className
+        className,
       )}
     >
       <StatusMark state={state} />

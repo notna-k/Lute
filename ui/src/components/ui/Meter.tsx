@@ -15,13 +15,7 @@ export interface MeterProps {
  * it answers "is this machine near its limit" at a glance, and the exact figure
  * sits next to it as text.
  */
-export function Meter({
-  value,
-  hotAt = 0.75,
-  showValue = true,
-  className,
-  label,
-}: MeterProps) {
+export function Meter({ value, hotAt = 0.75, showValue = true, className, label }: MeterProps) {
   const ratio = Math.max(0, Math.min(1, value));
   const hot = ratio > hotAt;
   return (
@@ -35,10 +29,7 @@ export function Meter({
     >
       <span className='relative block h-1 w-14 bg-border'>
         <span
-          className={cn(
-            'absolute inset-y-0 left-0',
-            hot ? 'bg-warning' : 'bg-fg-muted'
-          )}
+          className={cn('absolute inset-y-0 left-0', hot ? 'bg-warning' : 'bg-fg-muted')}
           style={{ width: `${ratio * 100}%` }}
         />
       </span>
@@ -71,7 +62,7 @@ export function Slots({ total, used, className }: SlotsProps) {
           aria-hidden
           className={cn(
             'h-[11px] w-[9px] border border-fg-subtle',
-            i < used && 'border-warning bg-warning'
+            i < used && 'border-warning bg-warning',
           )}
         />
       ))}

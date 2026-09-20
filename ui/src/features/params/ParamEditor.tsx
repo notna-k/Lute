@@ -29,7 +29,7 @@ export function ParamEditor({ field, onChange, siblings }: ParamEditorProps) {
   const Config = def.Config;
   // Once an author edits name or env by hand, stop overwriting their choice.
   const [linked, setLinked] = useState(
-    () => field.name === nameFromLabel(field.label) && field.envVar === envFromName(field.name)
+    () => field.name === nameFromLabel(field.label) && field.envVar === envFromName(field.name),
   );
   const duplicate = siblings.includes(field.name);
 
@@ -69,7 +69,7 @@ export function ParamEditor({ field, onChange, siblings }: ParamEditorProps) {
                 'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors',
                 active
                   ? 'border-primary bg-primary-subtle text-primary'
-                  : 'border-border text-fg-muted hover:border-border-strong hover:text-fg'
+                  : 'border-border text-fg-muted hover:border-border-strong hover:text-fg',
               )}
             >
               <Icon className='h-3.5 w-3.5' />
@@ -102,7 +102,9 @@ export function ParamEditor({ field, onChange, siblings }: ParamEditorProps) {
             <button
               type='button'
               onClick={() => setLinked((l) => !l)}
-              title={linked ? 'Derived from the label — click to unlink' : 'Not linked to the label'}
+              title={
+                linked ? 'Derived from the label — click to unlink' : 'Not linked to the label'
+              }
               className={cn('shrink-0 p-1', linked ? 'text-primary' : 'text-fg-subtle')}
             >
               {linked ? <Link2 className='h-3.5 w-3.5' /> : <Link2Off className='h-3.5 w-3.5' />}
@@ -144,13 +146,15 @@ export function ParamEditor({ field, onChange, siblings }: ParamEditorProps) {
             <span
               className={cn(
                 'relative h-5 w-9 rounded-full border transition-colors',
-                field.required ? 'border-warning bg-warning-subtle' : 'border-border bg-surface-hover'
+                field.required
+                  ? 'border-warning bg-warning-subtle'
+                  : 'border-border bg-surface-hover',
               )}
             >
               <span
                 className={cn(
                   'absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all',
-                  field.required ? 'left-[1.125rem] bg-warning' : 'left-0.5 bg-fg-subtle'
+                  field.required ? 'left-[1.125rem] bg-warning' : 'left-0.5 bg-fg-subtle',
                 )}
               />
             </span>

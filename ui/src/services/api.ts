@@ -1,8 +1,6 @@
 import { authBridge } from '../contexts/AuthContext';
 import { API_URL } from './apiBase';
 
-
-
 /**
  * An error response from the API. `fields` carries per-input messages when the
  * server rejected a payload against a schema (see the job-definition trigger
@@ -66,9 +64,7 @@ class ApiClient {
     if (!response.ok) {
       const body = await response.json().catch(() => ({ error: response.statusText }));
       const message =
-        typeof body.error === 'string'
-          ? body.error
-          : `HTTP error! status: ${response.status}`;
+        typeof body.error === 'string' ? body.error : `HTTP error! status: ${response.status}`;
       throw new ApiError(message, response.status, body.fields);
     }
     return response.json() as Promise<T>;

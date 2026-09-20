@@ -46,11 +46,9 @@ function write(key: string, value: string) {
 }
 
 export function UiPreferencesProvider({ children }: { children: ReactNode }) {
-  const [sidebarExpanded, setExpanded] = useState(
-    () => read(SIDEBAR_KEY, 'rail') === 'expanded'
-  );
+  const [sidebarExpanded, setExpanded] = useState(() => read(SIDEBAR_KEY, 'rail') === 'expanded');
   const [density, setDensityState] = useState<Density>(() =>
-    read(DENSITY_KEY, 'roomy') === 'compact' ? 'compact' : 'roomy'
+    read(DENSITY_KEY, 'roomy') === 'compact' ? 'compact' : 'roomy',
   );
 
   // Density is a CSS concern (row padding, base font size), so it rides on the
@@ -74,7 +72,7 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
         write(SIDEBAR_KEY, prev ? 'rail' : 'expanded');
         return !prev;
       }),
-    []
+    [],
   );
 
   const setDensity = useCallback((next: Density) => {
@@ -90,14 +88,10 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
       density,
       setDensity,
     }),
-    [sidebarExpanded, setSidebarExpanded, toggleSidebar, density, setDensity]
+    [sidebarExpanded, setSidebarExpanded, toggleSidebar, density, setDensity],
   );
 
-  return (
-    <UiPreferencesContext.Provider value={value}>
-      {children}
-    </UiPreferencesContext.Provider>
-  );
+  return <UiPreferencesContext.Provider value={value}>{children}</UiPreferencesContext.Provider>;
 }
 
 export function useUiPreferences(): UiPreferencesValue {

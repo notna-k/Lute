@@ -204,14 +204,14 @@ export function initialValues(fields: ParameterField[]): Record<string, Paramete
  */
 export function valuesFromEnv(
   fields: ParameterField[],
-  env: Record<string, string> | undefined
+  env: Record<string, string> | undefined,
 ): Record<string, ParameterValue> {
   return Object.fromEntries(
     fields.map((f) => {
       const raw = env?.[f.envVar];
       if (raw === undefined || f.type === 'secret') return [f.name, initialValue(f)];
       return [f.name, typeDef(f.type).fromEnv(f, raw)];
-    })
+    }),
   );
 }
 
@@ -227,7 +227,7 @@ export function isEmpty(value: ParameterValue | undefined): boolean {
  */
 export function validateAll(
   fields: ParameterField[],
-  values: Record<string, ParameterValue>
+  values: Record<string, ParameterValue>,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of fields) {
@@ -251,7 +251,7 @@ export function validateAll(
 /** The env block as the container will receive it. */
 export function toEnvPairs(
   fields: ParameterField[],
-  values: Record<string, ParameterValue>
+  values: Record<string, ParameterValue>,
 ): { key: string; value: string; masked: boolean }[] {
   return fields.map((field) => ({
     key: field.envVar,

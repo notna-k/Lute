@@ -20,14 +20,10 @@ const TAB_BASE =
   'inline-flex items-center gap-1.5 border-b-[1.5px] pb-2.5 pt-3 text-[13px] font-medium transition-colors -mb-px';
 
 const tabTone = (active: boolean) =>
-  active
-    ? 'border-fg text-fg'
-    : 'border-transparent text-fg-subtle hover:text-fg-muted';
+  active ? 'border-fg text-fg' : 'border-transparent text-fg-subtle hover:text-fg-muted';
 
 function Count({ value }: { value: number }) {
-  return (
-    <span className='font-mono text-[11px] text-fg-subtle tabular-nums'>{value}</span>
-  );
+  return <span className='font-mono text-[11px] text-fg-subtle tabular-nums'>{value}</span>;
 }
 
 /** Underlined tabs for local state — a view switch that is not a route. */
@@ -38,10 +34,7 @@ export function Tabs<T extends string = string>({
   className,
 }: TabsProps<T>) {
   return (
-    <div
-      role='tablist'
-      className={cn('flex gap-6 border-b border-border', className)}
-    >
+    <div role='tablist' className={cn('flex gap-6 border-b border-border', className)}>
       {items.map((item) => {
         const active = item.value === value;
         return (
@@ -55,7 +48,7 @@ export function Tabs<T extends string = string>({
             className={cn(
               TAB_BASE,
               tabTone(active),
-              item.disabled && 'cursor-not-allowed opacity-50'
+              item.disabled && 'cursor-not-allowed opacity-50',
             )}
           >
             {item.label}

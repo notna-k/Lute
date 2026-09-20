@@ -57,7 +57,7 @@ export function Sidebar({
         expanded && 'w-[216px]',
         // On phones the rail lies down as a top bar.
         'max-md:w-auto max-md:flex-row max-md:flex-wrap max-md:items-center max-md:border-b max-md:border-r-0 max-md:px-3 max-md:py-1.5',
-        className
+        className,
       )}
     >
       <div className='flex h-10 items-center gap-2.5 pl-0.5'>
@@ -70,8 +70,7 @@ export function Sidebar({
         </Link>
         {expanded && (
           <span className='min-w-0 flex-1 truncate text-[13.5px] max-md:hidden'>
-            <b className='font-semibold'>Lute</b>{' '}
-            <span className='text-fg-subtle'>panel</span>
+            <b className='font-semibold'>Lute</b> <span className='text-fg-subtle'>panel</span>
           </span>
         )}
         <IconButton
@@ -83,7 +82,7 @@ export function Sidebar({
               ? 'ml-auto'
               : // Collapsed, the toggle would crowd the logo, so it surfaces on
                 // hover as a floating affordance instead.
-                'absolute left-3 top-[54px] z-[3] h-6 w-6 border border-border bg-surface opacity-0 transition-opacity focus-visible:opacity-100 group-hover/sidebar:opacity-100'
+                'absolute left-3 top-[54px] z-[3] h-6 w-6 border border-border bg-surface opacity-0 transition-opacity focus-visible:opacity-100 group-hover/sidebar:opacity-100',
           )}
         >
           {expanded ? (
@@ -100,7 +99,7 @@ export function Sidebar({
         title={`Search — ${MOD_KEY} K`}
         className={cn(
           'mb-1.5 flex h-[34px] items-center gap-2.5 border border-transparent px-2.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg max-md:hidden',
-          expanded && 'border-border bg-surface'
+          expanded && 'border-border bg-surface',
         )}
       >
         <Search className='h-4 w-4 shrink-0' />
@@ -127,8 +126,7 @@ export function Sidebar({
               title={expanded ? undefined : item.label}
               className={cn(
                 'relative flex h-[34px] items-center gap-3 px-2.5 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg',
-                active &&
-                  'bg-surface-active text-fg shadow-[inset_2px_0_0_rgb(var(--color-fg))]'
+                active && 'bg-surface-active text-fg shadow-[inset_2px_0_0_rgb(var(--color-fg))]',
               )}
             >
               <item.icon className='h-4 w-4 shrink-0' />
@@ -152,7 +150,7 @@ export function Sidebar({
       <div
         className={cn(
           'flex items-center gap-2.5 border-t border-border pt-2 text-[12.5px] text-fg-muted max-md:ml-auto max-md:border-0 max-md:pt-0',
-          !expanded && 'flex-col-reverse gap-1.5 px-0 max-md:flex-row'
+          !expanded && 'flex-col-reverse gap-1.5 px-0 max-md:flex-row',
         )}
       >
         <UserMenu compact={!expanded} />

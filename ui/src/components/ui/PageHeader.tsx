@@ -30,10 +30,7 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header
-      className={cn(
-        'shrink-0 border-b border-border px-7 py-[var(--density-gutter-y)]',
-        className
-      )}
+      className={cn('shrink-0 border-b border-border px-7 py-[var(--density-gutter-y)]', className)}
     >
       {breadcrumb && (
         <div className='flex min-h-[18px] flex-wrap items-center gap-1 text-xs text-fg-subtle'>
@@ -44,13 +41,9 @@ export function PageHeader({
         <h1 className='m-0 mt-1 flex flex-wrap items-center gap-3 text-[22px] font-semibold leading-tight tracking-[-0.015em]'>
           {title}
         </h1>
-        {actions && (
-          <div className='ml-auto flex flex-wrap gap-1.5'>{actions}</div>
-        )}
+        {actions && <div className='ml-auto flex flex-wrap gap-1.5'>{actions}</div>}
       </div>
-      {description && (
-        <p className='mt-1.5 max-w-[75ch] text-fg-muted'>{description}</p>
-      )}
+      {description && <p className='mt-1.5 max-w-[75ch] text-fg-muted'>{description}</p>}
       {facts && (
         <div className='mt-2.5 flex flex-wrap items-center gap-x-[22px] gap-y-1.5 text-[12.5px] text-fg-muted'>
           {facts}
@@ -75,7 +68,7 @@ export function Fact({ icon, children, title, className }: FactProps) {
       title={title}
       className={cn(
         'inline-flex items-center gap-1.5 whitespace-nowrap [&>svg]:text-fg-subtle',
-        className
+        className,
       )}
     >
       {icon}

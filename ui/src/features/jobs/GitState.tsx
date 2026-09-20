@@ -226,7 +226,7 @@ export function JobActionsMenu({ job, className }: { job: JobDefinition; classNa
                       onClick={item.onClick}
                       className={cn(
                         'flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-fg',
-                        active && 'bg-surface-hover'
+                        active && 'bg-surface-hover',
                       )}
                     >
                       <Icon className='h-4 w-4 text-fg-muted' />

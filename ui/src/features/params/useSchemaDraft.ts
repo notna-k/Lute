@@ -33,9 +33,7 @@ export function stripIds(fields: DraftField[]): ParameterField[] {
 
 export function useSchemaDraft(source: ParameterField[]) {
   const [fields, setFields] = useState<DraftField[]>(() => withIds(source));
-  const [values, setValues] = useState<Record<string, ParameterValue>>(() =>
-    initialValues(source)
-  );
+  const [values, setValues] = useState<Record<string, ParameterValue>>(() => initialValues(source));
   const [submitted, setSubmitted] = useState(false);
 
   // Reseed when the definition itself changes (a refetch after a Git sync).
@@ -93,7 +91,7 @@ export function useSchemaDraft(source: ParameterField[]) {
         return next;
       });
     },
-    [fields]
+    [fields],
   );
 
   const addField = useCallback(
@@ -116,7 +114,7 @@ export function useSchemaDraft(source: ParameterField[]) {
       setValues((vs) => ({ ...vs, [field.name]: initialValue(field) }));
       return id;
     },
-    [fields]
+    [fields],
   );
 
   const duplicateField = useCallback(
@@ -135,7 +133,7 @@ export function useSchemaDraft(source: ParameterField[]) {
       setFields(next);
       setValues((vs) => ({ ...vs, [copy.name]: initialValue(copy) }));
     },
-    [fields]
+    [fields],
   );
 
   const removeField = useCallback((id: string) => {
@@ -174,7 +172,7 @@ export function useSchemaDraft(source: ParameterField[]) {
   /** True once the draft schema differs from what Git gave us. */
   const dirty = useMemo(
     () => JSON.stringify(stripIds(fields)) !== JSON.stringify(source),
-    [fields, source]
+    [fields, source],
   );
 
   return {

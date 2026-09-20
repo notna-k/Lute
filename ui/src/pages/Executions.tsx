@@ -41,8 +41,7 @@ type StatusFilter = '' | 'success' | 'failed';
 type SortOption = 'finished_at_desc' | 'finished_at_asc';
 
 /** Shortens an opaque id to something a row can hold without wrapping. */
-const shortId = (id: string, keep = 10) =>
-  id.length > keep + 2 ? `${id.slice(0, keep)}…` : id;
+const shortId = (id: string, keep = 10) => (id.length > keep + 2 ? `${id.slice(0, keep)}…` : id);
 
 export default function Executions() {
   const navigate = useNavigate();
@@ -243,10 +242,7 @@ export default function Executions() {
                       <Td className='text-fg-muted'>{ex.queue}</Td>
                       <Td className='font-mono text-fg-muted' title={ex.worker_id}>
                         {ex.worker_id ? (
-                          <Link
-                            to={`/workers/${ex.worker_id}`}
-                            className='hover:underline'
-                          >
+                          <Link to={`/workers/${ex.worker_id}`} className='hover:underline'>
                             {shortId(ex.worker_id, 8)}
                           </Link>
                         ) : (
@@ -259,13 +255,11 @@ export default function Executions() {
                       >
                         {finished ? relativeTime(finished) : '—'}
                       </Td>
-                      <Td className='text-right tabular-nums'>
-                        {duration(ex.elapsed_ms)}
-                      </Td>
+                      <Td className='text-right tabular-nums'>{duration(ex.elapsed_ms)}</Td>
                       <Td
                         className={cn(
                           'max-w-[220px] truncate',
-                          ex.error ? 'text-danger' : 'text-fg-subtle'
+                          ex.error ? 'text-danger' : 'text-fg-subtle',
                         )}
                         title={ex.error || ''}
                       >
@@ -276,12 +270,7 @@ export default function Executions() {
                 })}
               </TBody>
             </Table>
-            <Pagination
-              total={total}
-              page={page}
-              pageSize={PAGE_SIZE}
-              onPageChange={setPage}
-            />
+            <Pagination total={total} page={page} pageSize={PAGE_SIZE} onPageChange={setPage} />
           </>
         )}
       </PageScroll>

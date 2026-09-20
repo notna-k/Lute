@@ -59,7 +59,7 @@ export default function JobNew() {
       successRate: 0,
       medianDurationMs: 0,
     }),
-    [name, description, queue, runtime, command, sourceRepo]
+    [name, description, queue, runtime, command, sourceRepo],
   );
 
   const save = useMutation({

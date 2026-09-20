@@ -73,9 +73,7 @@ function RateCell({ job }: { job: JobDefinition }) {
   const rate = job.successRate;
   return (
     <span
-      className={
-        rate >= 0.97 ? 'text-fg' : rate >= 0.9 ? 'text-warning' : 'text-danger'
-      }
+      className={rate >= 0.97 ? 'text-fg' : rate >= 0.9 ? 'text-warning' : 'text-danger'}
       title='Success rate over the trailing 30 days'
     >
       {percent(rate)}
@@ -97,11 +95,7 @@ function JobRow({ job }: { job: JobDefinition }) {
           </Link>
           {job.gitState !== 'synced' && <GitStateBadge state={job.gitState} />}
         </div>
-        {job.description && (
-          <p className='row-subtext max-w-[46ch]'>
-            {job.description}
-          </p>
-        )}
+        {job.description && <p className='row-subtext max-w-[46ch]'>{job.description}</p>}
       </Td>
       <Td>
         {last ? (
@@ -112,9 +106,7 @@ function JobRow({ job }: { job: JobDefinition }) {
           <span className='text-fg-subtle'>never run</span>
         )}
       </Td>
-      <Td className='tabular-nums text-fg-muted'>
-        {last ? relativeTime(last.startedAt) : '—'}
-      </Td>
+      <Td className='tabular-nums text-fg-muted'>{last ? relativeTime(last.startedAt) : '—'}</Td>
       <Td className='tabular-nums text-fg-muted'>
         {duration(last?.durationMs ?? (job.medianDurationMs || null))}
       </Td>
@@ -179,7 +171,7 @@ export default function Jobs() {
       running: all.filter((j) => matchesHealth(j, 'running')).length,
       drift: all.filter((j) => matchesHealth(j, 'drift')).length,
     }),
-    [all]
+    [all],
   );
 
   const groups = useMemo(() => {
@@ -190,7 +182,7 @@ export default function Jobs() {
         (!needle ||
           job.name.toLowerCase().includes(needle) ||
           job.slug.toLowerCase().includes(needle) ||
-          job.source.path.toLowerCase().includes(needle))
+          job.source.path.toLowerCase().includes(needle)),
     );
     const byFolder = new Map<string, JobDefinition[]>();
     for (const job of filtered) {
@@ -224,9 +216,7 @@ export default function Jobs() {
               <span className='text-warning tabular-nums'>{counts.running} in flight</span>
             )}
             {counts.drift > 0 && (
-              <span className='text-warning tabular-nums'>
-                {counts.drift} differ from Git
-              </span>
+              <span className='text-warning tabular-nums'>{counts.drift} differ from Git</span>
             )}
           </>
         }
@@ -352,8 +342,7 @@ export default function Jobs() {
                       </button>
                     </Td>
                   </Tr>
-                  {!isCollapsed &&
-                    group.rows.map((job) => <JobRow key={job.slug} job={job} />)}
+                  {!isCollapsed && group.rows.map((job) => <JobRow key={job.slug} job={job} />)}
                 </TBody>
               );
             })}

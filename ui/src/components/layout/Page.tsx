@@ -18,12 +18,12 @@ export const PageScroll = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivEleme
         ref={ref}
         className={cn(
           'scrollbar-thin min-h-0 flex-1 overflow-auto max-md:overflow-visible',
-          className
+          className,
         )}
         {...props}
       />
     );
-  }
+  },
 );
 
 /** Standard content padding inside a PageScroll, matching the header's gutter. */
@@ -36,7 +36,7 @@ export const PageBody = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement
         {...props}
       />
     );
-  }
+  },
 );
 
 export interface SectionProps extends HTMLAttributes<HTMLElement> {
@@ -48,16 +48,11 @@ export interface SectionProps extends HTMLAttributes<HTMLElement> {
 /** A titled block inside a PageBody. */
 export function Section({ title, aside, className, children, ...rest }: SectionProps) {
   return (
-    <section
-      className={cn('mt-[var(--density-section-gap)] first:mt-0', className)}
-      {...rest}
-    >
+    <section className={cn('mt-[var(--density-section-gap)] first:mt-0', className)} {...rest}>
       {(title || aside) && (
         <h3 className='mb-2 flex items-center gap-2.5'>
           {title && <span className='caption'>{title}</span>}
-          {aside && (
-            <span className='ml-auto text-xs font-normal text-fg-muted'>{aside}</span>
-          )}
+          {aside && <span className='ml-auto text-xs font-normal text-fg-muted'>{aside}</span>}
         </h3>
       )}
       {children}

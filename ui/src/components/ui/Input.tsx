@@ -22,7 +22,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { className, leftIcon, rightIcon, ...props },
-  ref
+  ref,
 ) {
   if (leftIcon || rightIcon) {
     return (
@@ -34,13 +34,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         )}
         <input
           ref={ref}
-          className={cn(
-            BASE_FIELD,
-            'h-[30px]',
-            leftIcon && 'pl-8',
-            rightIcon && 'pr-8',
-            className
-          )}
+          className={cn(BASE_FIELD, 'h-[30px]', leftIcon && 'pl-8', rightIcon && 'pr-8', className)}
           {...props}
         />
         {rightIcon && (
@@ -68,34 +62,34 @@ export const Textarea = forwardRef<
   );
 });
 
-export interface NativeSelectProps
-  extends SelectHTMLAttributes<HTMLSelectElement> {
+export interface NativeSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   placeholder?: string;
 }
 
-export const NativeSelect = forwardRef<HTMLSelectElement, NativeSelectProps>(
-  function NativeSelect({ className, children, ...props }, ref) {
-    return (
-      <select
-        ref={ref}
-        // The chevron is drawn with currentColor so it follows the theme
-        // without a second asset per palette.
-        className={cn(
-          BASE_FIELD,
-          'h-[30px] appearance-none bg-no-repeat pr-7 [background-position:right_8px_center] [background-size:14px]',
-          className
-        )}
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-        }}
-        {...props}
-      >
-        {children}
-      </select>
-    );
-  }
-);
+export const NativeSelect = forwardRef<HTMLSelectElement, NativeSelectProps>(function NativeSelect(
+  { className, children, ...props },
+  ref,
+) {
+  return (
+    <select
+      ref={ref}
+      // The chevron is drawn with currentColor so it follows the theme
+      // without a second asset per palette.
+      className={cn(
+        BASE_FIELD,
+        'h-[30px] appearance-none bg-no-repeat pr-7 [background-position:right_8px_center] [background-size:14px]',
+        className,
+      )}
+      style={{
+        backgroundImage:
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+      }}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+});
 
 export interface FieldProps {
   label?: ReactNode;
@@ -145,43 +139,34 @@ export function Field({
               )}
             </label>
           )}
-          {required && (
-            <span className='text-[11.5px] text-fg-subtle'>required</span>
-          )}
-          {code && (
-            <code className='ml-auto font-mono text-[11px] text-fg-subtle'>
-              {code}
-            </code>
-          )}
+          {required && <span className='text-[11.5px] text-fg-subtle'>required</span>}
+          {code && <code className='ml-auto font-mono text-[11px] text-fg-subtle'>{code}</code>}
           {labelAction && <span className={cn(!code && 'ml-auto')}>{labelAction}</span>}
         </div>
       )}
       {children}
       {(hint || error) && (
-        <p className={cn('text-xs', error ? 'text-danger' : 'text-fg-subtle')}>
-          {error || hint}
-        </p>
+        <p className={cn('text-xs', error ? 'text-danger' : 'text-fg-subtle')}>{error || hint}</p>
       )}
     </div>
   );
 }
 
-export interface SwitchProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+export interface SwitchProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label?: ReactNode;
 }
 
 /** A labelled on/off switch — the settings and boolean-parameter control. */
 export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch(
   { label, className, disabled, ...props },
-  ref
+  ref,
 ) {
   return (
     <label
       className={cn(
         'inline-flex cursor-pointer items-center gap-2.5',
         disabled && 'cursor-not-allowed opacity-50',
-        className
+        className,
       )}
     >
       <input
@@ -191,7 +176,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch(
         className={cn(
           'relative m-0 h-[17px] w-[30px] shrink-0 cursor-pointer appearance-none bg-border transition-colors',
           'after:absolute after:left-0.5 after:top-0.5 after:h-[13px] after:w-[13px] after:bg-fg-muted after:transition-transform after:content-[""]',
-          'checked:bg-fg checked:after:translate-x-[13px] checked:after:bg-bg'
+          'checked:bg-fg checked:after:translate-x-[13px] checked:after:bg-bg',
         )}
         {...props}
       />

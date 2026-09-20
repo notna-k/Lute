@@ -51,12 +51,7 @@ import {
   StatusMark,
 } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
-import type {
-  Build,
-  JobDefinition,
-  ParameterField,
-  ParameterValues,
-} from '@/types/jobs';
+import type { Build, JobDefinition, ParameterField, ParameterValues } from '@/types/jobs';
 
 export type WorkbenchMode = 'run' | 'edit';
 type RunPane = 'docker' | 'curl';
@@ -127,17 +122,13 @@ export function BuildWorkbench({
 
   const { fields, values, setValue } = draft;
   const selected = fields.find((f) => f.id === selectedId) ?? null;
-  const errors = draft.submitted
-    ? { ...draft.localErrors, ...serverErrors }
-    : (serverErrors ?? {});
+  const errors = draft.submitted ? { ...draft.localErrors, ...serverErrors } : (serverErrors ?? {});
 
   const doc = useMemo(() => toYaml(job, stripIds(fields)), [job, fields]);
 
   const payload = useMemo(() => {
     const body = Object.fromEntries(
-      fields
-        .filter((f) => f.type !== 'secret')
-        .map((f) => [f.name, values[f.name] ?? null])
+      fields.filter((f) => f.type !== 'secret').map((f) => [f.name, values[f.name] ?? null]),
     );
     return JSON.stringify({ values: body }, null, 2);
   }, [fields, values]);
@@ -161,7 +152,7 @@ export function BuildWorkbench({
     // Secrets resolve worker-side from their secretRef; sending a placeholder
     // would only invite the server to store one.
     const payloadValues = Object.fromEntries(
-      fields.filter((f) => f.type !== 'secret').map((f) => [f.name, values[f.name]])
+      fields.filter((f) => f.type !== 'secret').map((f) => [f.name, values[f.name]]),
     );
     onRun?.(payloadValues, stripIds(fields));
   }
@@ -181,9 +172,7 @@ export function BuildWorkbench({
   const driftNote = draft.dirty && (
     <Badge tone='warning' size='sm'>
       <GitCompare className='h-3 w-3' />
-      {job.source.commit
-        ? `differs from @${job.source.commit}`
-        : 'not committed to Git'}
+      {job.source.commit ? `differs from @${job.source.commit}` : 'not committed to Git'}
     </Badge>
   );
 
@@ -194,7 +183,7 @@ export function BuildWorkbench({
           'grid items-start gap-5',
           mode === 'edit'
             ? 'xl:grid-cols-[22rem_minmax(0,1fr)_22rem]'
-            : 'xl:grid-cols-[14rem_minmax(0,1fr)_22rem]'
+            : 'xl:grid-cols-[14rem_minmax(0,1fr)_22rem]',
         )}
       >
         {/* ============================ LEFT ============================ */}
@@ -213,9 +202,7 @@ export function BuildWorkbench({
                   Job defaults
                   {startedFrom === null && <Check className='ml-auto h-3 w-3' />}
                 </Chip>
-                {seedable.length > 0 && (
-                  <span className='caption px-1 pt-2'>previous builds</span>
-                )}
+                {seedable.length > 0 && <span className='caption px-1 pt-2'>previous builds</span>}
                 {seedable.map((b) => (
                   <Chip
                     key={b.id}
@@ -226,15 +213,12 @@ export function BuildWorkbench({
                   >
                     <StatusMark state={b.status} size={8} />
                     <span className='font-mono'>#{b.id}</span>
-                    <span className='ml-auto text-fg-subtle'>
-                      {relativeTime(b.startedAt)}
-                    </span>
+                    <span className='ml-auto text-fg-subtle'>{relativeTime(b.startedAt)}</span>
                   </Chip>
                 ))}
                 {seedable.length === 0 && (
                   <p className='px-1 py-2 text-[11.5px] leading-relaxed text-fg-subtle'>
-                    Once this job has run, its values show up here as starting
-                    points.
+                    Once this job has run, its values show up here as starting points.
                   </p>
                 )}
               </div>
@@ -245,18 +229,14 @@ export function BuildWorkbench({
                The panel grows to its content and the page scrolls instead. */
             <Card className='sticky top-0'>
               <CardHeader>
-                <CardTitle>
-                  Configure{selected ? ` · ${selected.name}` : ''}
-                </CardTitle>
+                <CardTitle>Configure{selected ? ` · ${selected.name}` : ''}</CardTitle>
               </CardHeader>
               <div className='p-4'>
                 {selected ? (
                   <ParamEditor
                     field={selected}
                     onChange={(patch) => draft.updateField(selected.id, patch)}
-                    siblings={fields
-                      .filter((f) => f.id !== selected.id)
-                      .map((f) => f.name)}
+                    siblings={fields.filter((f) => f.id !== selected.id).map((f) => f.name)}
                   />
                 ) : (
                   <p className='py-8 text-center text-[12.5px] text-fg-subtle'>
@@ -303,12 +283,9 @@ export function BuildWorkbench({
                   {running ? 'Queueing…' : 'Run build'}
                 </Button>
                 <span className='font-mono text-[11.5px] text-fg-subtle'>
-                  queue <span className='text-fg-muted'>{job.queue}</span> ·{' '}
-                  {job.runtime}
+                  queue <span className='text-fg-muted'>{job.queue}</span> · {job.runtime}
                 </span>
-                {startedFrom && (
-                  <Badge size='sm'>from #{startedFrom}</Badge>
-                )}
+                {startedFrom && <Badge size='sm'>from #{startedFrom}</Badge>}
                 <Button
                   variant='ghost'
                   size='xs'
@@ -321,8 +298,7 @@ export function BuildWorkbench({
 
               {(runError || (draft.submitted && !draft.valid)) && (
                 <p className='mt-2 font-mono text-xs text-danger'>
-                  {runError ??
-                    `${Object.keys(draft.localErrors).length} field(s) need attention`}
+                  {runError ?? `${Object.keys(draft.localErrors).length} field(s) need attention`}
                 </p>
               )}
             </>
@@ -359,10 +335,7 @@ export function BuildWorkbench({
                           ? 'border-fg bg-bg-subtle'
                           : 'border-transparent hover:border-border hover:bg-surface-hover',
                         dragIndex === i && 'opacity-40',
-                        overIndex === i &&
-                          dragIndex !== null &&
-                          dragIndex !== i &&
-                          'border-fg'
+                        overIndex === i && dragIndex !== null && dragIndex !== i && 'border-fg',
                       )}
                     >
                       {/* Only the grip is draggable, so text selection inside
@@ -389,7 +362,7 @@ export function BuildWorkbench({
                       <div
                         className={cn(
                           'absolute right-2 top-2 flex items-center gap-0.5 border border-border bg-bg-elevated p-0.5 text-fg-subtle transition-opacity',
-                          active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                          active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
                         )}
                       >
                         <span className='px-1'>
@@ -554,7 +527,7 @@ export function BuildWorkbench({
                           key={p.key}
                           className={cn(
                             '-mx-1 whitespace-nowrap px-1',
-                            fields[i]?.name === focusName && 'bg-warning-subtle'
+                            fields[i]?.name === focusName && 'bg-warning-subtle',
                           )}
                         >
                           <span className='text-fg-subtle'> -e </span>
@@ -579,8 +552,8 @@ export function BuildWorkbench({
                   </Card>
                   <p className='mt-2 text-[11.5px] leading-relaxed text-fg-subtle'>
                     What the worker exports before running{' '}
-                    <code className='font-mono text-fg-muted'>{job.command}</code>.
-                    Secrets resolve on the worker and never leave the store.
+                    <code className='font-mono text-fg-muted'>{job.command}</code>. Secrets resolve
+                    on the worker and never leave the store.
                   </p>
                 </>
               ) : (
@@ -589,14 +562,14 @@ export function BuildWorkbench({
                     <CardTitle>Equivalent request</CardTitle>
                   </CardHeader>
                   <pre className='scrollbar-thin max-h-[26rem] overflow-auto px-3 py-2.5 font-mono text-[12px] leading-relaxed text-fg'>
-{`curl -X POST \\
+                    {`curl -X POST \\
   $CORE/api/v1/job-definitions/${job.slug}/trigger \\
   -H 'Authorization: Bearer $TOKEN' \\
   -d '${payload}'`}
                   </pre>
                   <p className='px-3 pb-3 text-[11.5px] leading-relaxed text-fg-subtle'>
-                    The panel and this call share one schema — anything the form
-                    rejects, the API rejects.
+                    The panel and this call share one schema — anything the form rejects, the API
+                    rejects.
                   </p>
                 </Card>
               )}

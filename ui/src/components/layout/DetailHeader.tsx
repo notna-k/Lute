@@ -47,7 +47,7 @@ export function DetailHeader({
     <header
       className={cn(
         'shrink-0 border-b border-border px-7 pt-[var(--density-toolbar-y)] max-md:px-4',
-        className
+        className,
       )}
     >
       <div className='flex flex-wrap items-center gap-3'>
@@ -73,9 +73,7 @@ export function DetailHeader({
           </h1>
           {tags}
           {subtitle && (
-            <span className='min-w-0 truncate text-[12.5px] text-fg-subtle'>
-              {subtitle}
-            </span>
+            <span className='min-w-0 truncate text-[12.5px] text-fg-subtle'>{subtitle}</span>
           )}
         </div>
         {actions && <div className='flex shrink-0 gap-1.5'>{actions}</div>}

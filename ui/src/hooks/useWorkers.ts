@@ -1,9 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  workerService,
-  CreateWorkerRequest,
-  UpdateWorkerRequest,
-} from '../services/workerService';
+import { workerService, CreateWorkerRequest, UpdateWorkerRequest } from '../services/workerService';
 
 export const workerKeys = {
   all: ['workers'] as const,

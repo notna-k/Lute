@@ -32,8 +32,7 @@ const TONE_ICONS: Record<AlertTone, typeof Info> = {
   danger: AlertTriangle,
 };
 
-export interface AlertProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
+export interface AlertProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   tone?: AlertTone;
   title?: ReactNode;
   /** Buttons that act on what the banner reports, aligned to the right. */
@@ -57,7 +56,7 @@ export function Alert({
       className={cn(
         'flex flex-wrap items-center gap-2.5 border border-l-2 border-border bg-surface px-3 py-2.5 text-[13px]',
         EDGE[tone],
-        className
+        className,
       )}
       {...rest}
     >

@@ -56,9 +56,7 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [mode, setModeState] = useState<ThemeMode>(() => readStoredMode());
-  const [resolved, setResolved] = useState<ResolvedTheme>(() =>
-    resolveTheme(readStoredMode())
-  );
+  const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveTheme(readStoredMode()));
 
   useEffect(() => {
     applyThemeClass(resolved);
@@ -68,8 +66,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     setResolved(resolveTheme(mode));
     if (mode !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const listener = (e: MediaQueryListEvent) =>
-      setResolved(e.matches ? 'dark' : 'light');
+    const listener = (e: MediaQueryListEvent) => setResolved(e.matches ? 'dark' : 'light');
     mq.addEventListener('change', listener);
     return () => mq.removeEventListener('change', listener);
   }, [mode]);
@@ -98,12 +95,10 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({ mode, resolved, setMode, toggle }),
-    [mode, resolved, setMode, toggle]
+    [mode, resolved, setMode, toggle],
   );
 
-  return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {

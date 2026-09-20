@@ -14,18 +14,12 @@ export interface EmptyStateProps {
  * table or panel that already has a border, and a second dashed box around it
  * reads as a broken layout rather than an explanation.
  */
-export function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-  className,
-}: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
     <div
       className={cn(
         'grid justify-items-center gap-2.5 px-5 py-10 text-center text-fg-subtle',
-        className
+        className,
       )}
     >
       {icon}

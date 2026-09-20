@@ -9,13 +9,7 @@ export interface PaginationProps {
   className?: string;
 }
 
-export function Pagination({
-  total,
-  page,
-  pageSize,
-  onPageChange,
-  className,
-}: PaginationProps) {
+export function Pagination({ total, page, pageSize, onPageChange, className }: PaginationProps) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const start = total === 0 ? 0 : page * pageSize + 1;
   const end = Math.min(total, (page + 1) * pageSize);
@@ -25,9 +19,7 @@ export function Pagination({
       className={`flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-fg-muted ${className ?? ''}`}
     >
       <span className='tabular-nums'>
-        {total === 0
-          ? '0 results'
-          : `${start}–${end} of ${total}`}
+        {total === 0 ? '0 results' : `${start}–${end} of ${total}`}
       </span>
       <div className='flex items-center gap-2'>
         <IconButton

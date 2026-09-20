@@ -67,15 +67,11 @@ export default function WorkerDetail() {
     isError: workerError,
     refetch: refetchWorker,
   } = useWorker(id ?? '');
-  const { data: chartData, isLoading: uptimeLoading } = useDashboardUptime(
-    period,
-    id ?? undefined
-  );
+  const { data: chartData, isLoading: uptimeLoading } = useDashboardUptime(period, id ?? undefined);
   const reEnable = useReEnableWorker();
   const queryClient = useQueryClient();
   const updateLabels = useMutation({
-    mutationFn: (labels: Record<string, string>) =>
-      workerService.updateLabels(id!, labels),
+    mutationFn: (labels: Record<string, string>) => workerService.updateLabels(id!, labels),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['worker', id] }),
   });
 
@@ -120,11 +116,7 @@ export default function WorkerDetail() {
         crumbs={[{ label: 'Workers', to: '/workers' }]}
         title={worker.name}
         subtitle={worker.description}
-        tags={
-          <StatusBadge state={workerState(worker.status)}>
-            {worker.status}
-          </StatusBadge>
-        }
+        tags={<StatusBadge state={workerState(worker.status)}>{worker.status}</StatusBadge>}
         actions={
           worker.status === 'dead' ? (
             <Button
@@ -172,8 +164,7 @@ export default function WorkerDetail() {
         <PageBody>
           {worker.status === 'dead' && (
             <Alert tone='warning' title='This worker is marked dead' className='mb-6'>
-              It stopped sending heartbeats. Re-enable it to let the agent connect
-              again.
+              It stopped sending heartbeats. Re-enable it to let the agent connect again.
             </Alert>
           )}
 
@@ -182,8 +173,7 @@ export default function WorkerDetail() {
               <CardHeader>
                 <CardTitle>Routing labels</CardTitle>
                 <CardDescription>
-                  A build is dispatched here when every key in its selector matches
-                  a label below.
+                  A build is dispatched here when every key in its selector matches a label below.
                 </CardDescription>
               </CardHeader>
               <div className='p-4'>
