@@ -1,0 +1,105 @@
+# Lute dev stack — three separate containers:
+#   postgres  durable state + job queue
+#   core      stateless Go API (HTTP + WebSocket + gRPC), no embedded UI
+#   admin     decoupled SPA (nginx), proxies /api to core
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: lute-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lute}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lute}
+      POSTGRES_DB: ${POSTGRES_DB:-lute}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lute-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lute} -d ${POSTGRES_DB:-lute}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core:
+    build:
+      context: ../..
+      dockerfile: api/Dockerfile
+      args:
+        - WORKER_VERSION=${WORKER_VERSION:-0.1.0}
+        - BUILD_TIME=${BUILD_TIME:-unknown}
+    container_name: lute-core
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_HTTP_PORT:-8081}:8080" # HTTP API (direct/programmatic access)
+      - "${API_GRPC_PORT:-50051}:50051" # gRPC (workers connect here)
+    environment:
+      # Server
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      GIN_MODE: ${GIN_MODE:-release}
+      # CORS: the panel's browser-visible origin must be allowed, or the SPA's
+      # own requests are rejected with 403. Defaults are derived from ADMIN_PORT.
+      ADMIN_PORT: ${ADMIN_PORT:-8090}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # Database (Postgres)
+      DB_DRIVER: postgres
+      POSTGRES_DSN: postgres://${POSTGRES_USER:-lute}:${POSTGRES_PASSWORD:-lute}@postgres:5432/${POSTGRES_DB:-lute}?sslmode=disable
+      # Job definitions (GitOps source, mounted below)
+      JOB_DEFS_DIR: /etc/lute/jobdefs
+      # gRPC
+      GRPC_PORT: ${GRPC_PORT:-50051}
+      GRPC_HOST: ${GRPC_HOST:-0.0.0.0}
+      # WebSocket
+      WS_READ_BUFFER_SIZE: ${WS_READ_BUFFER_SIZE:-1024}
+      WS_WRITE_BUFFER_SIZE: ${WS_WRITE_BUFFER_SIZE:-1024}
+      WS_CHECK_ORIGIN: ${WS_CHECK_ORIGIN:-false}
+      # Auth (JWT + seeded admin)
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-lute}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-720h}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Worker binaries
+      WORKER_BINARY_DIR: /opt/lute/worker-binaries
+      # Metrics / heartbeat
+      METRICS_SNAPSHOT_INTERVAL: ${METRICS_SNAPSHOT_INTERVAL:-5s}
+      HEARTBEAT_CHECK_INTERVAL: ${HEARTBEAT_CHECK_INTERVAL:-5s}
+    volumes:
+      - ./jobdefs:/etc/lute/jobdefs:ro
+    networks:
+      - lute-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: ui/Dockerfile
+      args:
+        - VITE_METRICS_UPDATE_INTERVAL_SECONDS=${VITE_METRICS_UPDATE_INTERVAL_SECONDS:-5}
+    container_name: lute-admin
+    depends_on:
+      - core
+    ports:
+      - "${ADMIN_PORT:-8080}:80"
+    networks:
+      - lute-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  lute-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

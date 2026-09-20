@@ -1,0 +1,112 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap");
+@import "./styles/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  /* The shell owns scrolling: each pane scrolls on its own so the sidebar,
+     page header and build log stay put. `data-scroll` marks those panes. */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    margin: 0;
+    font-family: "Geist", ui-sans-serif, system-ui, -apple-system,
+      BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  /* Density is a vertical rhythm, not a type scale — see tokens.css. */
+  body {
+    line-height: var(--density-line);
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-color: rgb(var(--color-border));
+  }
+
+  :focus-visible {
+    outline: 1.5px solid rgb(var(--color-fg));
+    outline-offset: 1px;
+  }
+
+  /* Native controls follow the theme instead of the OS default. */
+  input,
+  textarea,
+  select {
+    color: inherit;
+    accent-color: rgb(var(--color-fg));
+  }
+
+  ::placeholder {
+    color: rgb(var(--color-fg-subtle));
+  }
+}
+
+@layer components {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-border-strong)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--color-border));
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--color-border-strong));
+  }
+
+  /**
+   * The second line of a list row — a description, a path, a label set.
+   *
+   * Compact drops it rather than shrinking it. It is the single biggest cost
+   * in row height, and an operator who asked to fit more builds on screen
+   * wants the row, not the prose; the detail page still has it.
+   */
+  .row-subtext {
+    @apply mt-0.5 truncate text-xs text-fg-subtle;
+  }
+
+  :root[data-density="compact"] .row-subtext {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Small all-caps section label, used above tables and in rails. */
+  .caption {
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.07em] text-fg-subtle;
+  }
+}

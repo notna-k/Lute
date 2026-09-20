@@ -1,0 +1,53 @@
+# Example job definition. Git is the source of truth (PRODUCT.md);
+# Core syncs this file into Postgres on startup.
+name: web-release
+description: >-
+  Builds and ships the marketing site. Definition is synced from Git —
+  trigger and observe here, edit config in the repo.
+queue: deploy
+labels:
+  region: eu
+runtime: node:25-alpine
+command: ./scripts/ship.sh
+source:
+  repo: infra/jobs
+  commit: a91f0c
+parameters:
+  - name: environment
+    type: select
+    label: Target environment
+    env: ENVIRONMENT
+    required: true
+    default: staging
+    options:
+      - { value: dev, label: Development, hint: dev.lute.dev, tone: success }
+      - { value: staging, label: Staging, hint: staging.lute.dev, tone: warning }
+      - { value: prod, label: Production, hint: "www.lute.dev · approval required", tone: danger }
+  - name: regions
+    type: multiselect
+    label: Regions
+    env: REGIONS
+    description: Passed to the command as a comma-separated list.
+    default: [eu-central, us-east]
+    options:
+      - { value: eu-central, label: eu-central }
+      - { value: eu-west, label: eu-west }
+      - { value: us-east, label: us-east }
+      - { value: us-west, label: us-west }
+      - { value: ap-south, label: ap-south }
+  - name: release_date
+    type: date
+    label: Release date
+    env: RELEASE_DATE
+    default: '2026-07-25'
+  - name: dry_run
+    type: bool
+    label: Dry run
+    env: DRY_RUN
+    description: Produces a plan without shifting any traffic.
+    default: true
+  - name: deploy_token
+    type: secret
+    label: Deploy token
+    env: DEPLOY_TOKEN
+    secretRef: secrets/deploy
