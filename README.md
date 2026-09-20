@@ -15,6 +15,8 @@ problems it has:
 
 ![The Lute panel — job definitions synced from Git](docs/media/jobs.png)
 
+![The Lute panel — job definition editor](docs/media/job-definition.png)
+
 ## How it works
 
 Three pieces, each one doing one thing:
