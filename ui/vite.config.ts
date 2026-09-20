@@ -14,6 +14,17 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // In the compose stack nginx serves the SPA and proxies /api to core, so
+    // the app calls the API same-origin. Mirroring that here means `npm run
+    // dev` talks to the dev stack with no VITE_API_URL and no CORS entry.
+    proxy: {
+      '/api': {
+        target: process.env.DEV_API_TARGET ?? 'http://localhost:8080',
+        changeOrigin: true,
+        // The build log stream is a WebSocket on the same prefix.
+        ws: true,
+      },
+    },
   },
   envDir: './',
 });
