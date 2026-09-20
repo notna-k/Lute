@@ -33,6 +33,13 @@ export { Dialog } from './Dialog';
 export type { DialogProps } from './Dialog';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
+export { facetOptions, FilterBar, NoFilterMatches } from './FilterBar';
+export type {
+  FacetConfig,
+  FacetOption,
+  FilterBarProps,
+  ScopeOption,
+} from './FilterBar';
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
 export { Field, Input, NativeSelect, Switch, Textarea } from './Input';
@@ -86,8 +93,7 @@ export { Tabs, LinkTabs } from './Tabs';
 export type { LinkTabItem, LinkTabsProps, TabItem, TabsProps } from './Tabs';
 export { Tape } from './Tape';
 export type { TapeProps } from './Tape';
-export { FilterSelect, SearchInput, Toolbar } from './Toolbar';
-export type { FilterSelectProps, SearchInputProps } from './Toolbar';
+export { Toolbar } from './Toolbar';
 export { ToastProvider, toastSubject, useToast } from './Toast';
 export type { ToastLink, ToastOptions } from './Toast';
 export { Tooltip } from './Tooltip';

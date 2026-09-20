@@ -57,7 +57,9 @@ export function WorkerList({
     );
   }
 
-  if (!workers.length) return <div className='py-16'>{empty}</div>;
+  // The page owns the empty state's framing: filtered-to-nothing and
+  // nothing-yet are different sentences with different padding.
+  if (!workers.length) return <>{empty}</>;
 
   return (
     <Table>

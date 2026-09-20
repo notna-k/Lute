@@ -10,10 +10,12 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
+  Activity,
   ChevronRight,
   FileCode2,
   FolderOpen,
   GitBranch,
+  Layers,
   Play,
   Plus,
   RefreshCw,
@@ -23,11 +25,12 @@ import {
   Alert,
   Button,
   EmptyState,
+  facetOptions,
+  FilterBar,
+  NoFilterMatches,
   LinkButton,
   PageHeader,
   RowLink,
-  SearchInput,
-  SegmentedControl,
   Skeleton,
   StatusText,
   TBody,
@@ -36,10 +39,10 @@ import {
   Td,
   Th,
   THead,
-  Toolbar,
   Tr,
 } from '@/components/ui';
 import { PageScroll } from '@/components/layout';
+import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import { ConfigDialog, GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { duration, percent, relativeTime } from '@/lib/format';
 import type { BuildStatus, JobDefinition } from '@/types/jobs';
@@ -151,6 +154,16 @@ function syncSummary(r: SyncResult): string {
   return parts.length ? `Synced — ${parts.join(', ')}.` : 'Synced — already up to date.';
 }
 
+type SortKey = 'name' | 'recent' | 'slowest' | 'flakiest';
+
+/** Rows stay grouped by folder; sort decides the order inside each group. */
+const COMPARE: Record<SortKey, (a: JobDefinition, b: JobDefinition) => number> = {
+  name: (a, b) => a.name.localeCompare(b.name),
+  recent: (a, b) => (b.lastBuild?.startedAt ?? 0) - (a.lastBuild?.startedAt ?? 0),
+  slowest: (a, b) => b.medianDurationMs - a.medianDurationMs,
+  flakiest: (a, b) => a.successRate - b.successRate,
+};
+
 /** Stable empty list, so the memos below do not re-run on every render. */
 const NO_JOBS: JobDefinition[] = [];
 
@@ -158,8 +171,11 @@ export default function Jobs() {
   const queryClient = useQueryClient();
   const { data: jobs, isLoading } = useQuery({ queryKey: ['jobs'], queryFn: listJobs });
   const [exporting, setExporting] = useState(false);
-  const [query, setQuery] = useState('');
-  const [health, setHealth] = useState<Health>('all');
+  const [query, setQuery] = useFilterParam<string>('q', '');
+  const [health, setHealth] = useFilterParam<Health>('state', 'all');
+  const [folders, setFolders] = useFilterList('folder');
+  const [queues, setQueues] = useFilterList('queue');
+  const [sort, setSort] = useFilterParam<SortKey>('sort', 'name');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const all = jobs ?? NO_JOBS;
@@ -182,11 +198,22 @@ export default function Jobs() {
     [all]
   );
 
+  // The facet menus offer what the fleet of definitions actually holds, with
+  // the row count beside each value — a folder with one job is worth knowing
+  // about before picking it, not after.
+  const folderOptions = useMemo(() => facetOptions(all.map(folderOf)), [all]);
+  const queueOptions = useMemo(
+    () => facetOptions(all.map((j) => j.queue)),
+    [all]
+  );
+
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const filtered = all.filter(
       (job) =>
         matchesHealth(job, health) &&
+        (folders.length === 0 || folders.includes(folderOf(job))) &&
+        (queues.length === 0 || queues.includes(job.queue)) &&
         (!needle ||
           job.name.toLowerCase().includes(needle) ||
           job.slug.toLowerCase().includes(needle) ||
@@ -202,12 +229,19 @@ export default function Jobs() {
     return [...byFolder.entries()]
       .map(([folder, rows]) => ({
         folder,
-        rows: rows.sort((a, b) => a.name.localeCompare(b.name)),
+        rows: [...rows].sort(COMPARE[sort] ?? COMPARE.name),
       }))
       .sort((a, b) => a.folder.localeCompare(b.folder));
-  }, [all, health, query]);
+  }, [all, folders, health, query, queues, sort]);
 
   const shown = groups.reduce((n, g) => n + g.rows.length, 0);
+
+  function resetFilters() {
+    setQuery('');
+    setHealth('all');
+    setFolders([]);
+    setQueues([]);
+  }
 
   return (
     <>
@@ -252,28 +286,66 @@ export default function Jobs() {
 
       <ConfigDialog open={exporting} onClose={() => setExporting(false)} />
 
-      <Toolbar>
-        <SearchInput
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder='Filter by name or path'
-          aria-label='Filter jobs'
-        />
-        <SegmentedControl<Health>
-          label='Filter jobs'
-          value={health}
-          onChange={setHealth}
-          options={[
+      <FilterBar<Health>
+        search={{
+          value: query,
+          onChange: setQuery,
+          placeholder: 'Search by name, slug or path',
+          label: 'Search jobs',
+          chipLabel: 'name',
+        }}
+        scope={{
+          label: 'health',
+          allLabel: 'Any health',
+          allCount: counts.all,
+          icon: <Activity className='h-3.5 w-3.5 text-fg-subtle' />,
+          value: health,
+          onChange: setHealth,
+          options: [
             { value: 'all', label: 'All', count: counts.all },
             { value: 'failing', label: 'Failing', count: counts.failing },
             { value: 'running', label: 'In flight', count: counts.running },
-            { value: 'drift', label: 'Differs from Git', count: counts.drift },
-          ]}
-        />
-        <span className='ml-auto font-mono text-[11.5px] text-fg-subtle tabular-nums'>
-          {shown}/{counts.all}
-        </span>
-      </Toolbar>
+            {
+              value: 'drift',
+              label: 'Differs from Git',
+              count: counts.drift,
+              title: 'Definitions the panel changed, created or lost',
+            },
+          ],
+        }}
+        facets={[
+          {
+            id: 'folder',
+            label: 'folder',
+            allLabel: 'All folders',
+            icon: <FolderOpen className='h-3.5 w-3.5 text-fg-subtle' />,
+            values: folders,
+            options: folderOptions,
+            onChange: setFolders,
+          },
+          {
+            id: 'queue',
+            label: 'queue',
+            allLabel: 'All queues',
+            icon: <Layers className='h-3.5 w-3.5 text-fg-subtle' />,
+            values: queues,
+            options: queueOptions,
+            onChange: setQueues,
+          },
+        ]}
+        sort={{
+          value: sort,
+          onChange: (v) => setSort(v as SortKey),
+          options: [
+            { value: 'name', label: 'Name A–Z' },
+            { value: 'recent', label: 'Last run first' },
+            { value: 'slowest', label: 'Slowest first' },
+            { value: 'flakiest', label: 'Least reliable' },
+          ],
+        }}
+        count={{ shown, total: counts.all, noun: 'jobs' }}
+        onReset={resetFilters}
+      />
 
       <PageScroll>
         {(sync.isSuccess || sync.isError) && (
@@ -303,12 +375,7 @@ export default function Jobs() {
             />
           </div>
         ) : shown === 0 ? (
-          <div className='py-16'>
-            <EmptyState
-              title='Nothing matches'
-              description='Loosen the filter or clear the search box.'
-            />
-          </div>
+          <NoFilterMatches noun='jobs' onReset={resetFilters} />
         ) : (
           <Table>
             <THead>

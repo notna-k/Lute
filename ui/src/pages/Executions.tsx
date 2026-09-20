@@ -4,20 +4,24 @@
  * This is the cross-job view: the same rows a job's Builds tab shows, without
  * the job filter. Status is the first thing the eye needs, so it leads the row
  * and carries the shape vocabulary rather than a colour alone.
+ *
+ * Filtering happens on the server — the list is paginated, so a client-side
+ * search would only ever search the twenty-five rows already on screen and
+ * quietly lie about the rest.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, X } from 'lucide-react';
+import { Boxes, CircleDot, Layers, Plus, RefreshCw } from 'lucide-react';
 import {
   Alert,
   Button,
   EmptyState,
-  FilterSelect,
+  facetOptions,
+  FilterBar,
   IconButton,
-  NativeSelect,
+  NoFilterMatches,
   Pagination,
   RowLink,
-  SegmentedControl,
   Skeleton,
   StatusText,
   TBody,
@@ -26,23 +30,36 @@ import {
   Th,
   THead,
   PageHeader,
-  Toolbar,
   Tr,
 } from '@/components/ui';
 import { PageScroll } from '@/components/layout';
+import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import { EnqueueJobDialog } from '@/features/jobs/EnqueueJobDialog';
-import { executionService, type JobExecution } from '@/services/executionService';
+import {
+  executionService,
+  type ExecutionSort,
+  type JobExecution,
+} from '@/services/executionService';
 import { duration, relativeTime, timestamp, toEpochMs } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 const PAGE_SIZE = 25;
 
-type StatusFilter = '' | 'success' | 'failed';
-type SortOption = 'finished_at_desc' | 'finished_at_asc';
+type StatusFilter = 'all' | 'success' | 'failed';
 
 /** Shortens an opaque id to something a row can hold without wrapping. */
 const shortId = (id: string, keep = 10) =>
   id.length > keep + 2 ? `${id.slice(0, keep)}…` : id;
+
+/** Debounces the search box: one request per pause, not one per keystroke. */
+function useDebounced<T>(value: T, ms = 250): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return settled;
+}
 
 export default function Executions() {
   const navigate = useNavigate();
@@ -52,12 +69,14 @@ export default function Executions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [queueFilter, setQueueFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
-  const [sort, setSort] = useState<SortOption>('finished_at_desc');
+  const [search, setSearch] = useFilterParam<string>('q', '');
+  const [queues, setQueues] = useFilterList('queue');
+  const [types, setTypes] = useFilterList('type');
+  const [status, setStatus] = useFilterParam<StatusFilter>('state', 'all');
+  const [sort, setSort] = useFilterParam<ExecutionSort>('sort', 'finished_at_desc');
+  const debouncedSearch = useDebounced(search);
 
-  // null once the lookup fails: the filters then fall back to free text.
+  // null once the lookup fails: the facets then fall back to free text.
   const [queueOptions, setQueueOptions] = useState<string[] | null>([]);
   const [typeOptions, setTypeOptions] = useState<string[] | null>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,14 +94,21 @@ export default function Executions() {
     })();
   }, []);
 
+  // Any change to what is being asked for starts again at the first page: page
+  // 4 of the old result set is not page 4 of the new one.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, queues, types, status, sort]);
+
   const fetchExecutions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await executionService.list({
-        queue: queueFilter.trim() || undefined,
-        type: typeFilter.trim() || undefined,
-        status: statusFilter || undefined,
+        queues,
+        types,
+        status: status === 'all' ? undefined : status,
+        search: debouncedSearch,
         offset: page * PAGE_SIZE,
         limit: PAGE_SIZE,
         sort,
@@ -96,26 +122,33 @@ export default function Executions() {
     } finally {
       setLoading(false);
     }
-  }, [queueFilter, typeFilter, statusFilter, sort, page]);
+  }, [debouncedSearch, page, queues, sort, status, types]);
 
   useEffect(() => {
     void fetchExecutions();
   }, [fetchExecutions]);
 
-  const filtered = Boolean(queueFilter || typeFilter || statusFilter);
-  const clearFilters = () => {
-    setQueueFilter('');
-    setTypeFilter('');
-    setStatusFilter('');
+  const filtering =
+    Boolean(search.trim()) || queues.length > 0 || types.length > 0 || status !== 'all';
+
+  function resetFilters() {
+    setSearch('');
+    setQueues([]);
+    setTypes([]);
+    setStatus('all');
     setPage(0);
-  };
+  }
 
   return (
     <>
       <PageHeader
         title='Builds'
         description='Every run the engine has recorded, across all jobs.'
-        facts={<span className='tabular-nums'>{total} recorded</span>}
+        facts={
+          <span className='tabular-nums'>
+            {total} {filtering ? 'matching' : 'recorded'}
+          </span>
+        }
         actions={
           <Button variant='primary' size='sm' onClick={() => setDialogOpen(true)}>
             <Plus className='h-3.5 w-3.5' /> Trigger job
@@ -123,67 +156,70 @@ export default function Executions() {
         }
       />
 
-      <Toolbar>
-        <SegmentedControl<StatusFilter>
-          label='Filter by status'
-          value={statusFilter}
-          onChange={(v) => {
-            setStatusFilter(v);
-            setPage(0);
-          }}
-          options={[
-            { value: '', label: 'All' },
+      <FilterBar<StatusFilter>
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'Search by run, worker or error',
+          label: 'Search builds',
+          chipLabel: 'text',
+        }}
+        scope={{
+          label: 'result',
+          allLabel: 'Any result',
+          allCount: undefined,
+          icon: <CircleDot className='h-3.5 w-3.5 text-fg-subtle' />,
+          value: status,
+          onChange: setStatus,
+          options: [
+            { value: 'all', label: 'All' },
             { value: 'success', label: 'Passed' },
             { value: 'failed', label: 'Failed' },
-          ]}
-        />
-        <FilterSelect
-          label='queue'
-          allLabel='All queues'
-          value={queueFilter}
-          options={queueOptions}
-          onChange={(v) => {
-            setQueueFilter(v);
-            setPage(0);
-          }}
-        />
-        <FilterSelect
-          label='type'
-          allLabel='All types'
-          value={typeFilter}
-          options={typeOptions}
-          onChange={(v) => {
-            setTypeFilter(v);
-            setPage(0);
-          }}
-        />
-        <NativeSelect
-          value={sort}
-          aria-label='Sort order'
-          className='w-[150px]'
-          onChange={(e) => {
-            setSort(e.target.value as SortOption);
-            setPage(0);
-          }}
-        >
-          <option value='finished_at_desc'>Newest first</option>
-          <option value='finished_at_asc'>Oldest first</option>
-        </NativeSelect>
-        {filtered && (
-          <Button variant='ghost' size='sm' onClick={clearFilters}>
-            <X className='h-3.5 w-3.5' /> Clear
-          </Button>
-        )}
-        <IconButton
-          label='Refresh'
-          variant='outline'
-          className='ml-auto'
-          onClick={() => void fetchExecutions()}
-          disabled={loading}
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-        </IconButton>
-      </Toolbar>
+          ],
+        }}
+        facets={[
+          {
+            id: 'queue',
+            label: 'queue',
+            allLabel: 'All queues',
+            icon: <Layers className='h-3.5 w-3.5 text-fg-subtle' />,
+            values: queues,
+            options: queueOptions && facetOptions(queueOptions),
+            onChange: setQueues,
+          },
+          {
+            id: 'type',
+            label: 'type',
+            allLabel: 'All types',
+            icon: <Boxes className='h-3.5 w-3.5 text-fg-subtle' />,
+            values: types,
+            options: typeOptions && facetOptions(typeOptions),
+            onChange: setTypes,
+          },
+        ]}
+        sort={{
+          value: sort,
+          onChange: (v) => setSort(v as ExecutionSort),
+          options: [
+            { value: 'finished_at_desc', label: 'Newest first' },
+            { value: 'finished_at_asc', label: 'Oldest first' },
+            { value: 'elapsed_desc', label: 'Longest first' },
+            { value: 'elapsed_asc', label: 'Shortest first' },
+          ],
+        }}
+        count={{ total, noun: 'builds' }}
+        onReset={resetFilters}
+        actions={
+          <IconButton
+            label='Refresh'
+            variant='outline'
+            onClick={() => void fetchExecutions()}
+            disabled={loading}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+          </IconButton>
+        }
+      />
 
       <PageScroll>
         {error && (
@@ -199,27 +235,21 @@ export default function Executions() {
             ))}
           </div>
         ) : rows.length === 0 ? (
-          <div className='py-16'>
-            <EmptyState
-              title={filtered ? 'No runs match these filters' : 'No runs recorded yet'}
-              description={
-                filtered
-                  ? 'Loosen the filters, or trigger a job to produce one.'
-                  : 'Trigger a job and its run will land here.'
-              }
-              action={
-                filtered ? (
-                  <Button size='sm' onClick={clearFilters}>
-                    <X className='h-3.5 w-3.5' /> Clear filters
-                  </Button>
-                ) : (
+          filtering ? (
+            <NoFilterMatches noun='builds' onReset={resetFilters} />
+          ) : (
+            <div className='py-16'>
+              <EmptyState
+                title='No runs recorded yet'
+                description='Trigger a job and its run will land here.'
+                action={
                   <Button size='sm' onClick={() => setDialogOpen(true)}>
                     <Plus className='h-3.5 w-3.5' /> Trigger job
                   </Button>
-                )
-              }
-            />
-          </div>
+                }
+              />
+            </div>
+          )
         ) : (
           <>
             <Table>

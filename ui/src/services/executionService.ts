@@ -16,13 +16,22 @@ export interface JobExecution {
     finished_at: string;
 }
 
+export type ExecutionSort =
+    | 'finished_at_desc'
+    | 'finished_at_asc'
+    | 'elapsed_desc'
+    | 'elapsed_asc';
+
 export interface ListExecutionsParams {
-    queue?: string;
-    type?: string;
+    /** Any of these queues; empty or omitted means all of them. */
+    queues?: string[];
+    types?: string[];
     status?: '' | 'success' | 'failed';
+    /** Free text over the run id, the worker id and the error message. */
+    search?: string;
     offset?: number;
     limit?: number;
-    sort?: 'finished_at_desc' | 'finished_at_asc';
+    sort?: ExecutionSort;
 }
 
 export interface ListExecutionsResponse {
@@ -40,9 +49,12 @@ export interface ExecutionFilterOptions {
 export const executionService = {
     list: async (params?: ListExecutionsParams): Promise<ListExecutionsResponse> => {
         const qs = new URLSearchParams();
-        if (params?.queue) qs.set('queue', params.queue);
-        if (params?.type) qs.set('type', params.type);
+        // Repeated keys rather than a comma-joined list, so a queue name with a
+        // comma in it survives the round trip.
+        params?.queues?.forEach((q) => q && qs.append('queue', q));
+        params?.types?.forEach((t) => t && qs.append('type', t));
         if (params?.status) qs.set('status', params.status);
+        if (params?.search?.trim()) qs.set('q', params.search.trim());
         if (params?.offset !== undefined) qs.set('offset', String(params.offset));
         if (params?.limit !== undefined) qs.set('limit', String(params.limit));
         if (params?.sort) qs.set('sort', params.sort);
