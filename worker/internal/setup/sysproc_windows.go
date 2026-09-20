@@ -9,4 +9,3 @@ import "os/exec"
 func setDetachedProcessAttr(cmd *exec.Cmd) {
 	// No special attributes needed on Windows
 }
-

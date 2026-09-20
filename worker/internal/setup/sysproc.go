@@ -13,4 +13,3 @@ func setDetachedProcessAttr(cmd *exec.Cmd) {
 		Setsid: true, // detach from terminal (Unix/Linux/macOS)
 	}
 }
-

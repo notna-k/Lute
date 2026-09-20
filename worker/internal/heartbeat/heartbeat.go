@@ -19,8 +19,8 @@ func PongMessage(workerID string) *pb.WorkerMessage {
 		Timestamp: time.Now().Unix(),
 	}
 	return &pb.WorkerMessage{
-		WorkerId:  workerID,
-		Payload:   &pb.WorkerMessage_HeartbeatPong{HeartbeatPong: pong},
+		WorkerId: workerID,
+		Payload:  &pb.WorkerMessage_HeartbeatPong{HeartbeatPong: pong},
 	}
 }
 

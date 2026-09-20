@@ -21,9 +21,20 @@ module.exports = {
       'warn',
       {
         allowConstantExport: true,
-        allowExportNames: ['useAuth', 'useTheme', 'authBridge'],
+        allowExportNames: [
+          'BUILD_STATE_LABEL',
+          'MOD_KEY',
+          'WORKER_STATE_LABEL',
+          'authBridge',
+          'isAppleOS',
+          'stateLabel',
+          'toastSubject',
+          'useAuth',
+          'useTheme',
+          'useToast',
+          'useUiPreferences',
+        ],
       },
     ],
   },
 }
-

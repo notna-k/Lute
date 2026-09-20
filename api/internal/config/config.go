@@ -56,8 +56,8 @@ type ServerConfig struct {
 
 // SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
 type SQLiteConfig struct {
-	Path         string
-	BusyTimeout  time.Duration
+	Path        string
+	BusyTimeout time.Duration
 }
 
 // PostgresConfig holds libpq/pg connection parameters (when DB_DRIVER is postgres).
@@ -108,8 +108,8 @@ func Load() (*Config, error) {
 			Mode:         getEnv("GIN_MODE", "debug"),
 			AllowedOrigins: getCSVEnv("CORS_ALLOWED_ORIGINS", []string{
 				"http://localhost:" + getEnv("ADMIN_PORT", "8090"), // admin panel
-				"http://localhost:8080",                           // core, direct
-				"http://localhost:5173",                           // vite dev server
+				"http://localhost:8080",                            // core, direct
+				"http://localhost:5173",                            // vite dev server
 			}),
 		},
 		Database: DatabaseConfig{

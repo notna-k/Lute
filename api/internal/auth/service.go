@@ -19,9 +19,9 @@ var (
 
 // Service orchestrates login / refresh / logout against the user + refresh-token repos.
 type Service struct {
-	users    *repos.UserRepository
-	refresh  *repos.RefreshTokenRepository
-	tokens   *TokenService
+	users   *repos.UserRepository
+	refresh *repos.RefreshTokenRepository
+	tokens  *TokenService
 }
 
 func NewService(users *repos.UserRepository, refresh *repos.RefreshTokenRepository, tokens *TokenService) *Service {
