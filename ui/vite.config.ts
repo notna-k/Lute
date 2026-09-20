@@ -23,6 +23,14 @@ export default defineConfig({
         changeOrigin: true,
         // The build log stream is a WebSocket on the same prefix.
         ws: true,
+        configure(proxy) {
+          // The browser stamps Origin: http://localhost:3000 on these calls,
+          // and core's CORS list only knows the admin origin, so it would
+          // answer 403. By the time we forward, the browser's same-origin
+          // check has already passed and this is a server-to-server hop, so
+          // drop the header rather than widen CORS_ALLOWED_ORIGINS.
+          proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'));
+        },
       },
     },
   },

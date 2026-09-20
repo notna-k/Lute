@@ -1,5 +1,9 @@
 // Client-side auth helpers. The refresh token lives in an httpOnly cookie
 // set by the API; the access token is held in memory by AuthContext.
+//
+// These calls deliberately bypass apiClient: they are what produces the access
+// token it attaches, so they cannot depend on having one.
+import { API_URL as BASE } from './apiBase';
 
 export interface AuthUser {
   id: string;
@@ -14,14 +18,7 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-function apiBaseURL(): string {
-  const raw = import.meta.env.VITE_API_URL;
-  if (raw === undefined || raw === null) return 'http://localhost:8080';
-  const s = String(raw).trim();
-  return s === '' ? '' : s.replace(/\/$/, '');
-}
 
-const BASE = apiBaseURL();
 
 async function postJSON<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

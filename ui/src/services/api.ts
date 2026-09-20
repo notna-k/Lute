@@ -1,24 +1,7 @@
 import { authBridge } from '../contexts/AuthContext';
+import { API_URL } from './apiBase';
 
-/**
- * Empty string = same-origin, which is how the panel is actually served: nginx
- * fronts the SPA and proxies /api to core, and the dev server proxies the same
- * prefix. Point VITE_API_URL at an absolute URL only to talk to a core that is
- * somewhere else — that origin then has to be in CORS_ALLOWED_ORIGINS.
- */
-function resolveApiBaseURL(): string {
-  const raw = import.meta.env.VITE_API_URL;
-  if (raw === undefined || raw === null) {
-    return '';
-  }
-  const s = String(raw).trim();
-  if (s === '') {
-    return '';
-  }
-  return s.replace(/\/$/, '');
-}
 
-const API_URL = resolveApiBaseURL();
 
 /**
  * An error response from the API. `fields` carries per-input messages when the
