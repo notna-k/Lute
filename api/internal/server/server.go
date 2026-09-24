@@ -113,6 +113,7 @@ func New(d Deps) *Server {
 				grpcServer.DispatchQueue(ctx, q)
 			}
 		})
+		d.QueueScheduler.SetOnLeasesExpired(grpcServer.HandleExpiredLeases)
 	}
 
 	workerSnapshotJob := worker.NewWorkerSnapshotJob(d.WorkerRepo, d.WorkerSnapshotRepo, d.Config.Metrics.SnapshotInterval)
