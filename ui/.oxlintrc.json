@@ -20,6 +20,7 @@
           "MOD_KEY",
           "WORKER_STATE_LABEL",
           "authBridge",
+          "facetOptions",
           "isAppleOS",
           "stateLabel",
           "toastSubject",

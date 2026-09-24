@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/lute/api/internal/db/id"
@@ -72,13 +73,33 @@ func (r *JobExecutionRepository) ListByJobIDs(ctx context.Context, jobIDs []stri
 	return out, nil
 }
 
-type JobExecutionListFilter struct {
-	Queue  string
-	Type   string
-	Status string // "", "success", or "failed"
+// JobExecutionOrders is the closed set of orders the list endpoint accepts,
+// keyed by the value the panel sends.
+var JobExecutionOrders = map[string]string{
+	"finished_at_desc": "finished_at DESC",
+	"finished_at_asc":  "finished_at ASC",
+	"elapsed_desc":     "elapsed_ms DESC",
+	"elapsed_asc":      "elapsed_ms ASC",
 }
 
-func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionListFilter, offset, limit int64, sortDesc bool) ([]models.JobExecution, int64, error) {
+// DefaultJobExecutionOrder is what an unknown or missing sort falls back to.
+const DefaultJobExecutionOrder = "finished_at DESC"
+
+type JobExecutionListFilter struct {
+	// Queues and Types narrow to any of the given values; empty means all.
+	Queues []string
+	Types  []string
+	Status string // "", "success", or "failed"
+	// Search matches a job id, worker id or error message, case-insensitively.
+	// The panel's Builds list offers one box over the three because an operator
+	// arrives with one string and does not know which column it came from.
+	Search string
+}
+
+// List returns one page of executions. sortOrder is one of the SQL fragments in
+// JobExecutionOrders; anything else is rejected, so the caller may pass a query
+// parameter straight through without opening an injection hole.
+func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionListFilter, offset, limit int64, sortOrder string) ([]models.JobExecution, int64, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -90,11 +111,11 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 	}
 
 	q := r.q(ctx).Model(&models.JobExecution{})
-	if filter.Queue != "" {
-		q = q.Where("queue = ?", filter.Queue)
+	if len(filter.Queues) > 0 {
+		q = q.Where("queue IN ?", filter.Queues)
 	}
-	if filter.Type != "" {
-		q = q.Where("type = ?", filter.Type)
+	if len(filter.Types) > 0 {
+		q = q.Where("type IN ?", filter.Types)
 	}
 	switch filter.Status {
 	case "success":
@@ -102,15 +123,28 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 	case "failed":
 		q = q.Where("success = ?", false)
 	}
+	if s := strings.TrimSpace(filter.Search); s != "" {
+		// LIKE over lowered columns rather than ILIKE: the same statement has to
+		// run on Postgres and on the SQLite used by the tests.
+		like := "%" + strings.ToLower(s) + "%"
+		q = q.Where(
+			r.q(ctx).Where("LOWER(job_id) LIKE ?", like).
+				Or("LOWER(worker_id) LIKE ?", like).
+				Or("LOWER(error) LIKE ?", like),
+		)
+	}
 
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count job executions: %w", err)
 	}
 
-	order := "finished_at ASC"
-	if sortDesc {
-		order = "finished_at DESC"
+	order := DefaultJobExecutionOrder
+	for _, allowed := range JobExecutionOrders {
+		if sortOrder == allowed {
+			order = sortOrder
+			break
+		}
 	}
 
 	var out []models.JobExecution
