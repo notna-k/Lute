@@ -10,7 +10,9 @@ type QueueSlot struct {
 	Lane        enums.QueueLane `json:"lane" gorm:"column:lane;type:varchar(16);not null"`
 	Priority    float64         `json:"priority" gorm:"column:priority;default:0"`
 	ReleaseAtMS int64           `json:"release_at_ms" gorm:"column:release_at_ms;default:0"`
-	UpdatedAtMS int64           `json:"updated_at_ms" gorm:"column:updated_at_ms;not null"`
+	// LeaseExpiresAtMS is when a dispatched job stops counting as alive; zero means no running job.
+	LeaseExpiresAtMS int64 `json:"lease_expires_at_ms" gorm:"column:lease_expires_at_ms;default:0"`
+	UpdatedAtMS      int64 `json:"updated_at_ms" gorm:"column:updated_at_ms;not null"`
 }
 
 func (*QueueSlot) TableName() string { return "queue_slots" }

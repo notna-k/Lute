@@ -53,19 +53,14 @@ func (c *Client) ReadPump(cfg *config.WebSocketConfig) {
 	})
 
 	for {
-		_, message, err := c.conn.ReadMessage()
-		if err != nil {
+		// The hub is broadcast-only — relaying would let a client forge job events for
+		// every other. Reads continue so pongs and close frames are still processed.
+		if _, _, err := c.conn.ReadMessage(); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("WebSocket error for client %s: %v", c.userID, err)
 			}
 			break
 		}
-
-		// Handle incoming message
-		log.Printf("Received message from client %s: %s", c.userID, string(message))
-
-		// Echo message back (you can implement custom message handling here)
-		c.hub.broadcast <- message
 	}
 }
 

@@ -19,6 +19,23 @@ import (
 func nowMilli() int64 { return time.Now().UTC().UnixMilli() }
 func nowUnix() int64  { return time.Now().UTC().Unix() }
 
+// defaultTimeoutSec is the per-job wall-clock budget when an enqueue does not ask for one.
+const defaultTimeoutSec = 300
+
+// leaseGrace pads the timeout so reaping does not race a result the worker is still reporting.
+const leaseGrace = 60 * time.Second
+
+// reclaimAfter is how long a sweeper holds a claimed lease before another may retake it.
+const reclaimAfter = 60 * time.Second
+
+// leaseDeadlineMS is when a job dispatched now stops counting as alive.
+func leaseDeadlineMS(timeoutSec int) int64 {
+	if timeoutSec <= 0 {
+		timeoutSec = defaultTimeoutSec
+	}
+	return time.Now().Add(time.Duration(timeoutSec)*time.Second + leaseGrace).UnixMilli()
+}
+
 // JobQueueRepository persists FIFO queue_slots and DLQ rows (GORM only).
 type JobQueueRepository struct {
 	g *gorm.DB
@@ -38,7 +55,7 @@ func (r *JobQueueRepository) Enqueue(ctx context.Context, job *queuejob.Job, opt
 		opts.MaxRetries = 3
 	}
 	if opts.TimeoutSec == 0 {
-		opts.TimeoutSec = 300
+		opts.TimeoutSec = defaultTimeoutSec
 	}
 	job.Status = string(enums.QueueJobPending)
 	job.MaxRetries = opts.MaxRetries
@@ -72,10 +89,12 @@ func (r *JobQueueRepository) Enqueue(ctx context.Context, job *queuejob.Job, opt
 			ReleaseAtMS: releaseMs,
 			UpdatedAtMS: nowMilli(),
 		}
+		// lease_expires_at_ms is updated too, so re-enqueuing a dispatched slot clears its old lease.
 		return tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "job_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"queue_name", "payload", "lane", "priority", "release_at_ms", "updated_at_ms",
+				"queue_name", "payload", "lane", "priority", "release_at_ms",
+				"lease_expires_at_ms", "updated_at_ms",
 			}),
 		}).Create(&slot).Error
 	})
@@ -129,9 +148,10 @@ func (r *JobQueueRepository) Dequeue(ctx context.Context, queueName string) (*qu
 		res := tx.Model(&models.QueueSlot{}).
 			Where("job_id = ? AND queue_name = ? AND lane = ?", slot.JobID, queueName, enums.QueueLaneReady).
 			Updates(map[string]interface{}{
-				"lane":          enums.QueueLaneNone,
-				"payload":       string(data),
-				"updated_at_ms": nowMilli(),
+				"lane":                enums.QueueLaneNone,
+				"payload":             string(data),
+				"lease_expires_at_ms": leaseDeadlineMS(job.TimeoutSec),
+				"updated_at_ms":       nowMilli(),
 			})
 		if res.Error != nil {
 			return res.Error
@@ -148,7 +168,13 @@ func (r *JobQueueRepository) Dequeue(ctx context.Context, queueName string) (*qu
 	return out, nil
 }
 
-// Complete marks a job done in its slot payload.
+// leasedSlot scopes an update to a currently dispatched job: a live lease is what
+// separates one a worker still owns from one already requeued, dead-lettered or reported on.
+func leasedSlot(tx *gorm.DB, jobID string) *gorm.DB {
+	return tx.Where("job_id = ? AND lane = ? AND lease_expires_at_ms > 0", jobID, enums.QueueLaneNone)
+}
+
+// Complete marks a job done and releases its lease, or returns ErrJobNotRunning if it was reaped.
 func (r *JobQueueRepository) Complete(ctx context.Context, jobID string, elapsedMs int64) error {
 	job, err := r.GetJob(ctx, jobID)
 	if err != nil {
@@ -156,10 +182,27 @@ func (r *JobQueueRepository) Complete(ctx context.Context, jobID string, elapsed
 	}
 	job.Status = string(enums.QueueJobDone)
 	job.DoneAt = nowUnix()
-	return r.saveJob(ctx, job)
+
+	data, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	res := leasedSlot(r.q(ctx).Model(&models.QueueSlot{}), jobID).
+		Updates(map[string]interface{}{
+			"payload":             string(data),
+			"lease_expires_at_ms": int64(0),
+			"updated_at_ms":       nowMilli(),
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrJobNotRunning
+	}
+	return nil
 }
 
-// Fail handles failure: retry with backoff or DLQ.
+// Fail handles failure: retry with backoff or DLQ. Returns ErrJobNotRunning like Complete.
 func (r *JobQueueRepository) Fail(ctx context.Context, jobID string, errMsg string) error {
 	job, err := r.GetJob(ctx, jobID)
 	if err != nil {
@@ -177,16 +220,22 @@ func (r *JobQueueRepository) Fail(ctx context.Context, jobID string, errMsg stri
 			return err
 		}
 		return r.q(ctx).Transaction(func(tx *gorm.DB) error {
-			res := tx.Model(&models.QueueSlot{}).
-				Where("job_id = ? AND lane = ?", jobID, enums.QueueLaneNone).
+			res := leasedSlot(tx.Model(&models.QueueSlot{}), jobID).
 				Updates(map[string]interface{}{
-					"lane":          enums.QueueLaneDelayed,
-					"priority":      0,
-					"release_at_ms": releaseMs,
-					"payload":       string(data),
-					"updated_at_ms": nowMilli(),
+					"lane":                enums.QueueLaneDelayed,
+					"priority":            0,
+					"release_at_ms":       releaseMs,
+					"lease_expires_at_ms": int64(0),
+					"payload":             string(data),
+					"updated_at_ms":       nowMilli(),
 				})
-			return res.Error
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return ErrJobNotRunning
+			}
+			return nil
 		})
 	}
 
@@ -198,21 +247,29 @@ func (r *JobQueueRepository) Fail(ctx context.Context, jobID string, errMsg stri
 		return err
 	}
 	return r.q(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.QueueSlot{}).
-			Where("job_id = ?", jobID).
+		res := leasedSlot(tx.Model(&models.QueueSlot{}), jobID).
 			Updates(map[string]interface{}{
-				"lane":          enums.QueueLaneNone,
-				"payload":       string(data),
-				"release_at_ms": 0,
-				"updated_at_ms": nowMilli(),
-			}).Error; err != nil {
-			return err
+				"lane":                enums.QueueLaneNone,
+				"payload":             string(data),
+				"release_at_ms":       0,
+				"lease_expires_at_ms": int64(0),
+				"updated_at_ms":       nowMilli(),
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrJobNotRunning
 		}
 		dlq := models.QueueDLQ{
 			QueueName: job.Queue,
 			JobID:     jobID,
 		}
-		return tx.Create(&dlq).Error
+		// A job reaches the DLQ once; a duplicate must not abort the transaction.
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "job_id"}},
+			DoNothing: true,
+		}).Create(&dlq).Error
 	})
 }
 
@@ -416,6 +473,55 @@ func (r *JobQueueRepository) saveJob(ctx context.Context, job *queuejob.Job) err
 			"queue_name":    job.Queue,
 			"updated_at_ms": nowMilli(),
 		}).Error
+}
+
+// ExpiredLease identifies a dispatched job whose worker died, hung, or ran past its timeout.
+type ExpiredLease struct {
+	JobID    string
+	Queue    string
+	WorkerID string
+}
+
+// ClaimExpiredLeases takes jobs whose lease ran out, for the caller to fail. The claim pushes
+// the lease forward, so sweepers cannot collide and one dying mid-reap does not strand the job.
+func (r *JobQueueRepository) ClaimExpiredLeases(ctx context.Context) ([]ExpiredLease, error) {
+	ms := nowMilli()
+	nextMS := ms + reclaimAfter.Milliseconds()
+
+	var claimed []ExpiredLease
+	err := r.q(ctx).Transaction(func(tx *gorm.DB) error {
+		var slots []models.QueueSlot
+		if err := tx.Where("lane = ? AND lease_expires_at_ms > 0 AND lease_expires_at_ms <= ?",
+			enums.QueueLaneNone, ms).Find(&slots).Error; err != nil {
+			return err
+		}
+		for _, slot := range slots {
+			res := tx.Model(&models.QueueSlot{}).
+				Where("job_id = ? AND lane = ? AND lease_expires_at_ms = ?",
+					slot.JobID, enums.QueueLaneNone, slot.LeaseExpiresAtMS).
+				Updates(map[string]interface{}{
+					"lease_expires_at_ms": nextMS,
+					"updated_at_ms":       ms,
+				})
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				continue // another sweeper, or the worker's own result, got there first
+			}
+			lease := ExpiredLease{JobID: slot.JobID, Queue: slot.QueueName}
+			var job queuejob.Job
+			if err := json.Unmarshal([]byte(slot.Payload), &job); err == nil {
+				lease.WorkerID = job.WorkerID
+			}
+			claimed = append(claimed, lease)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return claimed, nil
 }
 
 // PromoteDelayed moves due delayed slots back to ready (transactional sweep).

@@ -51,10 +51,12 @@ services:
       # gRPC
       GRPC_PORT: ${GRPC_PORT:-50051}
       GRPC_HOST: ${GRPC_HOST:-0.0.0.0}
-      # WebSocket
+      # WebSocket. The upgrade is checked against CORS_ALLOWED_ORIGINS; turning
+      # the check off lets any page a signed-in browser visits open the event
+      # stream, which carries every build's parameters.
       WS_READ_BUFFER_SIZE: ${WS_READ_BUFFER_SIZE:-1024}
       WS_WRITE_BUFFER_SIZE: ${WS_WRITE_BUFFER_SIZE:-1024}
-      WS_CHECK_ORIGIN: ${WS_CHECK_ORIGIN:-false}
+      WS_CHECK_ORIGIN: ${WS_CHECK_ORIGIN:-true}
       # Auth (JWT + seeded admin)
       JWT_SECRET: ${JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-lute}
