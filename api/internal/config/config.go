@@ -136,7 +136,7 @@ func Load() (*Config, error) {
 		WebSocket: WebSocketConfig{
 			ReadBufferSize:  getIntEnv("WS_READ_BUFFER_SIZE", 1024),
 			WriteBufferSize: getIntEnv("WS_WRITE_BUFFER_SIZE", 1024),
-			CheckOrigin:     getBoolEnv("WS_CHECK_ORIGIN", false),
+			CheckOrigin:     getBoolEnv("WS_CHECK_ORIGIN", true),
 			PingPeriod:      getDurationEnv("WS_PING_PERIOD", 54*time.Second),
 			PongWait:        getDurationEnv("WS_PONG_WAIT", 60*time.Second),
 			WriteWait:       getDurationEnv("WS_WRITE_WAIT", 10*time.Second),

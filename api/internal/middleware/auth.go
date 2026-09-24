@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -27,20 +26,6 @@ func JWTAuthMiddleware(tokens *auth.TokenService) gin.HandlerFunc {
 		}
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
-		c.Next()
-	}
-}
-
-// OptionalAuthMiddleware records the bearer token on the context when present
-// (used by the WS upgrade path which authenticates later).
-func OptionalAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if h := c.GetHeader("Authorization"); h != "" {
-			parts := strings.SplitN(h, " ", 2)
-			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-				c.Set("token", strings.TrimSpace(parts[1]))
-			}
-		}
 		c.Next()
 	}
 }
