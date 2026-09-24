@@ -16,14 +16,7 @@
  * With it, "why am I only seeing four builds" is answered without opening a
  * single menu, and each reason can be dropped on its own.
  */
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Popover, Transition } from '@headlessui/react';
 import { Check, ChevronDown, ListFilter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -142,7 +135,7 @@ const optionLabel = (o: FacetOption) => o.label ?? o.value;
  */
 export function facetOptions(
   values: (string | null | undefined)[],
-  label?: (value: string) => string
+  label?: (value: string) => string,
 ): FacetOption[] {
   const counts = new Map<string, number>();
   for (const v of values) {
@@ -157,8 +150,7 @@ export function facetOptions(
 /** "release", or "release +2" once a facet holds more than it can show. */
 function facetSummary(facet: FacetConfig): string {
   const [first, ...rest] = facet.values;
-  const label =
-    facet.options?.find((o) => o.value === first) ?? ({ value: first } as FacetOption);
+  const label = facet.options?.find((o) => o.value === first) ?? ({ value: first } as FacetOption);
   return rest.length ? `${optionLabel(label)} +${rest.length}` : optionLabel(label);
 }
 
@@ -179,9 +171,7 @@ function FacetMenu({ facet }: { facet: FacetConfig }) {
     if (!options) return [];
     if (!n) return options;
     return options.filter(
-      (o) =>
-        o.value.toLowerCase().includes(n) ||
-        (o.label ?? '').toLowerCase().includes(n)
+      (o) => o.value.toLowerCase().includes(n) || (o.label ?? '').toLowerCase().includes(n),
     );
   }, [options, needle]);
 
@@ -220,9 +210,7 @@ function FacetMenu({ facet }: { facet: FacetConfig }) {
       close();
       return;
     }
-    facet.onChange(
-      values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
-    );
+    facet.onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
   }
 
   return (
@@ -233,7 +221,7 @@ function FacetMenu({ facet }: { facet: FacetConfig }) {
           'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg',
           active
             ? 'border-fg bg-bg-subtle text-fg'
-            : 'border-border text-fg-muted hover:border-border-strong hover:text-fg'
+            : 'border-border text-fg-muted hover:border-border-strong hover:text-fg',
         )}
         aria-label={`Filter by ${facet.label}`}
       >
@@ -367,14 +355,14 @@ function MenuRow({
       onClick={onClick}
       className={cn(
         'flex w-full items-center gap-2 px-2.5 py-1 text-left text-xs hover:bg-surface-hover hover:text-fg',
-        selected ? 'text-fg' : 'text-fg-muted'
+        selected ? 'text-fg' : 'text-fg-muted',
       )}
     >
       {multiple ? (
         <span
           className={cn(
             'grid h-3 w-3 shrink-0 place-items-center border',
-            selected ? 'border-fg bg-fg text-bg' : 'border-border-strong'
+            selected ? 'border-fg bg-fg text-bg' : 'border-border-strong',
           )}
         >
           {selected && <Check className='h-2.5 w-2.5' aria-hidden />}
@@ -386,9 +374,7 @@ function MenuRow({
       )}
       <span className='flex-1 truncate font-mono'>{label}</span>
       {typeof count === 'number' && (
-        <span className='font-mono text-[11px] text-fg-subtle tabular-nums'>
-          {count}
-        </span>
+        <span className='font-mono text-[11px] text-fg-subtle tabular-nums'>{count}</span>
       )}
     </button>
   );
@@ -427,13 +413,7 @@ function FilterChip({
  * is: filtered-to-nothing reads differently from having nothing, and the way
  * out — reset — belongs next to the sentence that says so.
  */
-export function NoFilterMatches({
-  noun,
-  onReset,
-}: {
-  noun: string;
-  onReset: () => void;
-}) {
+export function NoFilterMatches({ noun, onReset }: { noun: string; onReset: () => void }) {
   return (
     <div className='py-16'>
       <EmptyState
@@ -473,8 +453,7 @@ export function FilterBar<S extends string = string>({
       const target = event.target as HTMLElement | null;
       if (
         target &&
-        (target.isContentEditable ||
-          ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
       ) {
         return;
       }
@@ -503,10 +482,7 @@ export function FilterBar<S extends string = string>({
   }
 
   return (
-    <Toolbar
-      className={cn('flex-col items-stretch gap-0 py-0', className)}
-      aria-label='Filters'
-    >
+    <Toolbar className={cn('flex-col items-stretch gap-0 py-0', className)} aria-label='Filters'>
       <div className='flex flex-wrap items-center gap-2 py-[var(--density-toolbar-y)]'>
         {/* The icon-bearing Input grows to its container, so the width lives
             here rather than on the control itself. */}
@@ -563,8 +539,7 @@ export function FilterBar<S extends string = string>({
               options: scope.options
                 .filter((o) => o.value !== scopeDefault)
                 .map((o) => ({ value: o.value, label: o.label, count: o.count })),
-              onChange: (values) =>
-                scope.onChange((values[0] as S | undefined) ?? scopeDefault),
+              onChange: (values) => scope.onChange((values[0] as S | undefined) ?? scopeDefault),
             }}
           />
         )}
@@ -623,10 +598,7 @@ export function FilterBar<S extends string = string>({
           {scopeActive && scope && (
             <FilterChip
               label={scope.label}
-              value={
-                scope.options.find((o) => o.value === scope.value)?.label ??
-                scope.value
-              }
+              value={scope.options.find((o) => o.value === scope.value)?.label ?? scope.value}
               onRemove={() => scopeDefault !== undefined && scope.onChange(scopeDefault)}
             />
           )}
@@ -635,14 +607,10 @@ export function FilterBar<S extends string = string>({
               <FilterChip
                 key={`${facet.id}:${value}`}
                 label={facet.label}
-                value={
-                  facet.options?.find((o) => o.value === value)?.label ?? value
-                }
-                onRemove={() =>
-                  facet.onChange(facet.values.filter((v) => v !== value))
-                }
+                value={facet.options?.find((o) => o.value === value)?.label ?? value}
+                onRemove={() => facet.onChange(facet.values.filter((v) => v !== value))}
               />
-            ))
+            )),
           )}
           <button
             type='button'

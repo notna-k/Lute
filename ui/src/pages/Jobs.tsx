@@ -194,10 +194,7 @@ export default function Jobs() {
   // the row count beside each value — a folder with one job is worth knowing
   // about before picking it, not after.
   const folderOptions = useMemo(() => facetOptions(all.map(folderOf)), [all]);
-  const queueOptions = useMemo(
-    () => facetOptions(all.map((j) => j.queue)),
-    [all]
-  );
+  const queueOptions = useMemo(() => facetOptions(all.map((j) => j.queue)), [all]);
 
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();

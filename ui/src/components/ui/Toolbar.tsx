@@ -9,17 +9,18 @@ import { cn } from '@/lib/cn';
  * List pages do not use it directly — they compose FilterBar, which fills it
  * with the shared search / scope / facet vocabulary.
  */
-export const Toolbar = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  function Toolbar({ className, ...props }, ref) {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          'flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border px-7 py-[var(--density-toolbar-y)] max-md:px-4',
-          className
-        )}
-        {...props}
-      />
-    );
-  }
-);
+export const Toolbar = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function Toolbar(
+  { className, ...props },
+  ref,
+) {
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        'flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border px-7 py-[var(--density-toolbar-y)] max-md:px-4',
+        className,
+      )}
+      {...props}
+    />
+  );
+});

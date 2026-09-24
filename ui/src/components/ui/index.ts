@@ -22,12 +22,7 @@ export type { DialogProps } from './Dialog';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 export { facetOptions, FilterBar, NoFilterMatches } from './FilterBar';
-export type {
-  FacetConfig,
-  FacetOption,
-  FilterBarProps,
-  ScopeOption,
-} from './FilterBar';
+export type { FacetConfig, FacetOption, FilterBarProps, ScopeOption } from './FilterBar';
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
 export { Field, Input, NativeSelect, Switch, Textarea } from './Input';

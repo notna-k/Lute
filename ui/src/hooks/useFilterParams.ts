@@ -9,7 +9,7 @@
  * Writes replace rather than push: typing into a search box should not bury the
  * previous page under thirty history entries.
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 const EMPTY: string[] = [];
@@ -17,7 +17,7 @@ const EMPTY: string[] = [];
 /** A single-valued filter — a search box, a scope, a sort order. */
 export function useFilterParam<T extends string = string>(
   key: string,
-  fallback: T
+  fallback: T,
 ): [T, (value: T) => void] {
   const [params, setParams] = useSearchParams();
   const value = (params.get(key) as T | null) ?? fallback;
@@ -31,10 +31,10 @@ export function useFilterParam<T extends string = string>(
           else out.set(key, next);
           return out;
         },
-        { replace: true }
+        { replace: true },
       );
     },
-    [fallback, key, setParams]
+    [fallback, key, setParams],
   );
 
   return [value, set];
@@ -47,17 +47,12 @@ export function useFilterParam<T extends string = string>(
 export function useFilterList(key: string): [string[], (values: string[]) => void] {
   const [params, setParams] = useSearchParams();
 
-  // getAll() hands back a fresh array every render, which would re-run every
-  // memo downstream. Hold the last one while its contents are unchanged.
-  const cache = useRef<{ key: string; values: string[] }>({
-    key: '',
-    values: EMPTY,
-  });
-  const raw = params.getAll(key);
-  const identity = raw.join('\u0000');
-  if (cache.current.key !== identity) {
-    cache.current = { key: identity, values: raw.length ? raw : EMPTY };
-  }
+  // getAll() hands back a fresh array every call, which would re-run every memo
+  // downstream. params only changes when the URL does, so tie the array to it.
+  const values = useMemo(() => {
+    const raw = params.getAll(key);
+    return raw.length ? raw : EMPTY;
+  }, [params, key]);
 
   const set = useCallback(
     (next: string[]) => {
@@ -68,11 +63,11 @@ export function useFilterList(key: string): [string[], (values: string[]) => voi
           next.filter(Boolean).forEach((v) => out.append(key, v));
           return out;
         },
-        { replace: true }
+        { replace: true },
       );
     },
-    [key, setParams]
+    [key, setParams],
   );
 
-  return [cache.current.values, set];
+  return [values, set];
 }

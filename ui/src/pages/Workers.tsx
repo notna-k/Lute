@@ -9,11 +9,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Plus, Server, Signal, Tag, Tags } from 'lucide-react';
-import {
-  useDeleteWorker,
-  useReEnableWorker,
-  useUserWorkers,
-} from '@/hooks/useWorkers';
+import { useDeleteWorker, useReEnableWorker, useUserWorkers } from '@/hooks/useWorkers';
 import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import type { Worker } from '@/types';
 import {
@@ -80,14 +76,8 @@ export default function Workers() {
   const all = userQuery.data ?? NO_WORKERS;
   const online = all.filter((w) => workerState(w.status) !== 'offline').length;
 
-  const labelOptions = useMemo(
-    () => facetOptions(all.flatMap(labelPairs)),
-    [all]
-  );
-  const versionOptions = useMemo(
-    () => facetOptions(all.map((w) => w.agent_version)),
-    [all]
-  );
+  const labelOptions = useMemo(() => facetOptions(all.flatMap(labelPairs)), [all]);
+  const versionOptions = useMemo(() => facetOptions(all.map((w) => w.agent_version)), [all]);
 
   const workers = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -112,10 +102,7 @@ export default function Workers() {
   }
 
   const filtering =
-    Boolean(query.trim()) ||
-    availability !== 'all' ||
-    labels.length > 0 ||
-    versions.length > 0;
+    Boolean(query.trim()) || availability !== 'all' || labels.length > 0 || versions.length > 0;
 
   return (
     <>
