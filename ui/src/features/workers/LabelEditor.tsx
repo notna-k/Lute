@@ -31,8 +31,7 @@ function validateRow(row: LabelRow): string | null {
   if (!row.key.trim()) return null; // empty key = will be skipped
   if (!LABEL_KEY_RE.test(row.key.trim()))
     return `Key "${row.key}" is invalid — use letters, numbers, _ - . only (1–63 chars)`;
-  if (row.value.length > 255)
-    return `Value for "${row.key}" exceeds 255 characters`;
+  if (row.value.length > 255) return `Value for "${row.key}" exceeds 255 characters`;
   return null;
 }
 
@@ -95,9 +94,7 @@ export function LabelEditor({ initialLabels, onSave, saving }: LabelEditorProps)
         <p className='text-sm text-fg-muted'>No labels — add one below.</p>
       )}
 
-      {validationError && (
-        <p className='text-sm text-danger'>{validationError}</p>
-      )}
+      {validationError && <p className='text-sm text-danger'>{validationError}</p>}
 
       <div className='flex items-center gap-2'>
         <Button
@@ -109,13 +106,7 @@ export function LabelEditor({ initialLabels, onSave, saving }: LabelEditorProps)
         >
           Add label
         </Button>
-        <Button
-          type='button'
-          size='sm'
-          onClick={handleSave}
-          loading={saving}
-          disabled={saving}
-        >
+        <Button type='button' size='sm' onClick={handleSave} loading={saving} disabled={saving}>
           Save labels
         </Button>
       </div>

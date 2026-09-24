@@ -32,12 +32,7 @@ export function Dialog({
 }: DialogProps) {
   return (
     <Transition appear show={open} as={Fragment}>
-      <HDialog
-        as='div'
-        className='relative z-50'
-        onClose={onClose}
-        initialFocus={initialFocus}
-      >
+      <HDialog as='div' className='relative z-50' onClose={onClose} initialFocus={initialFocus}>
         <Transition.Child
           as={Fragment}
           enter='ease-out duration-150'
@@ -47,10 +42,7 @@ export function Dialog({
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div
-            className='fixed inset-0 bg-black/60 backdrop-blur-sm'
-            aria-hidden
-          />
+          <div className='fixed inset-0 bg-black/60 backdrop-blur-sm' aria-hidden />
         </Transition.Child>
 
         <div className='fixed inset-0 overflow-y-auto'>
@@ -67,7 +59,7 @@ export function Dialog({
               <HDialog.Panel
                 className={cn(
                   'w-full rounded-lg border border-border bg-surface shadow-popover',
-                  SIZE_CLASSES[size]
+                  SIZE_CLASSES[size],
                 )}
               >
                 {(title || description) && (

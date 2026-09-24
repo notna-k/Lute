@@ -14,26 +14,26 @@ import (
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/router"
 	"github.com/lute/api/internal/webhooks"
-	"github.com/lute/api/internal/worker"
 	"github.com/lute/api/internal/websocket"
+	"github.com/lute/api/internal/worker"
 )
 
 type Server struct {
-	HTTP                *http.Server
-	GRPC                *grpc.Server
-	Hub                 *websocket.Hub
-	HeartbeatChecker    *worker.HeartbeatChecker
-	WorkerSnapshotJob   *worker.WorkerSnapshotJob
-	QueueScheduler      *queue.Scheduler
-	WebhookDispatcher   *webhooks.Dispatcher
-	checkerCtx          context.Context
-	checkerStop         context.CancelFunc
-	snapshotJobCtx      context.Context
-	snapshotJobCancel   context.CancelFunc
-	schedulerCtx        context.Context
-	schedulerCancel     context.CancelFunc
-	webhookCtx          context.Context
-	webhookCancel       context.CancelFunc
+	HTTP              *http.Server
+	GRPC              *grpc.Server
+	Hub               *websocket.Hub
+	HeartbeatChecker  *worker.HeartbeatChecker
+	WorkerSnapshotJob *worker.WorkerSnapshotJob
+	QueueScheduler    *queue.Scheduler
+	WebhookDispatcher *webhooks.Dispatcher
+	checkerCtx        context.Context
+	checkerStop       context.CancelFunc
+	snapshotJobCtx    context.Context
+	snapshotJobCancel context.CancelFunc
+	schedulerCtx      context.Context
+	schedulerCancel   context.CancelFunc
+	webhookCtx        context.Context
+	webhookCancel     context.CancelFunc
 }
 
 // Deps aggregates the dependencies needed to construct a Server.
@@ -113,6 +113,7 @@ func New(d Deps) *Server {
 				grpcServer.DispatchQueue(ctx, q)
 			}
 		})
+		d.QueueScheduler.SetOnLeasesExpired(grpcServer.HandleExpiredLeases)
 	}
 
 	workerSnapshotJob := worker.NewWorkerSnapshotJob(d.WorkerRepo, d.WorkerSnapshotRepo, d.Config.Metrics.SnapshotInterval)

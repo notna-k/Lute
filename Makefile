@@ -1,4 +1,4 @@
-.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-all worker-build-linux go-lint ui-build api-build
+.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-all worker-build-linux go-format-check go-test go-lint ui-build api-build
 
 export DOCKER_BUILDKIT := 1
 export WORKER_VERSION ?= 0.1.0
@@ -35,6 +35,20 @@ worker-build-all:
 
 worker-build-linux:
 	$(MAKE) worker-build-all PLATFORMS=linux/amd64
+
+go-format-check:
+	@unformatted="$$(gofmt -l api worker shared/proto)"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "The following Go files need formatting:"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
+
+go-test:
+	@for module in api worker shared/proto; do \
+		echo "Testing $$module"; \
+		(cd $$module && go test ./...) || exit 1; \
+	done
 
 go-lint:
 	cd api && $(LINT) run ./...

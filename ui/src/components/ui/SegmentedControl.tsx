@@ -48,9 +48,7 @@ export function SegmentedControl<T extends string>({
             className={cn(
               'inline-flex h-[26px] items-center gap-1.5 px-2.5 text-xs transition-colors',
               i < options.length - 1 && 'border-r border-border',
-              active
-                ? 'bg-surface-active text-fg'
-                : 'text-fg-subtle hover:text-fg'
+              active ? 'bg-surface-active text-fg' : 'text-fg-subtle hover:text-fg',
             )}
           >
             {option.label}

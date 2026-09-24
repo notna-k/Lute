@@ -18,8 +18,6 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-
-
 async function postJSON<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',

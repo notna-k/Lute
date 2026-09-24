@@ -30,15 +30,12 @@ export function ProgressTrack({
       <span
         className={cn(
           'absolute inset-y-0 left-0 transition-[width] duration-700 ease-linear',
-          FILL[state] ?? 'bg-fg-subtle'
+          FILL[state] ?? 'bg-fg-subtle',
         )}
         style={{ width: `${ratio * 100}%` }}
       />
       {showTarget && (
-        <span
-          aria-hidden
-          className='absolute -top-0.5 -bottom-0.5 right-0 w-px bg-fg-subtle'
-        />
+        <span aria-hidden className='absolute -top-0.5 -bottom-0.5 right-0 w-px bg-fg-subtle' />
       )}
     </span>
   );

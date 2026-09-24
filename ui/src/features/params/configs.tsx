@@ -91,7 +91,7 @@ function OptionsEditor({ field, onChange }: ParamConfigProps) {
               title='Cycle tone'
               className={cn(
                 'shrink-0 rounded px-1.5 py-1 font-mono text-xxs',
-                TONE_TAG[opt.tone ?? 'neutral']
+                TONE_TAG[opt.tone ?? 'neutral'],
               )}
             >
               {(opt.tone ?? 'neutral').slice(0, 4)}

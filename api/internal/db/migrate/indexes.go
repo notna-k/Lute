@@ -29,6 +29,7 @@ func ApplySecondaryIndexes(db *gorm.DB) error {
 
 		`CREATE INDEX IF NOT EXISTS idx_queue_slots_ready ON queue_slots(queue_name, priority DESC, job_id ASC) WHERE lane = 'ready'`,
 		`CREATE INDEX IF NOT EXISTS idx_queue_slots_delayed ON queue_slots(release_at_ms, job_id) WHERE lane = 'delayed'`,
+		`CREATE INDEX IF NOT EXISTS idx_queue_slots_leased ON queue_slots(lease_expires_at_ms, job_id) WHERE lease_expires_at_ms > 0`,
 		`CREATE INDEX IF NOT EXISTS idx_queue_dlq_queue_id ON queue_dlq(queue_name, id)`,
 	}
 	for _, q := range stmts {

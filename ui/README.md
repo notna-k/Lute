@@ -23,6 +23,7 @@ Lute API's JWT authentication.
 ### Installation
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```

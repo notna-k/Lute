@@ -47,9 +47,7 @@ function SettingRow({
       <div className='min-w-[14rem] flex-1'>
         <p className='text-[13px] font-medium text-fg'>{label}</p>
         {hint && (
-          <p className='mt-0.5 max-w-[60ch] text-xs leading-relaxed text-fg-subtle'>
-            {hint}
-          </p>
+          <p className='mt-0.5 max-w-[60ch] text-xs leading-relaxed text-fg-subtle'>{hint}</p>
         )}
       </div>
       <div className='flex shrink-0 items-center gap-2'>{children}</div>
@@ -73,8 +71,7 @@ export default function Settings() {
   const [name, setName] = useState('');
   const [newToken, setNewToken] = useState<CreateAPIKeyResponse | null>(null);
   const { mode, setMode } = useTheme();
-  const { density, setDensity, sidebarExpanded, setSidebarExpanded } =
-    useUiPreferences();
+  const { density, setDensity, sidebarExpanded, setSidebarExpanded } = useUiPreferences();
 
   const keysQuery = useQuery({
     queryKey: ['api-keys'],
@@ -114,10 +111,7 @@ export default function Settings() {
         <PageBody className='max-w-[64rem]'>
           <Section title='Appearance'>
             <Card>
-              <SettingRow
-                label='Theme'
-                hint='System follows your operating system’s setting.'
-              >
+              <SettingRow label='Theme' hint='System follows your operating system’s setting.'>
                 <SegmentedControl<ThemeMode>
                   label='Theme'
                   value={mode}
@@ -147,8 +141,7 @@ export default function Settings() {
                 label='Expanded sidebar'
                 hint={
                   <>
-                    Show labels beside the navigation icons. Toggle any time with{' '}
-                    <Kbd>[</Kbd>.
+                    Show labels beside the navigation icons. Toggle any time with <Kbd>[</Kbd>.
                   </>
                 }
               >
@@ -170,9 +163,7 @@ export default function Settings() {
                 <Switch
                   checked={settingsQuery.data?.allowAdhocBuilds ?? true}
                   disabled={settingsQuery.isLoading || settingsMut.isPending}
-                  onChange={(e) =>
-                    settingsMut.mutate({ allowAdhocBuilds: e.target.checked })
-                  }
+                  onChange={(e) => settingsMut.mutate({ allowAdhocBuilds: e.target.checked })}
                   aria-label='Allow ad-hoc builds'
                 />
               </SettingRow>
@@ -183,9 +174,7 @@ export default function Settings() {
                 <Switch
                   checked={settingsQuery.data?.pruneDefinitions ?? false}
                   disabled={settingsQuery.isLoading || settingsMut.isPending}
-                  onChange={(e) =>
-                    settingsMut.mutate({ pruneDefinitions: e.target.checked })
-                  }
+                  onChange={(e) => settingsMut.mutate({ pruneDefinitions: e.target.checked })}
                   aria-label='Prune definitions missing from Git'
                 />
               </SettingRow>
@@ -205,8 +194,7 @@ export default function Settings() {
                 label='Endpoint'
                 hint={
                   <>
-                    Send <code>Authorization: Bearer &lt;token&gt;</code> to this base
-                    URL.
+                    Send <code>Authorization: Bearer &lt;token&gt;</code> to this base URL.
                   </>
                 }
               >
@@ -239,9 +227,7 @@ export default function Settings() {
 
             {createMut.isError && (
               <Alert tone='danger' className='mt-3'>
-                {createMut.error instanceof Error
-                  ? createMut.error.message
-                  : 'Create failed'}
+                {createMut.error instanceof Error ? createMut.error.message : 'Create failed'}
               </Alert>
             )}
 
@@ -297,9 +283,7 @@ export default function Settings() {
                       label={
                         <span className='flex items-center gap-2'>
                           {k.name}
-                          <span className='font-mono text-[11.5px] text-fg-subtle'>
-                            {k.prefix}
-                          </span>
+                          <span className='font-mono text-[11.5px] text-fg-subtle'>{k.prefix}</span>
                           {k.revoked && (
                             <span className='text-[11.5px] text-fg-subtle'>revoked</span>
                           )}
@@ -322,7 +306,7 @@ export default function Settings() {
                           onClick={() => {
                             if (
                               window.confirm(
-                                `Revoke "${k.name}"? Anything using it stops working immediately.`
+                                `Revoke "${k.name}"? Anything using it stops working immediately.`,
                               )
                             ) {
                               revokeMut.mutate(k.id);
@@ -339,9 +323,7 @@ export default function Settings() {
             )}
             {revokeMut.isError && (
               <Alert tone='danger' className='mt-3'>
-                {revokeMut.error instanceof Error
-                  ? revokeMut.error.message
-                  : 'Revoke failed'}
+                {revokeMut.error instanceof Error ? revokeMut.error.message : 'Revoke failed'}
               </Alert>
             )}
           </Section>

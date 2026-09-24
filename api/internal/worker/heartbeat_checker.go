@@ -16,8 +16,8 @@ import (
 // reset; on failure it is incremented. Once retries exceed max the worker
 // is marked dead and no longer polled.
 type HeartbeatChecker struct {
-	workerRepo *repos.WorkerRepository
-	connMgr    *grpc.ConnectionManager
+	workerRepo  *repos.WorkerRepository
+	connMgr     *grpc.ConnectionManager
 	interval    time.Duration
 	pingTimeout time.Duration
 	maxRetries  int
@@ -32,8 +32,8 @@ func NewHeartbeatChecker(
 	maxRetries int,
 ) *HeartbeatChecker {
 	return &HeartbeatChecker{
-		workerRepo: workerRepo,
-		connMgr:    connMgr,
+		workerRepo:  workerRepo,
+		connMgr:     connMgr,
 		interval:    interval,
 		pingTimeout: pingTimeout,
 		maxRetries:  maxRetries,

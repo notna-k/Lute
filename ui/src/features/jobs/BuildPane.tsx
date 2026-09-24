@@ -41,15 +41,15 @@ export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
     );
   }
 
-  const paramRows: KeyValueRow[] = Object.entries(build.params ?? {}).map(
-    ([key, value]) => ({ key, value, title: value })
-  );
+  const paramRows: KeyValueRow[] = Object.entries(build.params ?? {}).map(([key, value]) => ({
+    key,
+    value,
+    title: value,
+  }));
 
   // Only meaningful once the job has a track record to compare against.
   const pace =
-    live && job.medianDurationMs > 0
-      ? (Date.now() - build.startedAt) / job.medianDurationMs
-      : null;
+    live && job.medianDurationMs > 0 ? (Date.now() - build.startedAt) / job.medianDurationMs : null;
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
@@ -80,9 +80,7 @@ export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
               <Button
                 variant='ghost'
                 size='xs'
-                onClick={() =>
-                  window.open(`/api/v1/jobs/${build.runId}/logs?limit=5000`, '_blank')
-                }
+                onClick={() => window.open(`/api/v1/jobs/${build.runId}/logs?limit=5000`, '_blank')}
               >
                 <Download className='h-3 w-3' /> Raw log
               </Button>
@@ -91,27 +89,15 @@ export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
         </div>
 
         {pace != null && (
-          <ProgressTrack
-            value={pace}
-            state='running'
-            showTarget
-            className='mt-2.5'
-          />
+          <ProgressTrack value={pace} state='running' showTarget className='mt-2.5' />
         )}
 
         {paramRows.length > 0 && (
-          <KeyValueList
-            rows={paramRows}
-            className='mt-3 max-h-24 overflow-auto scrollbar-thin'
-          />
+          <KeyValueList rows={paramRows} className='mt-3 max-h-24 overflow-auto scrollbar-thin' />
         )}
       </div>
 
-      <LogViewer
-        logs={logs}
-        title={`${job.slug} · #${build.id}`}
-        className='min-h-0 flex-1'
-      />
+      <LogViewer logs={logs} title={`${job.slug} · #${build.id}`} className='min-h-0 flex-1' />
     </div>
   );
 }

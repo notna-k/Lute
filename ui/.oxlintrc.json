@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react"],
+  "env": {
+    "browser": true
+  },
+  "options": {
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "rules": {
+    "react/exhaustive-deps": "error",
+    "react/immutability": "off",
+    "react/only-export-components": [
+      "error",
+      {
+        "allowConstantExport": true,
+        "allowExportNames": [
+          "BUILD_STATE_LABEL",
+          "MOD_KEY",
+          "WORKER_STATE_LABEL",
+          "authBridge",
+          "isAppleOS",
+          "stateLabel",
+          "toastSubject",
+          "useAuth",
+          "useTheme",
+          "useToast",
+          "useUiPreferences"
+        ]
+      }
+    ],
+    "react/purity": "off",
+    "react/rules-of-hooks": "error",
+    "react/set-state-in-effect": "off"
+  }
+}

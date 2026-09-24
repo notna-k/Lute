@@ -60,8 +60,10 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 		health.SetupRoutes(api, healthHandler)
 	}
 
-	wsHandler := websocket.NewWebSocketHandler(d.Hub, d.Config)
-	api.GET("/ws", middleware.OptionalAuthMiddleware(), wsHandler.HandleWebSocket)
+	wsHandler := websocket.NewWebSocketHandler(d.Hub, d.Config, d.TokenService)
+	// The handler authenticates itself: a browser sends the token as a subprotocol,
+	// which JWTAuthMiddleware would reject.
+	api.GET("/ws", wsHandler.HandleWebSocket)
 
 	workerService := worker.NewWorkerService(d.WorkerRepo)
 	workerHandler := worker.NewWorkerHandler(d.Config.WorkerBinary.Dir, d.Config, d.WorkerRepo, d.CommandRepo, d.GRPCServer.ConnMgr, d.GRPCServer)

@@ -20,7 +20,7 @@ export interface UseJobLogsOptions {
 
 export function useJobLogs(
   jobId: string | undefined,
-  { live = false, intervalMs = 3000 }: UseJobLogsOptions = {}
+  { live = false, intervalMs = 3000 }: UseJobLogsOptions = {},
 ) {
   const boxRef = useRef<HTMLDivElement>(null);
   const loadingOlderRef = useRef(false);
@@ -62,9 +62,7 @@ export function useJobLogs(
         requestAnimationFrame(() => {
           const box = boxRef.current;
           if (!box) return;
-          box.scrollTop = prepend
-            ? box.scrollHeight - prevHeight + prevTop
-            : box.scrollHeight;
+          box.scrollTop = prepend ? box.scrollHeight - prevHeight + prevTop : box.scrollHeight;
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load logs');
@@ -79,7 +77,7 @@ export function useJobLogs(
         loadingOlderRef.current = false;
       }
     },
-    [jobId]
+    [jobId],
   );
 
   // A new run starts from an empty pane rather than the previous build's tail.

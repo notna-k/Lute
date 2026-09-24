@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/lute/proto"
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
@@ -22,6 +21,7 @@ import (
 	"github.com/lute/api/internal/db/types"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/websocket"
+	pb "github.com/lute/proto"
 )
 
 func ParseWorkerID(hex string) (id.ID, error) {
@@ -57,8 +57,8 @@ func NewServer(
 	hub *websocket.Hub,
 ) *Server {
 	return &Server{
-		config:     cfg,
-		workerRepo: workerRepo,
+		config:      cfg,
+		workerRepo:  workerRepo,
 		jobExecRepo: jobExecRepo,
 		queueEngine: queueEngine,
 		statsAgg:    statsAgg,
@@ -150,6 +150,11 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 	var job *queue.Job
 	if result.Success {
 		if err := s.queueEngine.Complete(ctx, result.JobId, result.ElapsedMs); err != nil {
+			if errors.Is(err, repos.ErrJobNotRunning) {
+				// The reaper already requeued this attempt; recording it would contradict the retry.
+				log.Printf("handleJobResult: ignoring late success for %s from worker %s", result.JobId, workerID)
+				return
+			}
 			log.Printf("handleJobResult: complete %s: %v", result.JobId, err)
 		}
 		job, _ = s.queueEngine.GetJob(ctx, result.JobId)
@@ -164,6 +169,10 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 		})
 	} else {
 		if err := s.queueEngine.Fail(ctx, result.JobId, result.Error); err != nil {
+			if errors.Is(err, repos.ErrJobNotRunning) {
+				log.Printf("handleJobResult: ignoring late failure for %s from worker %s", result.JobId, workerID)
+				return
+			}
 			log.Printf("handleJobResult: fail %s: %v", result.JobId, err)
 		}
 		job, _ = s.queueEngine.GetJob(ctx, result.JobId)
@@ -188,6 +197,52 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 	// Pull more pending work now that this worker has a free slot.
 	if job != nil {
 		s.DispatchQueue(ctx, job.Queue)
+	}
+}
+
+// HandleExpiredLeases fails builds the sweep gave up on, so they are retried or dead-lettered
+// like any other failure instead of showing as running forever.
+func (s *Server) HandleExpiredLeases(ctx context.Context, leases []queue.ExpiredLease) {
+	queues := make(map[string]struct{}, len(leases))
+	for _, lease := range leases {
+		reason := fmt.Sprintf("worker %s stopped reporting before the job finished", lease.WorkerID)
+		if lease.WorkerID == "" {
+			reason = "the assigned worker stopped reporting before the job finished"
+		}
+		log.Printf("HandleExpiredLeases: failing job %s (%s)", lease.JobID, reason)
+
+		if err := s.queueEngine.Fail(ctx, lease.JobID, reason); err != nil {
+			if errors.Is(err, repos.ErrJobNotRunning) {
+				continue // the worker's own result landed between the claim and here
+			}
+			log.Printf("HandleExpiredLeases: fail %s: %v", lease.JobID, err)
+			continue
+		}
+
+		job, _ := s.queueEngine.GetJob(ctx, lease.JobID)
+		if job != nil {
+			s.statsAgg.RecordFailed(ctx, job.Queue)
+			s.broadcastJobEvent("failed", job)
+		}
+		if job != nil && job.Status == "dead" {
+			s.persistExecution(ctx, lease.WorkerID, &pb.JobResult{
+				JobId:   lease.JobID,
+				Success: false,
+				Error:   reason,
+			})
+			s.emitWebhook(ctx, lease.JobID, "run.failed", map[string]interface{}{
+				"success":   false,
+				"error":     reason,
+				"attempts":  job.Attempts,
+				"worker_id": lease.WorkerID,
+			})
+		}
+		queues[lease.Queue] = struct{}{}
+	}
+
+	// A reaped job frees capacity on whatever worker is still connected.
+	for q := range queues {
+		s.DispatchQueue(ctx, q)
 	}
 }
 

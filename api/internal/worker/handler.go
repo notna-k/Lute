@@ -68,9 +68,9 @@ type claimEntry struct {
 // WorkerHandler serves worker binaries, handles registration, claim codes, and worker management.
 type WorkerHandler struct {
 	binaryDir     string
-	binaryMu      sync.RWMutex           // guards binaryCache — SHA256 is expensive, so cache is needed
+	binaryMu      sync.RWMutex // guards binaryCache — SHA256 is expensive, so cache is needed
 	binaryCache   map[string]*WorkerBinaryInfo
-	claimMu       sync.RWMutex           // guards claimCodes
+	claimMu       sync.RWMutex // guards claimCodes
 	claimCodes    map[string]*claimEntry
 	cfg           *config.Config
 	workerRepo    *repos.WorkerRepository

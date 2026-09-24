@@ -83,17 +83,10 @@ export function WorkerList({
           return (
             <RowLink key={w.id} to={`/workers/${w.id}`}>
               <Td>
-                <Link
-                  to={`/workers/${w.id}`}
-                  className='font-mono font-medium hover:underline'
-                >
+                <Link to={`/workers/${w.id}`} className='font-mono font-medium hover:underline'>
                   {w.name}
                 </Link>
-                {w.description && (
-                  <p className='row-subtext max-w-[40ch]'>
-                    {w.description}
-                  </p>
-                )}
+                {w.description && <p className='row-subtext max-w-[40ch]'>{w.description}</p>}
               </Td>
               <Td>
                 <StatusText state={workerState(w.status)}>{w.status}</StatusText>
@@ -112,9 +105,7 @@ export function WorkerList({
               <Td>
                 <LabelChips labels={w.labels} emptyText='none' />
               </Td>
-              <Td className='text-fg-muted tabular-nums'>
-                {seen ? relativeTime(seen) : '—'}
-              </Td>
+              <Td className='text-fg-muted tabular-nums'>{seen ? relativeTime(seen) : '—'}</Td>
               <Td className='font-mono text-fg-subtle'>{w.agent_version || '—'}</Td>
               <Td className='text-right'>
                 <span className='inline-flex items-center gap-1.5'>

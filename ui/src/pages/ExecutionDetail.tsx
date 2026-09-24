@@ -118,10 +118,7 @@ export default function ExecutionDetail() {
           {
             key: 'worker',
             value: (
-              <Link
-                to={`/workers/${job.worker_id}`}
-                className='font-mono hover:underline'
-              >
+              <Link to={`/workers/${job.worker_id}`} className='font-mono hover:underline'>
                 {job.worker_id}
               </Link>
             ),
@@ -131,9 +128,7 @@ export default function ExecutionDetail() {
   ];
 
   const elapsedMs =
-    ms(job.done_at) && ms(job.started_at)
-      ? ms(job.done_at)! - ms(job.started_at)!
-      : undefined;
+    ms(job.done_at) && ms(job.started_at) ? ms(job.done_at)! - ms(job.started_at)! : undefined;
 
   return (
     <>
@@ -198,9 +193,7 @@ export default function ExecutionDetail() {
         )}
         {job.error && (
           <Alert tone='danger' title='Error' className='mb-3'>
-            <pre className='whitespace-pre-wrap break-all font-mono text-[12px]'>
-              {job.error}
-            </pre>
+            <pre className='whitespace-pre-wrap break-all font-mono text-[12px]'>{job.error}</pre>
           </Alert>
         )}
         <KeyValueList

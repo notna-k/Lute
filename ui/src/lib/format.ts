@@ -42,8 +42,18 @@ export function clockTime(ts: number, withSeconds = false): string {
 export function timestamp(ts: number): string {
   const d = new Date(ts);
   const month = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ][d.getMonth()];
   return `${month} ${d.getDate()}, ${clockTime(ts)}`;
 }

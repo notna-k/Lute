@@ -13,7 +13,7 @@ export interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  */
 export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
   { selected, className, type = 'button', children, ...rest },
-  ref
+  ref,
 ) {
   return (
     <button
@@ -25,7 +25,7 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
         selected
           ? 'border-fg bg-bg-subtle text-fg'
           : 'border-border text-fg-muted hover:border-border-strong hover:text-fg',
-        className
+        className,
       )}
       {...rest}
     >

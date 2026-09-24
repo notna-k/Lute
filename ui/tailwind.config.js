@@ -82,14 +82,7 @@ export default {
           'Roboto',
           'sans-serif',
         ],
-        mono: [
-          'Geist Mono',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Consolas',
-          'monospace',
-        ],
+        mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {
         xxs: ['0.6875rem', { lineHeight: '1rem' }],

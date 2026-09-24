@@ -67,10 +67,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setEntries((prev) => [...prev, { ...options, id }].slice(-MAX_VISIBLE));
       timers.current.set(
         id,
-        setTimeout(() => dismiss(id), options.duration ?? DEFAULT_DURATION)
+        setTimeout(() => dismiss(id), options.duration ?? DEFAULT_DURATION),
       );
     },
-    [dismiss]
+    [dismiss],
   );
 
   // Clear pending timers on unmount so a late fire cannot set state on a
@@ -80,7 +80,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       timers.current.forEach(clearTimeout);
       timers.current.clear();
     },
-    []
+    [],
   );
 
   const value = useMemo(() => ({ toast }), [toast]);

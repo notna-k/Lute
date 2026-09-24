@@ -56,8 +56,8 @@ type ServerConfig struct {
 
 // SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
 type SQLiteConfig struct {
-	Path         string
-	BusyTimeout  time.Duration
+	Path        string
+	BusyTimeout time.Duration
 }
 
 // PostgresConfig holds libpq/pg connection parameters (when DB_DRIVER is postgres).
@@ -108,8 +108,8 @@ func Load() (*Config, error) {
 			Mode:         getEnv("GIN_MODE", "debug"),
 			AllowedOrigins: getCSVEnv("CORS_ALLOWED_ORIGINS", []string{
 				"http://localhost:" + getEnv("ADMIN_PORT", "8090"), // admin panel
-				"http://localhost:8080",                           // core, direct
-				"http://localhost:5173",                           // vite dev server
+				"http://localhost:8080",                            // core, direct
+				"http://localhost:5173",                            // vite dev server
 			}),
 		},
 		Database: DatabaseConfig{
@@ -136,7 +136,7 @@ func Load() (*Config, error) {
 		WebSocket: WebSocketConfig{
 			ReadBufferSize:  getIntEnv("WS_READ_BUFFER_SIZE", 1024),
 			WriteBufferSize: getIntEnv("WS_WRITE_BUFFER_SIZE", 1024),
-			CheckOrigin:     getBoolEnv("WS_CHECK_ORIGIN", false),
+			CheckOrigin:     getBoolEnv("WS_CHECK_ORIGIN", true),
 			PingPeriod:      getDurationEnv("WS_PING_PERIOD", 54*time.Second),
 			PongWait:        getDurationEnv("WS_PONG_WAIT", 60*time.Second),
 			WriteWait:       getDurationEnv("WS_WRITE_WAIT", 10*time.Second),

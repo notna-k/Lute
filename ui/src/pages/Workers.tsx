@@ -193,9 +193,7 @@ export default function Workers() {
         {userQuery.isError && (
           <div className='px-7 pt-4'>
             <Alert tone='danger' title='Failed to load workers'>
-              {userQuery.error instanceof Error
-                ? userQuery.error.message
-                : 'Unknown error'}
+              {userQuery.error instanceof Error ? userQuery.error.message : 'Unknown error'}
             </Alert>
           </div>
         )}
@@ -203,16 +201,10 @@ export default function Workers() {
         <WorkerList
           workers={workers}
           loading={userQuery.isLoading}
-          onReEnable={(w) =>
-            reEnable.mutate(w.id, { onSuccess: () => void userQuery.refetch() })
-          }
+          onReEnable={(w) => reEnable.mutate(w.id, { onSuccess: () => void userQuery.refetch() })}
           onDelete={(w) => setDeleteTarget(w)}
-          reEnablingId={
-            reEnable.isPending ? (reEnable.variables as string | undefined) : undefined
-          }
-          deletingId={
-            remove.isPending ? (remove.variables as string | undefined) : undefined
-          }
+          reEnablingId={reEnable.isPending ? (reEnable.variables as string | undefined) : undefined}
+          deletingId={remove.isPending ? (remove.variables as string | undefined) : undefined}
           empty={
             filtering && all.length ? (
               <NoFilterMatches noun='workers' onReset={resetFilters} />
@@ -239,8 +231,7 @@ export default function Workers() {
         worker={deleteTarget}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() =>
-          deleteTarget &&
-          remove.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })
+          deleteTarget && remove.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })
         }
         pending={remove.isPending}
       />
