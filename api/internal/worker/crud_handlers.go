@@ -221,3 +221,27 @@ func (h *WorkerHandler) save(ctx context.Context, w *models.Worker) (*models.Wor
 	}
 	return h.workerRepo.GetByID(ctx, w.ID)
 }
+
+func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
+	worker, ok := h.ownedWorker(c)
+	if !ok {
+		return
+	}
+	result := gin.H{
+		"worker_id": worker.ID.Hex(),
+		"name":      worker.Name,
+		"status":    worker.Status,
+	}
+	if worker.Status != enums.WorkerPending && !worker.LastSeen.IsZero() {
+		result["agent_ip"] = worker.AgentIP
+		result["agent_version"] = worker.AgentVersion
+		result["last_seen"] = worker.LastSeen
+		result["metrics"] = worker.Metrics
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *WorkerHandler) ListConnectedWorkers(c *gin.Context) {
+	w := h.connectionMgr.ActiveWorkers()
+	c.JSON(http.StatusOK, gin.H{"workers": w, "count": len(w)})
+}

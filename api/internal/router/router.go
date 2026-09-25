@@ -32,7 +32,7 @@ func New(d *setup.Deps, hub *websocket.Hub, grpcServer *luteGrpc.Server) *gin.En
 	// Authenticates itself: browsers send the token as a subprotocol, which JWTAuthMiddleware rejects.
 	api.GET("/ws", websocket.NewWebSocketHandler(hub, cfg, d.Tokens).HandleWebSocket)
 
-	workerHandler := worker.NewWorkerHandler(cfg.WorkerBinary.Dir, cfg, d.Workers, d.Commands, grpcServer.ConnMgr, grpcServer)
+	workerHandler := worker.NewWorkerHandler(cfg, d.Workers, d.Commands, grpcServer)
 	authedMW := middleware.JWTAuthMiddleware(d.Tokens)
 
 	v1 := api.Group("/v1")
