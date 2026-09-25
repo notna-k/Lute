@@ -49,7 +49,7 @@ import { StatusMark } from '@/components/ui/Status';
 import { relativeTime } from '@/lib/format';
 import type { Build, JobDefinition, ParameterField, ParameterValues } from '@/types/jobs';
 
-export type WorkbenchMode = 'run' | 'edit';
+type WorkbenchMode = 'run' | 'edit';
 type RunPane = 'docker' | 'curl';
 
 /** Minimal YAML colouring — enough to read, not a parser. */
@@ -578,5 +578,3 @@ export function BuildWorkbench({
     </div>
   );
 }
-
-export default BuildWorkbench;

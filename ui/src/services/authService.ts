@@ -38,12 +38,3 @@ export const login = (email: string, password: string) =>
 export const refresh = () => postJSON<LoginResponse>('/api/v1/auth/refresh');
 
 export const logout = () => postJSON<{ ok: true }>('/api/v1/auth/logout');
-
-export const me = async (accessToken: string): Promise<AuthUser> => {
-  const res = await fetch(`${BASE}/api/v1/auth/me`, {
-    credentials: 'include',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<AuthUser>;
-};

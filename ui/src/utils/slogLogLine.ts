@@ -153,19 +153,6 @@ export const SEVERITY_STYLE: Record<LogSeverity, { color: string; labelBg: strin
   UNKNOWN: { color: '#b0bec5', labelBg: 'rgba(144, 164, 174, 0.15)' },
 };
 
-/**
- * Solid swatches for severity rows in light UI (filters, menus).
- * Do not use SEVERITY_STYLE.color there — those tints are for dark log backgrounds only.
- */
-export const SEVERITY_LIGHT_UI_SWATCH: Record<LogSeverity, string> = {
-  DEBUG: '#00796b',
-  INFO: '#0d47a1',
-  WARN: '#e65100',
-  ERROR: '#c62828',
-  FATAL: '#b71c1c',
-  UNKNOWN: '#455a64',
-};
-
 /** Dark-console badge for log source (container vs worker/system). */
 export const SOURCE_STYLE: Record<LogSource, { color: string; labelBg: string }> = {
   container: { color: '#80deea', labelBg: 'rgba(0, 151, 167, 0.38)' },

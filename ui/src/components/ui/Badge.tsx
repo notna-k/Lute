@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn';
 
 export type BadgeTone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 
-export type BadgeSize = 'sm' | 'md';
+type BadgeSize = 'sm' | 'md';
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   tone?: BadgeTone;

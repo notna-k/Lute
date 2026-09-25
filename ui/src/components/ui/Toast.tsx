@@ -20,7 +20,7 @@ import { cn } from '@/lib/cn';
  * where the user is still looking.
  */
 
-export interface ToastLink {
+interface ToastLink {
   to: string;
   label: string;
 }

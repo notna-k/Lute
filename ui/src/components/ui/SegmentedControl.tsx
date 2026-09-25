@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-export interface SegmentOption<T extends string> {
+interface SegmentOption<T extends string> {
   value: T;
   label: ReactNode;
   /** Trailing count, e.g. how many builds the filter would show. */

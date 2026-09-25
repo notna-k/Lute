@@ -115,5 +115,3 @@ export function LabelEditor({ initialLabels, onSave, saving }: LabelEditorProps)
     </div>
   );
 }
-
-export default LabelEditor;

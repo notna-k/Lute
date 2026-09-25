@@ -34,7 +34,7 @@ import type { ParameterField, ParameterType, ParameterValue } from '@/types/jobs
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const PARAM_TYPES: Record<ParameterType, ParamTypeDef> = {
+const PARAM_TYPES: Record<ParameterType, ParamTypeDef> = {
   string: {
     id: 'string',
     label: 'Text',
@@ -215,7 +215,7 @@ export function valuesFromEnv(
   );
 }
 
-export function isEmpty(value: ParameterValue | undefined): boolean {
+function isEmpty(value: ParameterValue | undefined): boolean {
   if (Array.isArray(value)) return value.length === 0;
   return value === '' || value === undefined || value === null;
 }

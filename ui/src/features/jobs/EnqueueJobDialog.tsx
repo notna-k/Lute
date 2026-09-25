@@ -312,5 +312,3 @@ export function EnqueueJobDialog({
     </Dialog>
   );
 }
-
-export default EnqueueJobDialog;

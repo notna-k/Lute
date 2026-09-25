@@ -3,9 +3,9 @@ import { Link, type LinkProps } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'link';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'link';
 
-export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
+type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
 
 /**
  * Square, hairline-bordered control. `primary` is the inverted fill — there is

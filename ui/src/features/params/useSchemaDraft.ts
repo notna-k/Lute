@@ -18,7 +18,7 @@ import type { ParameterField, ParameterType, ParameterValue } from '@/types/jobs
 /** A parameter plus a client-side identity that survives renames. */
 export type DraftField = ParameterField & { id: string };
 
-export function withIds(fields: ParameterField[]): DraftField[] {
+function withIds(fields: ParameterField[]): DraftField[] {
   return fields.map((f) => ({ ...f, id: newDraftId() }));
 }
 
@@ -195,5 +195,3 @@ export function useSchemaDraft(source: ParameterField[]) {
     reorderField,
   };
 }
-
-export type SchemaDraft = ReturnType<typeof useSchemaDraft>;

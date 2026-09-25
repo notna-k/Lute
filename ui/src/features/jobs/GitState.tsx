@@ -24,7 +24,6 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { Spinner } from '@/components/ui/Spinner';
-import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/cn';
 import { downloadFile, downloadYaml } from '@/features/params/yaml';
 import { exportJob, exportJobs, exportJobsZip, revertJob } from '@/services/jobDefService';
@@ -35,23 +34,6 @@ const GIT_STATE_LABEL: Record<Exclude<GitState, 'synced'>, string> = {
   manual: 'Created in the panel',
   removed: 'Removed from Git',
 };
-
-/** The yellow marker on anything that differs from Git; nothing when synced. */
-export function GitStateDot({ state, className }: { state: GitState; className?: string }) {
-  if (state === 'synced') return null;
-  const label = GIT_STATE_LABEL[state];
-  return (
-    <span className={cn('inline-flex', className)}>
-      <Tooltip side='left' content={label}>
-        <span
-          tabIndex={0}
-          aria-label={label}
-          className='block h-2.5 w-2.5 bg-warning ring-2 ring-bg'
-        />
-      </Tooltip>
-    </span>
-  );
-}
 
 /** The state as a labelled chip, for a job's header. */
 export function GitStateBadge({ state }: { state: GitState }) {

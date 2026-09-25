@@ -42,7 +42,7 @@ export interface ParameterField {
 export type ParameterValue = string | number | boolean | string[];
 export type ParameterValues = Record<string, ParameterValue>;
 
-export interface JobSource {
+interface JobSource {
   repo: string;
   path: string;
   commit: string;

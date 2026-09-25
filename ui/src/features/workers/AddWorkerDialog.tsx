@@ -154,5 +154,3 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
     </Dialog>
   );
 }
-
-export default AddWorkerDialog;

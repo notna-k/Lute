@@ -3,7 +3,7 @@ import { Listbox, Transition } from '@headlessui/react';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-export interface SelectOption<T extends string = string> {
+interface SelectOption<T extends string = string> {
   value: T;
   label: ReactNode;
   disabled?: boolean;

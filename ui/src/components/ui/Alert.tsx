@@ -2,7 +2,7 @@ import { type HTMLAttributes, type ReactNode } from 'react';
 import { AlertTriangle, GitBranch, Info } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-export type AlertTone = 'info' | 'success' | 'warning' | 'danger';
+type AlertTone = 'info' | 'success' | 'warning' | 'danger';
 
 /**
  * A banner about the state of the thing on the page, not a coloured box.

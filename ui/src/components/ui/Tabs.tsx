@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
-export interface TabItem<T extends string = string> {
+interface TabItem<T extends string = string> {
   value: T;
   label: ReactNode;
   count?: number;
@@ -60,7 +60,7 @@ export function Tabs<T extends string = string>({
   );
 }
 
-export interface LinkTabItem {
+interface LinkTabItem {
   to: string;
   label: ReactNode;
   count?: number;

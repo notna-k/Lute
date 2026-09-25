@@ -21,7 +21,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
 import type { useJobLogs } from '@/hooks/useJobLogs';
 
-export type JobLogs = ReturnType<typeof useJobLogs>;
+type JobLogs = ReturnType<typeof useJobLogs>;
 
 export interface LogViewerProps {
   logs: JobLogs;

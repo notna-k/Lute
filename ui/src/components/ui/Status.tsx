@@ -12,9 +12,9 @@ import { cn } from '@/lib/cn';
 
 export type BuildState = 'passed' | 'failed' | 'running' | 'queued' | 'aborted';
 export type WorkerState = 'idle' | 'busy' | 'draining' | 'offline';
-export type State = BuildState | WorkerState;
+type State = BuildState | WorkerState;
 
-export const BUILD_STATE_LABEL: Record<BuildState, string> = {
+const BUILD_STATE_LABEL: Record<BuildState, string> = {
   passed: 'Passed',
   failed: 'Failed',
   running: 'Running',
@@ -22,14 +22,14 @@ export const BUILD_STATE_LABEL: Record<BuildState, string> = {
   aborted: 'Cancelled',
 };
 
-export const WORKER_STATE_LABEL: Record<WorkerState, string> = {
+const WORKER_STATE_LABEL: Record<WorkerState, string> = {
   idle: 'Idle',
   busy: 'Busy',
   draining: 'Draining',
   offline: 'Offline',
 };
 
-export function stateLabel(state: State): string {
+function stateLabel(state: State): string {
   return (
     (BUILD_STATE_LABEL as Record<string, string>)[state] ??
     (WORKER_STATE_LABEL as Record<string, string>)[state] ??

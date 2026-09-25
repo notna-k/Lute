@@ -36,7 +36,7 @@ export interface FacetOption {
   count?: number;
 }
 
-export interface FacetConfig {
+interface FacetConfig {
   id: string;
   /** The dimension, lowercase: "queue", "folder", "label". Used in chips too. */
   label: string;
@@ -62,7 +62,7 @@ export interface FacetConfig {
   menuWidth?: number;
 }
 
-export interface ScopeOption<T extends string> {
+interface ScopeOption<T extends string> {
   value: T;
   label: string;
   count?: number;
