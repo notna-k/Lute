@@ -28,8 +28,7 @@ func ParseWorkerID(hex string) (id.ID, error) {
 	return id.FromHex(hex)
 }
 
-// WebhookEmitter is the narrow interface the gRPC layer uses to fire run events.
-// It is satisfied by *webhooks.Emitter and can be nil to disable emission.
+// WebhookEmitter fires run events; nil disables them.
 type WebhookEmitter interface {
 	Emit(ctx context.Context, jobID, event string, payload map[string]interface{})
 }
@@ -68,9 +67,7 @@ func NewServer(
 	}
 }
 
-// Listen binds the configured address and registers the service, without serving yet.
-// Splitting this from Serve lets a caller fail fast on a port conflict — and lets it
-// ask for port 0 and then read the assigned port off Addr.
+// Listen binds without serving, so a port conflict fails fast and port 0 can be read off Addr.
 func (s *Server) Listen() error {
 	if s.listener != nil {
 		return nil
@@ -96,7 +93,7 @@ func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
-// Serve blocks serving the listener Listen bound. It returns nil after Stop.
+// Serve blocks until Stop, then returns nil.
 func (s *Server) Serve() error {
 	if s.listener == nil {
 		return fmt.Errorf("serve: Listen was not called")
@@ -108,16 +105,10 @@ func (s *Server) Serve() error {
 	return nil
 }
 
-// gracefulStopTimeout bounds how long a shutdown waits for in-flight RPCs.
 const gracefulStopTimeout = 5 * time.Second
 
-// Stop shuts the server down, giving in-flight RPCs until the context's
-// deadline (or gracefulStopTimeout, whichever is sooner) to finish.
-//
-// A worker's Connect stream lives for as long as the worker does, so a plain
-// GracefulStop never returns: it waits for streams that only end when the other side
-// hangs up. Waiting a little and then closing them is what lets core exit on a signal
-// instead of hanging until something kills it.
+// Stop waits for in-flight RPCs until ctx's deadline or gracefulStopTimeout, then closes
+// them: worker streams only end when the worker hangs up, so GracefulStop alone never returns.
 func (s *Server) Stop(ctx context.Context) {
 	if s.grpcServer == nil {
 		return
@@ -145,8 +136,7 @@ func (s *Server) Stop(ctx context.Context) {
 	}
 }
 
-// Connect handles the bidirectional stream opened by a worker.
-// The first message must carry worker_id.
+// Connect serves a worker's stream; its first message must carry worker_id.
 func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	first, err := stream.Recv()
 	if err != nil {
@@ -185,7 +175,7 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	slog.Info("worker connected", "worker_id", workerID)
 
 	conn := s.ConnMgr.Register(workerID, stream)
-	conn.Labels = w.Labels // seed in-memory labels from DB at connect time
+	conn.Labels = w.Labels
 	if s.OnConnectionRegistered != nil {
 		s.OnConnectionRegistered()
 	}
@@ -233,8 +223,7 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 			s.statsAgg.RecordFailed(ctx, job.Queue)
 			s.broadcastJobEvent("failed", job)
 		}
-		// Only fire the public webhook once the job is truly dead (DLQ), not on
-		// per-attempt retries. Internal retries are an implementation detail.
+		// The public webhook fires once the job is dead, not on each retried attempt.
 		if job != nil && job.Status == "dead" {
 			s.emitWebhook(ctx, result.JobId, "run.failed", map[string]interface{}{
 				"success":   false,
@@ -247,14 +236,12 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 
 	s.persistExecution(ctx, workerID, result)
 
-	// Pull more pending work now that this worker has a free slot.
 	if job != nil {
 		s.DispatchQueue(ctx, job.Queue)
 	}
 }
 
-// HandleExpiredLeases fails builds the sweep gave up on, so they are retried or dead-lettered
-// like any other failure instead of showing as running forever.
+// HandleExpiredLeases fails builds the sweep gave up on, so they do not show as running forever.
 func (s *Server) HandleExpiredLeases(ctx context.Context, leases []queue.ExpiredLease) {
 	queues := make(map[string]struct{}, len(leases))
 	for _, lease := range leases {
@@ -341,16 +328,13 @@ func (s *Server) handleWorkerRegistration(workerID string, reg *pb.WorkerRegistr
 	}
 }
 
-// DispatchQueue assigns pending jobs from the queue to available workers until
-// no worker can take work or the queue is empty.
+// DispatchQueue assigns jobs until the queue is empty or no worker can take one.
 func (s *Server) DispatchQueue(ctx context.Context, queueName string) {
 	for s.DispatchJob(ctx, queueName) {
 	}
 }
 
-// DispatchJob attempts to assign a pending job to an available worker.
-// It peeks the next job first to read its selector, then finds a matching worker,
-// and only dequeues once a match is confirmed.
+// DispatchJob assigns the next job, dequeuing it only once a worker matching its selector is found.
 func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 	peeked, err := s.queueEngine.PeekNextReadyJob(ctx, queueName)
 	if err != nil {
@@ -405,7 +389,6 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 	return true
 }
 
-// RequestJobLog asks a connected worker to read a chunk of a job log file.
 func (s *Server) RequestJobLog(ctx context.Context, workerID string, req *pb.JobLogRequest) (*pb.JobLogResponse, error) {
 	conn := s.ConnMgr.Get(workerID)
 	if conn == nil {

@@ -11,12 +11,10 @@ import (
 	"github.com/lute/api/internal/db/migrate"
 )
 
-// Database wraps the shared GORM handle.
 type Database struct {
 	DB *gorm.DB
 }
 
-// Close releases the connection pool.
 func (d *Database) Close() error {
 	if d == nil || d.DB == nil {
 		return nil
@@ -28,7 +26,6 @@ func (d *Database) Close() error {
 	return sqlDB.Close()
 }
 
-// HealthCheck verifies the database is reachable.
 func (d *Database) HealthCheck(ctx context.Context) error {
 	sqlDB, err := d.DB.DB()
 	if err != nil {
@@ -39,7 +36,7 @@ func (d *Database) HealthCheck(ctx context.Context) error {
 	return sqlDB.PingContext(ctx)
 }
 
-// Open connects to Postgres, runs migrations, and returns a handle.
+// Open connects to Postgres and runs migrations.
 func Open(ctx context.Context, dsn string) (*Database, error) {
 	if dsn == "" {
 		return nil, fmt.Errorf("POSTGRES_DSN is required")

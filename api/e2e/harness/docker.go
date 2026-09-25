@@ -1,12 +1,6 @@
 //go:build e2e
 
-// Package harness boots the pieces of Lute an end-to-end test needs: a Postgres
-// instance, a core server, and real worker agents running as child processes.
-//
-// Nothing here fakes Lute's own behaviour. Core runs its production startup path
-// against a throwaway database, agents are the compiled binary, and job bodies are
-// real containers on the host Docker daemon. Tests observe the system only through
-// HTTP, WebSocket and gRPC, so they survive refactors and fail on behaviour changes.
+// Package harness boots real core, real agent processes and real containers; tests observe them only over HTTP, WebSocket and gRPC.
 package harness
 
 import (
@@ -17,18 +11,15 @@ import (
 	"sync"
 )
 
-// TestImages are pulled once per suite run so an individual test does not pay for
-// an image pull inside its own timeout.
+// TestImages are pulled once up front, so no test pays for a pull inside its timeout.
 var TestImages = []string{"bash:5", "alpine:3"}
 
-// DockerAvailable reports whether a Docker daemon is reachable.
 func DockerAvailable() bool {
 	return exec.Command("docker", "info").Run() == nil
 }
 
 var pullOnce sync.Once
 
-// PullTestImages fetches the images job bodies run in. Safe to call repeatedly.
 func PullTestImages() error {
 	var err error
 	pullOnce.Do(func() {
@@ -43,11 +34,9 @@ func PullTestImages() error {
 	return err
 }
 
-// ContainerSet is a snapshot of the containers on the host, used to tell the ones a
-// suite run created from the ones that were already here.
+// ContainerSet tells the containers a suite run created from the ones already on the host.
 type ContainerSet map[string]struct{}
 
-// SnapshotContainers records every container currently on the host.
 func SnapshotContainers() ContainerSet {
 	out, err := docker("ps", "-aq", "--no-trunc")
 	if err != nil {
@@ -62,9 +51,8 @@ func SnapshotContainers() ContainerSet {
 	return set
 }
 
-// ReapJobContainers removes containers that appeared since the snapshot and run one of
-// the suite's job images. An agent killed mid-build never runs its own cleanup, so
-// without this every run that tests a crash leaves a container behind.
+// ReapJobContainers removes job containers created since the snapshot: an agent killed
+// mid-build never cleans up after itself.
 func ReapJobContainers(before ContainerSet) int {
 	removed := 0
 	for _, img := range TestImages {
@@ -88,7 +76,6 @@ func ReapJobContainers(before ContainerSet) int {
 	return removed
 }
 
-// docker runs a docker subcommand and returns its trimmed stdout.
 func docker(args ...string) (string, error) {
 	cmd := exec.Command("docker", args...)
 	out, err := cmd.Output()

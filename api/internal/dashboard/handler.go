@@ -12,14 +12,12 @@ import (
 	"github.com/lute/api/internal/db/repos"
 )
 
-// DashboardHandler handles dashboard stats and uptime API.
 type DashboardHandler struct {
 	cfg          *config.Config
 	workerRepo   *repos.WorkerRepository
 	snapshotRepo *repos.WorkerSnapshotRepository
 }
 
-// NewDashboardHandler creates a new DashboardHandler.
 func NewDashboardHandler(cfg *config.Config, workerRepo *repos.WorkerRepository, snapshotRepo *repos.WorkerSnapshotRepository) *DashboardHandler {
 	return &DashboardHandler{
 		cfg:          cfg,
@@ -28,7 +26,7 @@ func NewDashboardHandler(cfg *config.Config, workerRepo *repos.WorkerRepository,
 	}
 }
 
-// GetConfig returns dashboard/metrics client config (e.g. poll interval to match snapshot job).
+// GetConfig tells the panel how often to poll, matching the snapshot interval.
 func (h *DashboardHandler) GetConfig(c *gin.Context) {
 	sec := int(h.cfg.Metrics.SnapshotInterval.Seconds())
 	if sec < 1 {
@@ -38,7 +36,6 @@ func (h *DashboardHandler) GetConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"metrics_poll_interval_seconds": sec})
 }
 
-// GetStats handles GET /api/v1/dashboard/stats (authenticated).
 func (h *DashboardHandler) GetStats(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -76,7 +73,6 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	})
 }
 
-// ChartPoint is one bucket-aligned point for charts.
 type ChartPoint struct {
 	T           int64    `json:"t"`
 	CpuLoad     *float64 `json:"cpu_load"`
@@ -85,7 +81,6 @@ type ChartPoint struct {
 	DiskTotalGb *float64 `json:"disk_total_gb"`
 }
 
-// ChartResponse is the dashboard uptime API response.
 type ChartResponse struct {
 	Points        []ChartPoint `json:"points"`
 	PeriodStartMs int64        `json:"period_start_ms"`
@@ -210,7 +205,7 @@ func buildChartAggregated(snapshots []*models.WorkerSnapshot, periodStart, perio
 
 func ptrFloat(f float64) *float64 { return &f }
 
-// GetUptime handles GET /api/v1/dashboard/uptime?period=7d (optional: worker_id=hex) (authenticated).
+// GetUptime serves metric charts for all of the caller's workers, or one with ?worker_id=.
 func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {

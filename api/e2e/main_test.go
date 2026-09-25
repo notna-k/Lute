@@ -1,10 +1,6 @@
 //go:build e2e
 
-// Package e2e drives Lute the way its users and its build hosts do: HTTP and
-// WebSocket in from the panel, real agent processes over gRPC, real containers for
-// job bodies, and assertions only on what those surfaces report back.
-//
-// Run with: make e2e
+// Package e2e drives Lute end to end through its public surfaces. Run with: make e2e
 package e2e
 
 import (
@@ -16,7 +12,6 @@ import (
 	"github.com/lute/api/internal/testutil/pgtest"
 )
 
-// pg is the database server every stack carves a database out of.
 var pg *pgtest.Server
 
 func TestMain(m *testing.M) {
@@ -33,8 +28,7 @@ func run(m *testing.M) (int, error) {
 		return 0, fmt.Errorf("this suite needs a Docker daemon, or LUTE_E2E_POSTGRES_DSN pointing at a Postgres")
 	}
 
-	// Build the agent and fetch the job images up front: neither belongs inside an
-	// individual test's timeout.
+	// Done up front so no test pays for them inside its timeout.
 	if err := harness.BuildWorker(); err != nil {
 		return 0, err
 	}
@@ -44,8 +38,7 @@ func run(m *testing.M) (int, error) {
 		}
 	}
 
-	// Containers already on this machine are none of the suite's business; the ones
-	// that appear from here on are, including those a killed agent left behind.
+	// Only containers created from here on, e.g. by a killed agent, are the suite's to reap.
 	existing := harness.SnapshotContainers()
 
 	started, err := pgtest.Start()

@@ -14,14 +14,9 @@ import (
 //go:embed all:web
 var embedded embed.FS
 
-// Register attaches SPA static file serving and a NoRoute fallback for non-/api paths.
-// Call after all /api routes are registered on the engine.
-//
-// We avoid gin's c.FileFromFS / http.FileServer because the latter issues a
-// permanent redirect from any path ending in "/index.html" to "./", which —
-// combined with FileFromFS rewriting URL.Path to "index.html" — produces an
-// infinite 301 loop on GET /. Reading bytes from the embed.FS and writing
-// them ourselves keeps URLs stable.
+// Register serves the SPA for non-/api paths; call it after the /api routes. It writes
+// files itself because http.FileServer redirects "/index.html" to "./", which with
+// FileFromFS loops forever on GET /.
 func Register(r *gin.Engine) {
 	sub, err := fs.Sub(embedded, "web")
 	if err != nil {

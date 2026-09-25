@@ -8,9 +8,9 @@ func ApplySecondaryIndexes(db *gorm.DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_nonempty ON users(email) WHERE email IS NOT NULL AND email != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_family ON refresh_tokens(user_id, family_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_workers_user_id ON workers(user_id)`,
-		// workers: one logical agent per IP per user when IP is set
+		// One agent per IP per user.
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_user_agent_ip ON workers(user_id, agent_ip) WHERE agent_ip IS NOT NULL AND agent_ip != ''`,
-		// runs: idempotency per user when key is set
+
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_user_idempotency ON runs(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_user_created ON runs(user_id, created_at DESC)`,
 

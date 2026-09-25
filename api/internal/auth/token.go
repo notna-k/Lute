@@ -14,14 +14,12 @@ import (
 	"github.com/lute/api/internal/db/id"
 )
 
-// AccessClaims is what we sign into the access JWT.
 type AccessClaims struct {
 	UserID string `json:"uid"`
 	Email  string `json:"eml,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// TokenService signs and verifies access JWTs and generates refresh-token strings.
 type TokenService struct {
 	secret     []byte
 	accessTTL  time.Duration
@@ -52,7 +50,6 @@ func NewTokenService(secret string, accessTTL, refreshTTL time.Duration, issuer 
 
 func (s *TokenService) RefreshTTL() time.Duration { return s.refreshTTL }
 
-// SignAccess issues a short-lived access JWT for the given user.
 func (s *TokenService) SignAccess(userID id.ID, email string) (string, time.Time, error) {
 	now := time.Now().UTC()
 	exp := now.Add(s.accessTTL)
@@ -74,7 +71,6 @@ func (s *TokenService) SignAccess(userID id.ID, email string) (string, time.Time
 	return signed, exp, nil
 }
 
-// ParseAccess verifies a signed access JWT and returns its claims.
 func (s *TokenService) ParseAccess(raw string) (*AccessClaims, error) {
 	parsed, err := jwt.ParseWithClaims(raw, &AccessClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -92,8 +88,7 @@ func (s *TokenService) ParseAccess(raw string) (*AccessClaims, error) {
 	return claims, nil
 }
 
-// NewRefreshToken returns a high-entropy opaque refresh token and its sha256 hex hash.
-// The plaintext is returned to the client (cookie); only the hash is persisted.
+// NewRefreshToken returns an opaque token and the sha256 hash that is stored instead of it.
 func NewRefreshToken() (plaintext, hash string, err error) {
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -104,7 +99,6 @@ func NewRefreshToken() (plaintext, hash string, err error) {
 	return plaintext, hash, nil
 }
 
-// HashRefresh returns the storage hash for a refresh token string.
 func HashRefresh(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])

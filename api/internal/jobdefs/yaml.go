@@ -14,9 +14,7 @@ import (
 	"github.com/lute/api/internal/db/models"
 )
 
-// yamlJob is the on-disk shape of a job definition. It is both what the sync
-// reads and what Export writes, so a panel edit can be pasted back into Git
-// and read as the same spec.
+// yamlJob is the on-disk shape: what the sync reads and Export writes, so exports round-trip.
 type yamlJob struct {
 	Slug        string            `yaml:"slug,omitempty"`
 	Name        string            `yaml:"name"`
@@ -53,8 +51,7 @@ type yamlOption struct {
 	Tone  string `yaml:"tone,omitempty"`
 }
 
-// parseDocs reads every `---`-separated definition in one file. Any invalid
-// document fails the whole file, so a half-applied file never happens.
+// parseDocs reads every `---`-separated definition; one invalid document fails the whole file.
 func parseDocs(data []byte, path string) ([]*models.JobDefinition, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var out []*models.JobDefinition
@@ -146,7 +143,7 @@ func (y yamlJob) toDefinition(path string) (*models.JobDefinition, error) {
 	return def, nil
 }
 
-// toYAML is the inverse of toDefinition: the file that would produce def.
+// toYAML is the inverse of toDefinition.
 func toYAML(def *models.JobDefinition) yamlJob {
 	y := yamlJob{
 		Name:        def.Name,
@@ -156,8 +153,7 @@ func toYAML(def *models.JobDefinition) yamlJob {
 		Runtime:     def.Runtime,
 		Command:     def.Command,
 	}
-	// A slug the name already implies is noise; one that differs (a renamed
-	// definition keeps its slug so its builds stay attached) must be kept.
+	// A renamed definition keeps its slug so its builds stay attached; only then is it written.
 	if def.Slug != slugify(def.Name) {
 		y.Slug = def.Slug
 	}
@@ -183,7 +179,7 @@ func toYAML(def *models.JobDefinition) yamlJob {
 	return y
 }
 
-// filePath is where def lives in Git, or where it should go if it never has.
+// filePath is where def lives in Git, or where it would go.
 func filePath(def *models.JobDefinition) string {
 	if def.SourcePath != "" {
 		return def.SourcePath
@@ -191,9 +187,7 @@ func filePath(def *models.JobDefinition) string {
 	return def.Slug + ".yaml"
 }
 
-// Export renders definitions as one multi-document YAML stream. Each document
-// is headed by the file it belongs in, so the output can be split back into
-// files — or committed as one, since the sync reads multi-document files.
+// Export renders one multi-document YAML stream, each document headed by its file path.
 func Export(defs []models.JobDefinition) ([]byte, error) {
 	var buf bytes.Buffer
 	for i := range defs {
@@ -210,17 +204,13 @@ func Export(defs []models.JobDefinition) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// ExportFile is one file of a split export: where it belongs in the
-// job-definitions repo, and what goes in it.
 type ExportFile struct {
 	Path string
 	Body []byte
 }
 
-// ExportSplit renders definitions as one file per job, each at the path it
-// belongs at in Git — what the panel offers as a zip, ready to unpack over the
-// repo. Definitions sharing a path (a multi-document file in Git) stay
-// together in that file, so splitting never drops a job to a name collision.
+// ExportSplit renders one file per Git path; definitions sharing a path stay together
+// in it, so a name collision never drops a job.
 func ExportSplit(defs []models.JobDefinition) ([]ExportFile, error) {
 	var out []ExportFile
 	at := map[string]int{} // path -> index in out
@@ -241,8 +231,7 @@ func ExportSplit(defs []models.JobDefinition) ([]ExportFile, error) {
 	return out, nil
 }
 
-// exportPath is filePath, kept inside the archive: an absolute or climbing
-// source path would unpack outside the repo it came from.
+// exportPath is filePath confined to the archive, so it cannot unpack outside the repo.
 func exportPath(def *models.JobDefinition) string {
 	p := path.Clean(filePath(def))
 	if path.IsAbs(p) || p == "." || strings.HasPrefix(p, "../") {

@@ -1,9 +1,6 @@
 package models
 
-// Setting is a panel-managed key/value knob. These are operator policy
-// switches, deliberately kept out of the job-definition YAML: PRODUCT.md's
-// canonical serialization rule governs *definitions*, and a setting here must
-// never encode anything a definition could express.
+// Setting is a panel-managed operator switch. It must never encode anything a job definition could express.
 type Setting struct {
 	BaseModel
 	Key   string `json:"key" gorm:"column:key;uniqueIndex;size:191;not null"`
@@ -12,18 +9,12 @@ type Setting struct {
 
 func (*Setting) TableName() string { return "settings" }
 
-// AllowAdhocBuilds gates running a template whose schema differs from the
-// definition synced from Git (edited in the workbench, or built from scratch).
-// Default true — turning it off requires every build to come from a committed
-// definition.
+// AllowAdhocBuilds permits builds whose schema differs from Git; off means every build runs a committed definition.
 const AllowAdhocBuilds = "allow_adhoc_builds"
 
-// PruneDefinitions makes the Git sync delete every definition no YAML file
-// defines — panel-created ones included. Default false: such definitions are
-// kept and flagged in the panel instead.
+// PruneDefinitions makes the sync delete definitions no YAML file defines, panel-created ones included.
 const PruneDefinitions = "prune_definitions"
 
-// SettingDefaults are applied when a key has never been written.
 var SettingDefaults = map[string]string{
 	AllowAdhocBuilds: "true",
 	PruneDefinitions: "false",

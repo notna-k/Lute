@@ -12,8 +12,7 @@ import (
 	"github.com/lute/api/internal/db/repos"
 )
 
-// APIKeysHandler manages issuance and revocation of public-API tokens for the
-// authenticated UI user. Create returns the plaintext token exactly once.
+// APIKeysHandler manages the caller's public-API tokens; Create shows the plaintext once.
 type APIKeysHandler struct {
 	repo *repos.APIKeyRepository
 }

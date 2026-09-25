@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// ParameterOption is a selectable choice for select/multiselect parameters.
 type ParameterOption struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
@@ -13,10 +12,7 @@ type ParameterOption struct {
 	Tone  string `json:"tone,omitempty"`
 }
 
-// ParameterField describes one typed input a job accepts. The schema both
-// renders the trigger UI and validates the trigger payload server-side.
-//
-// Type is one of: string, number, bool, select, multiselect, date, datetime, secret.
+// ParameterField is one typed job input; the schema renders the trigger form and validates it.
 type ParameterField struct {
 	Name        string            `json:"name"`
 	Type        string            `json:"type"`
@@ -29,10 +25,8 @@ type ParameterField struct {
 	SecretRef   string            `json:"secretRef,omitempty"`
 }
 
-// EnvName is the environment variable this parameter's value reaches the container
-// as. A definition that omits envVar gets a name derived from the parameter's own
-// name: an unnamed variable is rejected by the container runtime, which failed every
-// build of the job over one missing line of YAML.
+// EnvName is the container env var for this parameter. Without envVar it derives one
+// from the name, because the runtime rejects an unnamed variable.
 func (f ParameterField) EnvName() string {
 	if f.EnvVar != "" {
 		return f.EnvVar
@@ -40,9 +34,7 @@ func (f ParameterField) EnvName() string {
 	return deriveEnvName(f.Name)
 }
 
-// deriveEnvName upper-cases a parameter name into a usable variable name, mapping
-// anything that is not alphanumeric to an underscore. It returns "" when the name
-// yields nothing usable, so callers can skip the parameter instead of emitting junk.
+// deriveEnvName upper-cases name and maps non-alphanumerics to "_"; "" if nothing usable remains.
 func deriveEnvName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
@@ -66,8 +58,7 @@ func deriveEnvName(name string) string {
 	return out
 }
 
-// JobSpec is everything a definition's YAML file says about the job — the part
-// that can be edited in the panel and compared against Git.
+// JobSpec is what a definition's YAML says: the part the panel edits and compares against Git.
 type JobSpec struct {
 	Name          string            `json:"name"`
 	Description   string            `json:"description,omitempty"`
@@ -79,34 +70,27 @@ type JobSpec struct {
 	Parameters    []ParameterField  `json:"parameters,omitempty" gorm:"serializer:json"`
 }
 
-// Equal compares two specs by content. It goes through JSON so that nil and
-// empty collections, and a YAML uint64 default against a JSON float64 one,
-// compare as the same value.
+// Equal compares via JSON, so nil and empty collections, and a YAML uint64 against a
+// JSON float64, count as equal.
 func (s JobSpec) Equal(o JobSpec) bool {
 	a, errA := json.Marshal(s)
 	b, errB := json.Marshal(o)
 	return errA == nil && errB == nil && string(a) == string(b)
 }
 
-// JobDefinition is a reusable job. Git is the source of truth: the sync writes
-// each YAML file's spec here, and remembers it in GitSpec. The panel may edit
-// the live spec, which then drifts from GitSpec until the next change in Git
-// overwrites it (or someone commits the panel's version).
+// JobDefinition is a reusable job. The sync writes each file's spec here and into
+// GitSpec; a panel edit drifts from GitSpec until the file next changes.
 type JobDefinition struct {
 	BaseModel
 	Slug    string `json:"slug" gorm:"column:slug;uniqueIndex;size:191;not null"`
 	JobSpec `gorm:"embedded"`
-	// SourcePath and SourceCommit locate the YAML file this came from. A
-	// definition created in the panel has neither; one whose file was deleted
-	// keeps its last path, which is how the panel tells the two apart.
+	// SourcePath is empty for a panel-created definition; one whose file was deleted keeps it.
 	SourcePath   string `json:"sourcePath"`
 	SourceCommit string `json:"sourceCommit"`
-	// GitSpec is the spec as Git last stated it, or nil when no file in Git
-	// defines this slug (created in the panel, or removed from Git).
+	// GitSpec is nil when no file in Git defines this slug.
 	GitSpec *JobSpec `json:"gitSpec,omitempty" gorm:"serializer:json"`
 }
 
-// Git states of a definition, derived from its live spec against GitSpec.
 const (
 	GitSynced   = "synced"   // matches its YAML file
 	GitModified = "modified" // edited in the panel since the last Git change
@@ -114,7 +98,6 @@ const (
 	GitRemoved  = "removed"  // its YAML file was deleted; kept because prune is off
 )
 
-// GitState reports how this definition relates to Git.
 func (d *JobDefinition) GitState() string {
 	switch {
 	case d.GitSpec == nil && d.SourcePath != "":

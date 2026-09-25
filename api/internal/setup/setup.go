@@ -1,4 +1,4 @@
-// Package setup opens the database and builds the repositories and services core runs on.
+// Package setup builds the repositories and services core runs on.
 package setup
 
 import (
@@ -16,7 +16,6 @@ import (
 	"github.com/lute/api/internal/queue"
 )
 
-// Deps is everything the servers and handlers are built from.
 type Deps struct {
 	Config   *config.Config
 	Database *connection.Database
@@ -40,8 +39,7 @@ type Deps struct {
 	Auth         *auth.Service
 }
 
-// New opens the database, seeds the admin user and syncs job definitions from Git.
-// The binary and the e2e harness both boot through it.
+// New opens the database, seeds the admin and syncs job definitions; the e2e harness boots through it too.
 func New(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	db, err := connection.Open(ctx, cfg.Database.DSN)
 	if err != nil {

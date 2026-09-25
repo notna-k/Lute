@@ -1,6 +1,6 @@
 package enums
 
-// Portable "enums": varchar columns + typed string aliases (no native PG ENUM types).
+// Enums are varchar columns with string aliases, not native Postgres ENUM types.
 
 type WorkerStatus = string
 
@@ -29,7 +29,6 @@ const (
 	WebhookDeliveryFailed    WebhookDeliveryStatus = "failed"
 )
 
-// QueueLane is persisted for queue_slots.
 type QueueLane = string
 
 const (
@@ -38,7 +37,7 @@ const (
 	QueueLaneNone    QueueLane = "none"
 )
 
-// QueueJobStatus is the JSON job envelope status stored inside queue_slots.payload.
+// QueueJobStatus is stored inside queue_slots.payload, not as a column.
 type QueueJobStatus = string
 
 const (

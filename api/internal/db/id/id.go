@@ -8,12 +8,11 @@ import (
 	"fmt"
 )
 
-// ID is a 24-character hex document identifier (compatible with former Mongo ObjectID hex).
+// ID is 12 random bytes as 24 hex characters.
 type ID string
 
 var ErrInvalidID = errors.New("invalid id")
 
-// New returns a random 12-byte ID encoded as 24 hex characters.
 func New() ID {
 	var b [12]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -22,7 +21,6 @@ func New() ID {
 	return ID(hex.EncodeToString(b[:]))
 }
 
-// FromHex parses a 24-hex-character string.
 func FromHex(s string) (ID, error) {
 	if len(s) != 24 {
 		return "", fmt.Errorf("%w: wrong length", ErrInvalidID)

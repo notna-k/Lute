@@ -13,8 +13,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestBuildRuns is the path Lute exists for: a definition from Git, a build triggered
-// from the panel, a container on a build host, and the result and logs coming back.
+// TestBuildRuns is the core path: a Git definition, a panel trigger, a container, and results and logs.
 func TestBuildRuns(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -30,9 +29,7 @@ func TestBuildRuns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("trigger: %v", err)
 		}
-		// Trigger dispatches before it answers, so with an idle host connected the
-		// build can already be running by the time the response is written. What must
-		// not happen is a brand-new build reporting an outcome.
+		// Trigger dispatches before answering, so "running" is fine; an outcome is not.
 		if build.Status != "queued" && build.Status != "running" {
 			t.Errorf("a freshly triggered build reports %q, want queued or running", build.Status)
 		}
@@ -60,7 +57,6 @@ func TestBuildRuns(t *testing.T) {
 			}
 		}
 
-		// And core must have recorded the attempt against the host that ran it.
 		exec := harness.WaitExecution(admin, done.JobID, 30*time.Second)
 		if exec.WorkerID != agent.WorkerID {
 			t.Errorf("execution worker = %q, want %q", exec.WorkerID, agent.WorkerID)
@@ -101,8 +97,7 @@ func TestBuildRuns(t *testing.T) {
 			t.Fatalf("trigger: %v", err)
 		}
 
-		// A build's params are shown in the panel and offered as the next build's
-		// starting point. A secret landing there leaks it to every viewer.
+		// Params are shown in the panel, so a secret there leaks to every viewer.
 		for key, value := range build.Params {
 			if strings.Contains(value, "super-secret-value") {
 				t.Errorf("parameter %q carries the submitted secret", key)
@@ -155,8 +150,7 @@ func TestBuildRuns(t *testing.T) {
 		if code := harness.CodeOf(err); code != "invalid_parameters" {
 			t.Errorf("error code = %q, want invalid_parameters", code)
 		}
-		// The panel renders these next to the offending inputs; without them the
-		// operator only learns that something, somewhere, was wrong.
+		// The panel renders these next to the offending inputs.
 		fields := harness.FieldsOf(err)
 		for _, name := range []string{"environment", "retries"} {
 			if _, ok := fields[name]; !ok {
@@ -180,8 +174,7 @@ func TestBuildRuns(t *testing.T) {
 	})
 }
 
-// TestBuildLogs covers reading a build's output, which core fetches from the host that
-// ran it rather than storing itself.
+// TestBuildLogs covers reading a build's log, which core fetches from the host that ran it.
 func TestBuildLogs(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -306,8 +299,7 @@ func TestDocumentedRuntimes(t *testing.T) {
 	})
 }
 
-// readAllLogs returns a build's whole log, newest page first being irrelevant here:
-// the assertions are about content, not order of retrieval.
+// readAllLogs returns a build's whole log; callers assert on content, not order.
 func readAllLogs(t *testing.T, c *harness.Client, jobID string) []string {
 	t.Helper()
 	page, err := c.JobLogs(jobID, harness.LogOptions{Direction: "head", Limit: 500})

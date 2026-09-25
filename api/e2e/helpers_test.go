@@ -12,9 +12,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// newStack boots a Lute with the suite's job definitions already committed, which is
-// the state an operator finds after a deploy: definitions synced from Git, no builds
-// yet, no agents connected.
+// newStack boots with the suite's definitions synced, no builds and no agents.
 func newStack(t *testing.T, opts ...harness.StackOption) *harness.Stack {
 	t.Helper()
 	return harness.NewStack(t, pg, append([]harness.StackOption{
@@ -22,7 +20,6 @@ func newStack(t *testing.T, opts ...harness.StackOption) *harness.Stack {
 	}, opts...)...)
 }
 
-// newBareStack boots a Lute with no definitions, for tests that write their own.
 func newBareStack(t *testing.T, opts ...harness.StackOption) *harness.Stack {
 	t.Helper()
 	return harness.NewStack(t, pg, append([]harness.StackOption{
@@ -30,7 +27,6 @@ func newBareStack(t *testing.T, opts ...harness.StackOption) *harness.Stack {
 	}, opts...)...)
 }
 
-// jobDefsDir writes definition files into a directory core will sync from at boot.
 func jobDefsDir(t *testing.T, defs map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -42,7 +38,6 @@ func jobDefsDir(t *testing.T, defs map[string]string) string {
 	return dir
 }
 
-// slugsOf lists the slugs of a definition set, for set comparisons.
 func slugsOf(defs []harness.JobDefinition) []string {
 	out := make([]string, 0, len(defs))
 	for _, d := range defs {
@@ -51,7 +46,6 @@ func slugsOf(defs []harness.JobDefinition) []string {
 	return out
 }
 
-// findDef returns the definition with the given slug, or fails.
 func findDef(t *testing.T, defs []harness.JobDefinition, slug string) harness.JobDefinition {
 	t.Helper()
 	for _, d := range defs {
@@ -63,8 +57,7 @@ func findDef(t *testing.T, defs []harness.JobDefinition, slug string) harness.Jo
 	return harness.JobDefinition{}
 }
 
-// jobIDOf resolves a build's queue-job id, which is what the queue and log APIs are
-// keyed by. The panel addresses a build by run id; the two are deliberately distinct.
+// jobIDOf resolves the queue-job id the queue and log APIs use, which differs from the run id.
 func jobIDOf(t *testing.T, c *harness.Client, slug, runID string) string {
 	t.Helper()
 	builds, err := c.Builds(slug)
@@ -80,8 +73,6 @@ func jobIDOf(t *testing.T, c *harness.Client, slug, runID string) string {
 	return ""
 }
 
-// containerPayload builds the payload a "container" job carries, for the tests that
-// queue work directly rather than through a definition.
 func containerPayload(t *testing.T, runtime, command string) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(harness.ContainerSpec{Runtime: runtime, Command: command})
@@ -91,7 +82,6 @@ func containerPayload(t *testing.T, runtime, command string) json.RawMessage {
 	return raw
 }
 
-// linesContain reports whether any line contains the substring.
 func linesContain(lines []string, want string) bool {
 	for _, l := range lines {
 		if strings.Contains(l, want) {

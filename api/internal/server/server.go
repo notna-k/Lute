@@ -1,5 +1,4 @@
-// Package server runs core: the HTTP API, the gRPC endpoint agents connect to, and
-// the background loops (queue sweep, heartbeats, snapshots, webhooks).
+// Package server runs core's HTTP API, its gRPC endpoint for agents, and the background loops.
 package server
 
 import (
@@ -82,8 +81,7 @@ func (s *Server) GRPCAddr() string {
 	return s.grpc.Addr()
 }
 
-// Start binds both listeners in the foreground, so a port conflict is returned to
-// the caller, then serves and starts the background loops.
+// Start binds both listeners in the foreground, so a port conflict is returned to the caller.
 func (s *Server) Start() error {
 	lis, err := net.Listen("tcp", s.http.Addr)
 	if err != nil {
@@ -114,7 +112,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Shutdown stops the loops and both servers, and waits for the loops to return.
+// Shutdown waits for the loops to return, so the caller may then close the database.
 func (s *Server) Shutdown(ctx context.Context) error {
 	slog.Info("shutting down")
 	s.cancel()

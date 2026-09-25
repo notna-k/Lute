@@ -34,7 +34,6 @@ func testConfig() *config.Config {
 	}
 }
 
-// newTestServer serves the WS route as the router mounts it, with a valid token for it.
 func newTestServer(t *testing.T) (wsURL, token string, hub *Hub) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

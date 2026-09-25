@@ -9,14 +9,12 @@ import (
 	"github.com/lute/api/internal/db/types"
 )
 
-// BaseModel embeds identifiers and timestamps for domain rows.
 type BaseModel struct {
 	ID        id.ID           `json:"id" gorm:"primaryKey;size:24"`
 	CreatedAt types.MilliTime `json:"created_at" gorm:"column:created_at;default:0"`
 	UpdatedAt types.MilliTime `json:"updated_at" gorm:"column:updated_at;default:0"`
 }
 
-// BeforeCreate initializes id and timestamps before insert (GORM callback).
 func (b *BaseModel) BeforeCreate(_ *gorm.DB) error {
 	if b.ID.IsZero() {
 		b.ID = id.New()
@@ -29,7 +27,6 @@ func (b *BaseModel) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-// BeforeUpdate refreshes UpdatedAt before write (GORM callback).
 func (b *BaseModel) BeforeUpdate(_ *gorm.DB) error {
 	b.UpdatedAt = types.NewMilliTime(time.Now())
 	return nil

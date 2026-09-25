@@ -14,8 +14,6 @@ func TestParameterFieldEnvName(t *testing.T) {
 			want:  "TARGET_ENV",
 		},
 		{
-			// A definition that omits envVar used to resolve to an unnamed variable,
-			// which the container runtime rejects — failing every build of the job.
 			name:  "Success - a missing envVar is derived from the parameter name",
 			field: ParameterField{Name: "dry_run"},
 			want:  "DRY_RUN",
@@ -31,8 +29,6 @@ func TestParameterFieldEnvName(t *testing.T) {
 			want:  "P_2FA",
 		},
 		{
-			// Nothing usable to pass the value as; the caller skips the parameter
-			// rather than emitting a variable with no name.
 			name:  "Success - a name with nothing usable in it yields nothing",
 			field: ParameterField{Name: "***"},
 			want:  "",

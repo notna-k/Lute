@@ -2,16 +2,9 @@ package models
 
 import "github.com/lute/api/internal/db/id"
 
-// RefreshToken stores one issued refresh token in a session family.
-//
-// Security model:
-//   - TokenHash is sha256(token) — plaintext never persisted.
-//   - FamilyID groups tokens issued from one login. A session = one family.
-//   - On refresh: row is marked UsedAt and a new row (same FamilyID) is inserted.
-//   - If a token whose UsedAt is already set is presented again, the whole
-//     family is revoked (reuse-detection => probable theft).
-//   - Logout revokes all rows in the active family. A user may keep multiple
-//     concurrent families (sessions) — one per device / browser.
+// RefreshToken is one token in a session family (one login). A refresh marks it used
+// and issues the next; presenting a used token again revokes the whole family, since
+// that means it was stolen. Only sha256(token) is stored.
 type RefreshToken struct {
 	BaseModel
 	UserID    id.ID  `json:"user_id" gorm:"column:user_id;size:24;index:idx_refresh_tokens_user"`

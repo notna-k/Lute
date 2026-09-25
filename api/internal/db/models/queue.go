@@ -2,7 +2,7 @@ package models
 
 import "github.com/lute/api/internal/db/enums"
 
-// QueueSlot is the durable-backed queue envelope (serialized job JSON in Payload).
+// QueueSlot holds one queued job; Payload is the queue.Job as JSON.
 type QueueSlot struct {
 	JobID       string          `json:"job_id" gorm:"column:job_id;primaryKey"`
 	QueueName   string          `json:"queue_name" gorm:"column:queue_name;not null"`
@@ -17,7 +17,6 @@ type QueueSlot struct {
 
 func (*QueueSlot) TableName() string { return "queue_slots" }
 
-// QueueDLQ links dead-lettered job IDs to queues.
 type QueueDLQ struct {
 	ID        uint64 `gorm:"primaryKey;autoIncrement"`
 	QueueName string `json:"queue_name" gorm:"column:queue_name;not null;index:idx_queue_dlq_queue_id"`
@@ -26,7 +25,6 @@ type QueueDLQ struct {
 
 func (*QueueDLQ) TableName() string { return "queue_dlq" }
 
-// QueueStatsMinute holds rollup counters keyed by bucket.
 type QueueStatsMinute struct {
 	QueueName    string `gorm:"column:queue_name;primaryKey"`
 	MinuteBucket int64  `gorm:"column:minute_bucket;primaryKey"`

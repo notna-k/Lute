@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrNotFound is returned when a single-row lookup finds no matching record.
 var ErrNotFound = errors.New("not found")
 
 func mapErr(err error) error {

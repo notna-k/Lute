@@ -6,7 +6,7 @@ import (
 	"github.com/lute/api/internal/db/models"
 )
 
-// RegisteredModels lists all migrated tables in dependency-safe order (parents first).
+// RegisteredModels lists every migrated table, parents first. A model missing here never gets a table.
 func RegisteredModels() []any {
 	return []any{
 		&models.User{},
@@ -26,7 +26,6 @@ func RegisteredModels() []any {
 	}
 }
 
-// Run applies AutoMigrate plus secondary indexes neither dialect expresses well in struct tags alone.
 func Run(db *gorm.DB) error {
 	for _, model := range RegisteredModels() {
 		if err := db.AutoMigrate(model); err != nil {

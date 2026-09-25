@@ -18,8 +18,7 @@ import (
 	"github.com/lute/api/internal/worker"
 )
 
-// New builds the HTTP handler: the panel API under /api/v1, the API-key API under
-// /api/public/v1, and the embedded UI for everything else.
+// New serves the panel API on /api/v1, the API-key API on /api/public/v1, and the UI elsewhere.
 func New(d *setup.Deps, hub *websocket.Hub, grpcServer *luteGrpc.Server) *gin.Engine {
 	cfg := d.Config
 	gin.SetMode(cfg.Server.Mode)
@@ -29,8 +28,7 @@ func New(d *setup.Deps, hub *websocket.Hub, grpcServer *luteGrpc.Server) *gin.En
 
 	api := r.Group("/api")
 	health.SetupRoutes(api, health.NewHealthHandler(d.Database))
-	// The WebSocket handler authenticates itself: a browser sends the token as a
-	// subprotocol, which JWTAuthMiddleware would reject.
+	// Authenticates itself: browsers send the token as a subprotocol, which JWTAuthMiddleware rejects.
 	api.GET("/ws", websocket.NewWebSocketHandler(hub, cfg, d.Tokens).HandleWebSocket)
 
 	workerHandler := worker.NewWorkerHandler(cfg.WorkerBinary.Dir, cfg, d.Workers, d.Commands, grpcServer.ConnMgr, grpcServer)

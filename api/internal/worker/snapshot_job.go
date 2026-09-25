@@ -10,7 +10,7 @@ import (
 
 var workerSnapshotMetricKeys = []string{"cpu_load", "mem_usage_mb", "disk_used_gb", "disk_total_gb"}
 
-// WorkerSnapshotJob runs periodically to record per-worker snapshots (status + canonical metrics).
+// WorkerSnapshotJob periodically records each alive worker's metrics for the dashboard charts.
 type WorkerSnapshotJob struct {
 	workerRepo   *repos.WorkerRepository
 	snapshotRepo *repos.WorkerSnapshotRepository

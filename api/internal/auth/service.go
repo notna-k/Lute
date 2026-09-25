@@ -17,7 +17,6 @@ var (
 	ErrTokenReuse         = errors.New("refresh token reuse detected")
 )
 
-// Service orchestrates login / refresh / logout against the user + refresh-token repos.
 type Service struct {
 	users   *repos.UserRepository
 	refresh *repos.RefreshTokenRepository
@@ -28,8 +27,7 @@ func NewService(users *repos.UserRepository, refresh *repos.RefreshTokenReposito
 	return &Service{users: users, refresh: refresh, tokens: tokens}
 }
 
-// IssuedTokens bundles tokens returned to the caller. RefreshPlaintext is the value
-// the cookie should carry; only its hash is in the database.
+// IssuedTokens carries the refresh token in plaintext for the cookie; only its hash is stored.
 type IssuedTokens struct {
 	Access           string
 	AccessExpiresAt  time.Time
@@ -38,14 +36,12 @@ type IssuedTokens struct {
 	User             *models.User
 }
 
-// SessionMeta is best-effort metadata recorded on the refresh-token row.
 type SessionMeta struct {
 	UserAgent string
 	IP        string
 }
 
-// Login verifies the password and starts a new session family (each login = new family,
-// so multiple devices / browsers can be active concurrently).
+// Login starts a new session family, so several devices can be signed in at once.
 func (s *Service) Login(ctx context.Context, email, password string, meta SessionMeta) (*IssuedTokens, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || password == "" {
@@ -64,8 +60,7 @@ func (s *Service) Login(ctx context.Context, email, password string, meta Sessio
 	return s.issue(ctx, user, id.New(), meta)
 }
 
-// Refresh consumes a refresh token: marks it used, then issues a new pair in the same family.
-// If the token was already used (replay), the entire family is revoked.
+// Refresh rotates the token within its family; replaying a used token revokes the family.
 func (s *Service) Refresh(ctx context.Context, refreshPlaintext string, meta SessionMeta) (*IssuedTokens, error) {
 	if refreshPlaintext == "" {
 		return nil, ErrInvalidToken
@@ -84,7 +79,6 @@ func (s *Service) Refresh(ctx context.Context, refreshPlaintext string, meta Ses
 		return nil, ErrInvalidToken
 	}
 	if row.UsedAt != nil {
-		// Replay detected: revoke the whole family.
 		_ = s.refresh.RevokeFamily(ctx, row.FamilyID)
 		return nil, ErrTokenReuse
 	}
@@ -92,7 +86,7 @@ func (s *Service) Refresh(ctx context.Context, refreshPlaintext string, meta Ses
 		return nil, ErrInvalidToken
 	}
 
-	// Atomically claim the row. If another caller raced us, treat as reuse.
+	// Losing a race for the row counts as reuse.
 	if err := s.refresh.MarkUsed(ctx, row.ID); err != nil {
 		if errors.Is(err, repos.ErrNotFound) {
 			_ = s.refresh.RevokeFamily(ctx, row.FamilyID)
@@ -108,8 +102,7 @@ func (s *Service) Refresh(ctx context.Context, refreshPlaintext string, meta Ses
 	return s.issue(ctx, user, row.FamilyID, meta)
 }
 
-// Logout revokes the family associated with the supplied refresh token (a single session).
-// Other sessions for the same user are left untouched.
+// Logout revokes this session's family only; the user's other sessions stay.
 func (s *Service) Logout(ctx context.Context, refreshPlaintext string) error {
 	if refreshPlaintext == "" {
 		return nil

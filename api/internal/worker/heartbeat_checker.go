@@ -11,10 +11,8 @@ import (
 	"github.com/lute/api/internal/grpc"
 )
 
-// HeartbeatChecker periodically pings connected agents over their
-// bidirectional gRPC streams. On a successful pong the retry counter is
-// reset; on failure it is incremented. Once retries exceed max the worker
-// is marked dead and no longer polled.
+// HeartbeatChecker pings connected agents; after maxRetries missed pongs in a row a
+// worker is marked dead and no longer pinged.
 type HeartbeatChecker struct {
 	workerRepo  *repos.WorkerRepository
 	connMgr     *grpc.ConnectionManager

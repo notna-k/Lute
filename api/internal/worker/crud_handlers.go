@@ -87,7 +87,6 @@ func (h *WorkerHandler) GetLabels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"labels": labels})
 }
 
-// PatchLabels replaces the worker's whole label set.
 func (h *WorkerHandler) PatchLabels(c *gin.Context) {
 	w, ok := h.ownedWorker(c)
 	if !ok {
@@ -152,7 +151,6 @@ func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// Repeated ?label=key:value params filter by label.
 	filter := map[string]string{}
 	for _, lv := range c.QueryArray("label") {
 		if k, v, ok := strings.Cut(lv, ":"); ok {
@@ -230,7 +228,6 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": msg, "stop_signal_sent": stopped})
 }
 
-// save persists w and returns the stored row.
 func (h *WorkerHandler) save(ctx context.Context, w *models.Worker) (*models.Worker, error) {
 	if err := h.workerRepo.Update(ctx, w.ID, w); err != nil {
 		return nil, err

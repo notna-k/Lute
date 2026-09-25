@@ -14,7 +14,6 @@ import (
 
 const RefreshCookieName = "lute_refresh"
 
-// CookieConfig controls how the refresh cookie is set on responses.
 type CookieConfig struct {
 	Path     string
 	Domain   string
@@ -22,8 +21,7 @@ type CookieConfig struct {
 	SameSite http.SameSite
 }
 
-// DefaultCookieConfig returns sane defaults: scoped to /api/v1/auth so the
-// cookie is only sent to refresh / logout. SameSite=Strict blocks CSRF.
+// DefaultCookieConfig scopes the cookie to /api/v1/auth; SameSite=Strict blocks CSRF.
 func DefaultCookieConfig(secure bool) CookieConfig {
 	return CookieConfig{
 		Path:     "/api/v1/auth",
@@ -87,7 +85,6 @@ func (h *Handler) Refresh(c *gin.Context) {
 	}
 	tokens, err := h.svc.Refresh(c.Request.Context(), raw, sessionMeta(c))
 	if err != nil {
-		// Clear the cookie on any failure so the client stops sending it.
 		h.clearRefreshCookie(c)
 		if errors.Is(err, ErrTokenReuse) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "session revoked"})
@@ -112,7 +109,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-// Me returns the authenticated user. Must be mounted under the JWT middleware.
+// Me must be mounted under the JWT middleware.
 func (h *Handler) Me(c *gin.Context) {
 	uidStr, ok := c.Get("user_id")
 	if !ok {

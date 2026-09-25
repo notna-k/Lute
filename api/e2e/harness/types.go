@@ -4,10 +4,8 @@ package harness
 
 import "encoding/json"
 
-// The types here mirror what core puts on the wire, not its internal models. A test
-// asserting on these is asserting on the contract the panel and the public API see.
+// These types mirror core's wire format, not its internal models.
 
-// Session is the result of signing in.
 type Session struct {
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int64  `json:"expires_in"`
@@ -15,20 +13,17 @@ type Session struct {
 	User        User   `json:"user"`
 }
 
-// User is the panel's view of an account.
 type User struct {
 	ID          string `json:"id"`
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
 }
 
-// ClaimCode is a single-use code that links a new agent to the issuing account.
 type ClaimCode struct {
 	Code      string `json:"code"`
 	ExpiresAt string `json:"expires_at"`
 }
 
-// WorkerRegistration is what an agent sends to claim itself.
 type WorkerRegistration struct {
 	Name      string            `json:"name"`
 	Hostname  string            `json:"hostname,omitempty"`
@@ -41,14 +36,12 @@ type WorkerRegistration struct {
 	ClaimCode string            `json:"claim_code,omitempty"`
 }
 
-// Registered is core's answer to a successful claim.
 type Registered struct {
 	WorkerID    string `json:"worker_id"`
 	GRPCAddress string `json:"grpc_address"`
 	Message     string `json:"message"`
 }
 
-// Worker is a registered build host.
 type Worker struct {
 	ID           string            `json:"id"`
 	UserID       string            `json:"user_id"`
@@ -59,11 +52,9 @@ type Worker struct {
 	AgentVersion string            `json:"agent_version"`
 	Labels       map[string]string `json:"labels"`
 	Metrics      map[string]any    `json:"metrics"`
-	// LastSeen is an RFC3339 timestamp, empty until the host has reported in.
-	LastSeen string `json:"last_seen"`
+	LastSeen     string            `json:"last_seen"`
 }
 
-// ConnectedWorker is a live gRPC stream as core sees it.
 type ConnectedWorker struct {
 	WorkerID    string   `json:"worker_id"`
 	Queues      []string `json:"queues"`
@@ -72,8 +63,6 @@ type ConnectedWorker struct {
 	Draining    bool     `json:"draining"`
 }
 
-// WorkerLiveStatus is the status endpoint's answer, which omits agent detail until
-// the worker has actually reported in.
 type WorkerLiveStatus struct {
 	WorkerID     string         `json:"worker_id"`
 	Name         string         `json:"name"`
@@ -84,7 +73,6 @@ type WorkerLiveStatus struct {
 	Metrics      map[string]any `json:"metrics"`
 }
 
-// ParameterField is one input in a definition's schema.
 type ParameterField struct {
 	Name        string   `json:"name"`
 	Type        string   `json:"type"`
@@ -97,7 +85,6 @@ type ParameterField struct {
 	SecretRef   string   `json:"secretRef,omitempty"`
 }
 
-// Option is a choice offered by a select or multiselect parameter.
 type Option struct {
 	Value string `json:"value"`
 	Label string `json:"label,omitempty"`
@@ -105,14 +92,12 @@ type Option struct {
 	Tone  string `json:"tone,omitempty"`
 }
 
-// JobSource records where a definition came from.
 type JobSource struct {
 	Repo   string `json:"repo"`
 	Path   string `json:"path"`
 	Commit string `json:"commit"`
 }
 
-// JobDefinition is the panel's view of a job definition.
 type JobDefinition struct {
 	Slug             string            `json:"slug"`
 	Name             string            `json:"name"`
@@ -130,12 +115,9 @@ type JobDefinition struct {
 	Recent           []string          `json:"recent,omitempty"`
 }
 
-// Build is one execution of a definition.
 type Build struct {
-	ID    string `json:"id"`
-	RunID string `json:"runId"`
-	// JobID addresses the build in the queue and log APIs. A run id and a job id
-	// are different values, and mixing them up is a 404.
+	ID          string            `json:"id"`
+	RunID       string            `json:"runId"`
 	JobID       string            `json:"jobId"`
 	JobSlug     string            `json:"jobSlug"`
 	Status      string            `json:"status"`
@@ -146,14 +128,11 @@ type Build struct {
 	AdHoc       bool              `json:"adHoc,omitempty"`
 }
 
-// TriggerRequest starts a build. Parameters is only sent when the panel rendered a
-// schema of its own, which is what makes the build ad-hoc.
 type TriggerRequest struct {
 	Values     map[string]any   `json:"values"`
 	Parameters []ParameterField `json:"parameters,omitempty"`
 }
 
-// JobDefinitionRequest is a panel-authored template.
 type JobDefinitionRequest struct {
 	Name          string            `json:"name"`
 	Description   string            `json:"description,omitempty"`
@@ -165,7 +144,6 @@ type JobDefinitionRequest struct {
 	Parameters    []ParameterField  `json:"parameters,omitempty"`
 }
 
-// SyncResult is what a sync from the definition directory reports.
 type SyncResult struct {
 	Added     int      `json:"added"`
 	Updated   int      `json:"updated"`
@@ -175,7 +153,6 @@ type SyncResult struct {
 	Skipped   []string `json:"skipped"`
 }
 
-// Job is the queue's view of a unit of work.
 type Job struct {
 	ID         string            `json:"id"`
 	Queue      string            `json:"queue"`
@@ -194,7 +171,6 @@ type Job struct {
 	Selector   map[string]string `json:"selector,omitempty"`
 }
 
-// EnqueueRequest puts a job straight on a queue, bypassing definitions.
 type EnqueueRequest struct {
 	Queue      string            `json:"queue"`
 	Type       string            `json:"type"`
@@ -206,14 +182,12 @@ type EnqueueRequest struct {
 	Selector   map[string]string `json:"selector,omitempty"`
 }
 
-// Enqueued identifies a freshly queued job.
 type Enqueued struct {
 	JobID   string `json:"job_id"`
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
 
-// LogPage is a chunk of a build's log, read off the worker that ran it.
 type LogPage struct {
 	Lines      []string `json:"lines"`
 	Direction  string   `json:"direction"`
@@ -223,7 +197,6 @@ type LogPage struct {
 	Error      string   `json:"error"`
 }
 
-// Execution is the record of a finished attempt.
 type Execution struct {
 	JobID            string `json:"job_id"`
 	WorkerID         string `json:"worker_id"`
@@ -236,25 +209,21 @@ type Execution struct {
 	ExecutionLogFile string `json:"execution_log_file"`
 }
 
-// QueueInfo is one queue and how much is waiting on it.
 type QueueInfo struct {
 	Name  string `json:"name"`
 	Depth int64  `json:"depth"`
 }
 
-// Settings are the operator policy switches.
 type Settings struct {
 	AllowAdhocBuilds bool `json:"allowAdhocBuilds"`
 	PruneDefinitions bool `json:"pruneDefinitions"`
 }
 
-// SettingsUpdate leaves omitted fields unchanged.
 type SettingsUpdate struct {
 	AllowAdhocBuilds *bool `json:"allowAdhocBuilds,omitempty"`
 	PruneDefinitions *bool `json:"pruneDefinitions,omitempty"`
 }
 
-// APIKey is a key as returned on creation — the token is shown once and never again.
 type APIKey struct {
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`
@@ -265,7 +234,6 @@ type APIKey struct {
 	Revoked    bool    `json:"revoked"`
 }
 
-// CreateRunRequest is the public API's way to start work.
 type CreateRunRequest struct {
 	Queue          string            `json:"queue"`
 	Type           string            `json:"type"`
@@ -279,14 +247,12 @@ type CreateRunRequest struct {
 	Selector       map[string]string `json:"selector,omitempty"`
 }
 
-// WebhookSpec subscribes a run's events to an endpoint.
 type WebhookSpec struct {
 	URL    string   `json:"url"`
 	Secret string   `json:"secret,omitempty"`
 	Events []string `json:"events,omitempty"`
 }
 
-// Run is the public API's view of one unit of work.
 type Run struct {
 	ID            string   `json:"id"`
 	Queue         string   `json:"queue"`
@@ -303,8 +269,7 @@ type Run struct {
 	WebhookSecret string   `json:"webhook_secret,omitempty"`
 }
 
-// ContainerSpec is the payload a "container" job carries. Both core and the worker
-// speak this shape; a test asserting on it is asserting on their contract.
+// ContainerSpec is the "container" job payload shared by core and the worker.
 type ContainerSpec struct {
 	SourceRepository string            `json:"source_repository,omitempty"`
 	Runtime          string            `json:"runtime"`

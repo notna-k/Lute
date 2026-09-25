@@ -33,7 +33,6 @@ func NewScheduler(
 	}
 }
 
-// Run blocks until ctx is cancelled.
 func (s *Scheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()

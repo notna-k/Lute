@@ -8,7 +8,6 @@ import (
 	"github.com/lute/api/internal/db/types"
 )
 
-// Worker is a registered compute node that runs the Lute agent and executes jobs.
 type Worker struct {
 	BaseModel
 	UserID         id.ID                  `json:"user_id,omitempty" gorm:"size:24"`

@@ -18,15 +18,13 @@ import (
 	"github.com/lute/api/internal/testutil/pgtest"
 )
 
-// Credentials of the admin seeded into every stack.
 const (
 	AdminEmail    = "admin@e2e.test"
 	AdminPassword = "e2e-admin-password"
 	jwtSecret     = "e2e-jwt-secret-long-enough-for-hs256-signing"
 )
 
-// Stack is one running Lute: a database of its own, core in this process, and
-// whatever agents a test starts against it.
+// Stack is one Lute: its own database, core in this process, and the agents a test starts.
 type Stack struct {
 	t           *testing.T
 	DSN         string
@@ -40,17 +38,14 @@ type Stack struct {
 	agents []*Agent
 }
 
-// StackOption adjusts the config core boots with.
 type StackOption func(*config.Config)
 
-// WithJobDefsDir points core at an existing directory of definition YAML.
 func WithJobDefsDir(dir string) StackOption {
 	return func(c *config.Config) { c.JobDefs.Dir = dir }
 }
 
-// WithFastHeartbeat shortens agent liveness checks. Off by default: a stack that
-// pings aggressively marks a worker dead in the gap between registering it and
-// starting its agent, which is not what most tests are about.
+// WithFastHeartbeat is opt-in: aggressive pings mark a worker dead between registering
+// it and starting its agent.
 func WithFastHeartbeat(interval, pingTimeout time.Duration, maxRetries int) StackOption {
 	return func(c *config.Config) {
 		c.Heartbeat.CheckInterval = interval
@@ -59,7 +54,6 @@ func WithFastHeartbeat(interval, pingTimeout time.Duration, maxRetries int) Stac
 	}
 }
 
-// WithLeaseGrace sets how long past its timeout a dispatched build counts as alive.
 func WithLeaseGrace(grace, reclaimAfter time.Duration) StackOption {
 	return func(c *config.Config) {
 		c.Queue.LeaseGrace = grace
@@ -67,7 +61,6 @@ func WithLeaseGrace(grace, reclaimAfter time.Duration) StackOption {
 	}
 }
 
-// NewStack boots core against a fresh database and tears everything down on cleanup.
 func NewStack(t *testing.T, pg *pgtest.Server, opts ...StackOption) *Stack {
 	t.Helper()
 
@@ -102,14 +95,12 @@ func NewStack(t *testing.T, pg *pgtest.Server, opts ...StackOption) *Stack {
 func (s *Stack) baseConfig() *config.Config {
 	return &config.Config{
 		Server: config.ServerConfig{
-			Host:         "127.0.0.1",
-			Port:         "0",
-			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
-			Mode:         "test",
-			// The panel's origin, so a WebSocket test can prove both the allowed
-			// and the rejected case.
+			Host:           "127.0.0.1",
+			Port:           "0",
+			ReadTimeout:    30 * time.Second,
+			WriteTimeout:   30 * time.Second,
+			IdleTimeout:    60 * time.Second,
+			Mode:           "test",
 			AllowedOrigins: []string{"http://localhost:8080"},
 		},
 		Database: config.DatabaseConfig{DSN: s.DSN},
@@ -147,8 +138,6 @@ func (s *Stack) baseConfig() *config.Config {
 	}
 }
 
-// start boots core and waits for it to answer. Splitting this from NewStack is what
-// makes Restart possible.
 func (s *Stack) start() {
 	s.t.Helper()
 
@@ -165,8 +154,7 @@ func (s *Stack) start() {
 	}
 	s.server = srv
 
-	// Pin the ports the OS just handed out, so a Restart comes back on the same
-	// addresses and a running agent can reconnect to them.
+	// Pin the assigned ports, so after a Restart running agents reconnect to the same addresses.
 	_, httpPort := hostPort(srv.HTTPAddr())
 	_, grpcPort := hostPort(srv.GRPCAddr())
 	s.Config.Server.Port = httpPort
@@ -190,24 +178,19 @@ func (s *Stack) stop() {
 	}
 }
 
-// Restart stops core and brings it back on the same database and the same ports —
-// what a deploy of the stateless core looks like to a connected agent.
+// Restart brings core back on the same database and ports, as a deploy looks to an agent.
 func (s *Stack) Restart() {
 	s.t.Helper()
 	s.stop()
 	s.start()
 }
 
-// BaseURL is the HTTP origin of this stack's core.
 func (s *Stack) BaseURL() string { return "http://" + s.server.HTTPAddr() }
 
-// GRPCAddr is the address agents connect to.
 func (s *Stack) GRPCAddr() string { return s.server.GRPCAddr() }
 
-// Client returns an unauthenticated API client for this stack.
 func (s *Stack) Client() *Client { return NewClient(s.t, s.BaseURL()) }
 
-// AdminClient returns a client already signed in as the seeded admin.
 func (s *Stack) AdminClient() *Client {
 	s.t.Helper()
 	c := s.Client()
@@ -217,12 +200,9 @@ func (s *Stack) AdminClient() *Client {
 	return c
 }
 
-// Agents returns every agent this stack has started, for tests that need to take the
-// whole fleet down.
 func (s *Stack) Agents() []*Agent { return append([]*Agent(nil), s.agents...) }
 
-// WriteJobDef puts a definition YAML in the directory core syncs from. It does not
-// sync by itself: call Client.SyncJobDefs, or write before the stack boots.
+// WriteJobDef does not sync: call Client.SyncJobDefs, or write before the stack boots.
 func (s *Stack) WriteJobDef(name, yaml string) {
 	s.t.Helper()
 	path := filepath.Join(s.JobDefsDir, name)
@@ -231,7 +211,6 @@ func (s *Stack) WriteJobDef(name, yaml string) {
 	}
 }
 
-// RemoveJobDef deletes a definition file, as a commit removing it would.
 func (s *Stack) RemoveJobDef(name string) {
 	s.t.Helper()
 	if err := os.Remove(filepath.Join(s.JobDefsDir, name)); err != nil {
@@ -257,8 +236,7 @@ func (s *Stack) waitHealthy() {
 	s.t.Fatalf("core did not become healthy at %s", url)
 }
 
-// captureLogs tees core's log output into the test's artifact directory, so a CI
-// failure comes with the server's side of the story.
+// captureLogs sends core's log (slog's default handler writes through package log) to the artifact dir.
 func (s *Stack) captureLogs() {
 	s.t.Helper()
 	path := filepath.Join(s.ArtifactDir, "core.log")
@@ -277,7 +255,6 @@ func (s *Stack) captureLogs() {
 	})
 }
 
-// artifactDir is where a test's diagnostics land: core logs, agent stderr, job logs.
 func artifactDir(t *testing.T) string {
 	t.Helper()
 	root := os.Getenv("LUTE_E2E_ARTIFACTS")

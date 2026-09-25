@@ -61,7 +61,6 @@ func NewEngine(db *gorm.DB, timings Timings) *Engine {
 	return &Engine{g: db, timings: timings}
 }
 
-// leaseDeadlineMS is when a job dispatched now stops counting as alive.
 func (r *Engine) leaseDeadlineMS(timeoutSec int) int64 {
 	if timeoutSec <= 0 {
 		timeoutSec = defaultTimeoutSec
@@ -73,7 +72,7 @@ func (r *Engine) q(ctx context.Context) *gorm.DB {
 	return r.g.WithContext(ctx)
 }
 
-// Enqueue adds or replaces a queue slot row for the given job envelope.
+// Enqueue adds or replaces the job's slot.
 func (r *Engine) Enqueue(ctx context.Context, job *Job, opts EnqueueOpts) error {
 	if opts.MaxRetries == 0 {
 		opts.MaxRetries = 3
@@ -124,9 +123,8 @@ func (r *Engine) Enqueue(ctx context.Context, job *Job, opts EnqueueOpts) error 
 	})
 }
 
-// PeekNextReadyJob reads the highest-priority ready job without dequeuing it.
-// Returns nil if the queue is empty. Used by the dispatcher to inspect the selector before
-// committing to a dequeue.
+// PeekNextReadyJob returns the next ready job without dequeuing it, or nil, so the
+// dispatcher can match its selector first.
 func (r *Engine) PeekNextReadyJob(ctx context.Context, queueName string) (*Job, error) {
 	var slot models.QueueSlot
 	err := r.q(ctx).Where("queue_name = ? AND lane = ?", queueName, enums.QueueLaneReady).
@@ -144,7 +142,7 @@ func (r *Engine) PeekNextReadyJob(ctx context.Context, queueName string) (*Job, 
 	return &job, nil
 }
 
-// Dequeue assigns the highest-priority ready job to lane "none" and returns it, or nil if empty.
+// Dequeue leases the highest-priority ready job and returns it, or nil if empty.
 func (r *Engine) Dequeue(ctx context.Context, queueName string) (*Job, error) {
 	var out *Job
 	err := r.q(ctx).Transaction(func(tx *gorm.DB) error {
@@ -198,7 +196,7 @@ func leasedSlot(tx *gorm.DB, jobID string) *gorm.DB {
 	return tx.Where("job_id = ? AND lane = ? AND lease_expires_at_ms > 0", jobID, enums.QueueLaneNone)
 }
 
-// Complete marks a job done and releases its lease, or returns ErrJobNotRunning if it was reaped.
+// Complete marks a job done, or returns ErrJobNotRunning if it was reaped.
 func (r *Engine) Complete(ctx context.Context, jobID string, elapsedMs int64) error {
 	job, err := r.GetJob(ctx, jobID)
 	if err != nil {
@@ -227,7 +225,7 @@ func (r *Engine) Complete(ctx context.Context, jobID string, elapsedMs int64) er
 	return nil
 }
 
-// Fail handles failure: retry with backoff or DLQ. Returns ErrJobNotRunning like Complete.
+// Fail retries the job with backoff or dead-letters it; ErrJobNotRunning if it was reaped.
 func (r *Engine) Fail(ctx context.Context, jobID string, errMsg string) error {
 	job, err := r.GetJob(ctx, jobID)
 	if err != nil {
@@ -298,7 +296,6 @@ func (r *Engine) Fail(ctx context.Context, jobID string, errMsg string) error {
 	})
 }
 
-// GetJob loads payload from queue_slots by job ID.
 func (r *Engine) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	var slot models.QueueSlot
 	if err := r.q(ctx).Where("job_id = ?", jobID).First(&slot).Error; err != nil {
@@ -314,7 +311,6 @@ func (r *Engine) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	return &job, nil
 }
 
-// SetWorkerID updates WorkerID inside the persisted job payload.
 func (r *Engine) SetWorkerID(ctx context.Context, jobID, workerID string) error {
 	job, err := r.GetJob(ctx, jobID)
 	if err != nil {
@@ -324,7 +320,6 @@ func (r *Engine) SetWorkerID(ctx context.Context, jobID, workerID string) error 
 	return r.saveJob(ctx, job)
 }
 
-// DeleteJob removes slot and DLQ links.
 func (r *Engine) DeleteJob(ctx context.Context, jobID string) error {
 	return r.q(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("job_id = ?", jobID).Delete(&models.QueueDLQ{}).Error; err != nil {
@@ -334,7 +329,7 @@ func (r *Engine) DeleteJob(ctx context.Context, jobID string) error {
 	})
 }
 
-// CancelJob marks a pending job dead if it is still in ready or delayed lane.
+// CancelJob marks a job dead if it has not been dispatched yet.
 func (r *Engine) CancelJob(ctx context.Context, jobID string) error {
 	job, err := r.GetJob(ctx, jobID)
 	if err != nil {
@@ -368,7 +363,6 @@ func (r *Engine) CancelJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
-// QueueDepth counts ready jobs for a queue name.
 func (r *Engine) QueueDepth(ctx context.Context, queueName string) (int64, error) {
 	var n int64
 	err := r.q(ctx).Model(&models.QueueSlot{}).
@@ -377,7 +371,7 @@ func (r *Engine) QueueDepth(ctx context.Context, queueName string) (int64, error
 	return n, err
 }
 
-// ListQueues returns names that have ready/delayed slots or DLQ rows.
+// ListQueues returns queues with ready or delayed jobs or DLQ entries.
 func (r *Engine) ListQueues(ctx context.Context) ([]string, error) {
 	var fromSlots []string
 	if err := r.q(ctx).Model(&models.QueueSlot{}).
@@ -409,7 +403,6 @@ func (r *Engine) ListQueues(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// ListQueueJobs lists ready job IDs with pagination.
 func (r *Engine) ListQueueJobs(ctx context.Context, queueName string, offset, limit int64) ([]string, error) {
 	if limit <= 0 {
 		limit = 50
@@ -424,7 +417,6 @@ func (r *Engine) ListQueueJobs(ctx context.Context, queueName string, offset, li
 	return ids, err
 }
 
-// DLQList lists DLQ job IDs for a queue.
 func (r *Engine) DLQList(ctx context.Context, queueName string, offset, limit int64) ([]string, error) {
 	if limit <= 0 {
 		limit = 50
@@ -439,7 +431,6 @@ func (r *Engine) DLQList(ctx context.Context, queueName string, offset, limit in
 	return ids, err
 }
 
-// DLQRetryAll re-enqueues every DLQ job for the queue.
 func (r *Engine) DLQRetryAll(ctx context.Context, queueName string) (int, error) {
 	jobIDs, err := r.DLQList(ctx, queueName, 0, 100000)
 	if err != nil {
@@ -463,7 +454,6 @@ func (r *Engine) DLQRetryAll(ctx context.Context, queueName string) (int, error)
 	return count, nil
 }
 
-// PurgeQueue removes all ready jobs from a queue.
 func (r *Engine) PurgeQueue(ctx context.Context, queueName string) (int64, error) {
 	var ids []string
 	if err := r.q(ctx).Model(&models.QueueSlot{}).
@@ -500,7 +490,7 @@ func (r *Engine) saveJob(ctx context.Context, job *Job) error {
 		}).Error
 }
 
-// ExpiredLease identifies a dispatched job whose worker died, hung, or ran past its timeout.
+// ExpiredLease is a dispatched job whose worker died, hung, or ran past its timeout.
 type ExpiredLease struct {
 	JobID    string
 	Queue    string
@@ -549,7 +539,7 @@ func (r *Engine) ClaimExpiredLeases(ctx context.Context) ([]ExpiredLease, error)
 	return claimed, nil
 }
 
-// PromoteDelayed moves due delayed slots back to ready (transactional sweep).
+// PromoteDelayed moves due delayed jobs back to ready.
 func (r *Engine) PromoteDelayed(ctx context.Context) (int, []string, error) {
 	ms := nowMilli()
 

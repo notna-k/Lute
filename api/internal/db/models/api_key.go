@@ -5,7 +5,7 @@ import (
 	"github.com/lute/api/internal/db/types"
 )
 
-// APIKey is a programmatic credential (prefix + hash only at rest).
+// APIKey stores only the token's public prefix and hash.
 type APIKey struct {
 	BaseModel
 	UserID     id.ID            `json:"user_id" gorm:"size:24;not null;index:idx_api_keys_user_created,priority:1"`

@@ -6,7 +6,6 @@ import (
 	"github.com/lute/api/internal/db/types"
 )
 
-// WebhookDelivery records an outbound webhook attempt for a run-level event.
 type WebhookDelivery struct {
 	BaseModel
 	RunID           id.ID                       `json:"run_id" gorm:"size:24;not null"`

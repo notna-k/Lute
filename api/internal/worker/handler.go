@@ -66,10 +66,9 @@ type claimEntry struct {
 	ExpiresAt time.Time
 }
 
-// WorkerHandler serves worker binaries, handles registration, claim codes, and worker management.
 type WorkerHandler struct {
 	binaryDir     string
-	binaryMu      sync.RWMutex // guards binaryCache — SHA256 is expensive, so cache is needed
+	binaryMu      sync.RWMutex // guards binaryCache
 	binaryCache   map[string]*WorkerBinaryInfo
 	claimMu       sync.RWMutex // guards claimCodes
 	claimCodes    map[string]*claimEntry
@@ -244,8 +243,8 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	})
 }
 
-// reclaimStaleWorkersAtIP returns the conflicting worker if one is alive at agentIP,
-// or deletes stale (disconnected) workers and returns nil.
+// reclaimStaleWorkersAtIP returns a live worker at agentIP if there is one; otherwise it
+// deletes the stale ones there and returns nil.
 func (h *WorkerHandler) reclaimStaleWorkersAtIP(ctx context.Context, userID id.ID, agentIP string) (*models.Worker, error) {
 	existing, err := h.workerRepo.GetByUserIDAndIP(ctx, userID, agentIP)
 	if err != nil {
@@ -428,7 +427,7 @@ func (h *WorkerHandler) InstallScript(c *gin.Context) {
 set -e
 
 # Lute Worker Installer
-# Usage: curl -sSL %s | bash -s -- --worker-id <ID> --server <GRPC_ADDR>
+# Usage: curl -sSL %s | bash
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -454,10 +453,11 @@ echo "==> Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 ${INSTALL_DIR}/${BINARY_NAME} --version
 
 echo ""
-echo "==> Next step: register this host with the Lute server"
-echo "    ${BINARY_NAME} setup --claim-code <CODE>"
-echo ""
-echo "    (copy the full command from the Add Worker dialog in the Lute UI)"
+echo "==> Next steps:"
+echo "    1. Register this host (copy the command from the Add Worker dialog in the Lute UI):"
+echo "         ${BINARY_NAME} setup --claim-code <CODE>"
+echo "    2. Start the agent against the server's gRPC address:"
+echo "         ${BINARY_NAME} run --server <GRPC_ADDR>"
 `, installURL, baseURL, downloadURL)
 
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))

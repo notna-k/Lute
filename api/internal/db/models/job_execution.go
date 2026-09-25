@@ -4,7 +4,6 @@ import (
 	"github.com/lute/api/internal/db/types"
 )
 
-// JobExecution records the outcome of a job run.
 type JobExecution struct {
 	BaseModel
 	JobID            string          `json:"job_id" gorm:"uniqueIndex"`
