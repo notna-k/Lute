@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lute/api/internal/auth"
+	"github.com/lute/api/internal/httpx"
 )
 
 // JWTAuthMiddleware authenticates a Bearer access JWT and sets user_id and email.
@@ -13,14 +14,12 @@ func JWTAuthMiddleware(tokens *auth.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := extractBearer(c.GetHeader("Authorization"))
 		if raw == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing Bearer token"})
-			c.Abort()
+			httpx.Error(c, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
 		claims, err := tokens.ParseAccess(raw)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-			c.Abort()
+			httpx.Error(c, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
 		c.Set("user_id", claims.UserID)

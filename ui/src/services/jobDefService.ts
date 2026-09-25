@@ -21,7 +21,7 @@ export async function listBuilds(slug: string): Promise<Build[]> {
 
 /**
  * Triggers a build. `parameters` is the schema the panel rendered: if it differs from the
- * committed one the build is ad-hoc, and gets 409 `adhoc_builds_disabled` when those are off.
+ * committed one the build is ad-hoc, and gets 409 `conflict` when those are off.
  */
 export function triggerBuild(
   slug: string,

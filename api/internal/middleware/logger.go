@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/lute/api/internal/httpx"
 )
 
 func Logger() gin.HandlerFunc {
@@ -29,6 +31,6 @@ func Logger() gin.HandlerFunc {
 func Recovery() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
 		slog.Error("panic recovered", "method", c.Request.Method, "path", c.Request.URL.Path, "panic", recovered)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		httpx.Error(c, http.StatusInternalServerError, "internal server error")
 	})
 }

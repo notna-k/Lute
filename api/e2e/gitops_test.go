@@ -211,20 +211,26 @@ command: echo added
 		admin := stack.AdminClient()
 
 		cases := []struct {
-			name string
-			req  harness.JobDefinitionRequest
+			name  string
+			field string
+			req   harness.JobDefinitionRequest
 		}{
-			{"no name", harness.JobDefinitionRequest{Runtime: "bash:5", Command: "echo"}},
-			{"no runtime", harness.JobDefinitionRequest{Name: "No Runtime", Command: "echo"}},
-			{"no command", harness.JobDefinitionRequest{Name: "No Command", Runtime: "bash:5"}},
-			{"unknown parameter type", harness.JobDefinitionRequest{
+			{"no name", "name", harness.JobDefinitionRequest{Runtime: "bash:5", Command: "echo"}},
+			{"no runtime", "runtime", harness.JobDefinitionRequest{Name: "No Runtime", Command: "echo"}},
+			{"no command", "command", harness.JobDefinitionRequest{Name: "No Command", Runtime: "bash:5"}},
+			{"unknown parameter type", "parameters", harness.JobDefinitionRequest{
 				Name: "Bad Param", Runtime: "bash:5", Command: "echo",
 				Parameters: []harness.ParameterField{{Name: "x", Type: "quantum"}},
 			}},
 		}
 		for _, tc := range cases {
-			if _, err := admin.CreateJobDef(tc.req); harness.StatusOf(err) != http.StatusBadRequest {
+			_, err := admin.CreateJobDef(tc.req)
+			if harness.StatusOf(err) != http.StatusBadRequest {
 				t.Errorf("create with %s: err = %v, want 400", tc.name, err)
+				continue
+			}
+			if _, ok := harness.FieldsOf(err)[tc.field]; !ok {
+				t.Errorf("create with %s: no detail for %q in %v", tc.name, tc.field, harness.FieldsOf(err))
 			}
 		}
 	})
@@ -279,8 +285,8 @@ func TestAdhocBuildPolicy(t *testing.T) {
 		if harness.StatusOf(err) != http.StatusConflict {
 			t.Fatalf("trigger an ad-hoc build with the policy off: err = %v, want 409", err)
 		}
-		if code := harness.CodeOf(err); code != "adhoc_builds_disabled" {
-			t.Errorf("error code = %q, want adhoc_builds_disabled", code)
+		if code := harness.CodeOf(err); code != "conflict" {
+			t.Errorf("error code = %q, want conflict", code)
 		}
 	})
 

@@ -353,7 +353,7 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 		return false
 	}
 
-	job, err := s.queueEngine.Dequeue(ctx, queueName)
+	job, err := s.queueEngine.Dequeue(ctx, queueName, worker.WorkerID)
 	if err != nil {
 		slog.Error("dequeue job", "queue", queueName, "err", err)
 		return false
@@ -374,10 +374,6 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 		_ = s.queueEngine.Fail(ctx, job.ID, "worker rejected assignment")
 		slog.Warn("worker rejected job assignment", "worker_id", worker.WorkerID, "job_id", job.ID)
 		return false
-	}
-
-	if err := s.queueEngine.SetWorkerID(ctx, job.ID, worker.WorkerID); err != nil {
-		slog.Error("record job worker", "job_id", job.ID, "err", err)
 	}
 
 	slog.Info("assigned job", "job_id", job.ID, "worker_id", worker.WorkerID)

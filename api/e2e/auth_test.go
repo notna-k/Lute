@@ -61,8 +61,12 @@ func TestSignInFlow(t *testing.T) {
 	t.Run("Fail - no token; the panel's endpoints stay shut", func(t *testing.T) {
 		c := stack.Client()
 
-		if _, err := c.Me(); harness.StatusOf(err) != http.StatusUnauthorized {
+		_, err := c.Me()
+		if harness.StatusOf(err) != http.StatusUnauthorized {
 			t.Errorf("GET /auth/me anonymously: err = %v, want 401", err)
+		}
+		if code := harness.CodeOf(err); code != "unauthorized" {
+			t.Errorf("GET /auth/me anonymously: code = %q, want unauthorized", code)
 		}
 		if _, err := c.ListJobDefs(); harness.StatusOf(err) != http.StatusUnauthorized {
 			t.Errorf("GET /job-definitions anonymously: err = %v, want 401", err)

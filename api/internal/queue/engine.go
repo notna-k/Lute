@@ -19,6 +19,9 @@ import (
 // ErrJobNotRunning means the result is stale: the reaper already gave up on this attempt.
 var ErrJobNotRunning = errors.New("job is not running")
 
+// ErrNotCancellable means the job already left the pending state.
+var ErrNotCancellable = errors.New("can only cancel pending jobs")
+
 func nowMilli() int64 { return time.Now().UTC().UnixMilli() }
 func nowUnix() int64  { return time.Now().UTC().Unix() }
 
@@ -142,8 +145,9 @@ func (r *Engine) PeekNextReadyJob(ctx context.Context, queueName string) (*Job, 
 	return &job, nil
 }
 
-// Dequeue leases the highest-priority ready job and returns it, or nil if empty.
-func (r *Engine) Dequeue(ctx context.Context, queueName string) (*Job, error) {
+// Dequeue leases the highest-priority ready job to workerID and returns it, or nil if empty.
+// The worker is recorded in the same write, before the job can reach it and report back.
+func (r *Engine) Dequeue(ctx context.Context, queueName, workerID string) (*Job, error) {
 	var out *Job
 	err := r.q(ctx).Transaction(func(tx *gorm.DB) error {
 		var slot models.QueueSlot
@@ -161,6 +165,7 @@ func (r *Engine) Dequeue(ctx context.Context, queueName string) (*Job, error) {
 		}
 		job.Status = string(enums.QueueJobRunning)
 		job.StartedAt = nowUnix()
+		job.WorkerID = workerID
 		job.Attempts++
 
 		data, err := json.Marshal(&job)
@@ -311,15 +316,6 @@ func (r *Engine) GetJob(ctx context.Context, jobID string) (*Job, error) {
 	return &job, nil
 }
 
-func (r *Engine) SetWorkerID(ctx context.Context, jobID, workerID string) error {
-	job, err := r.GetJob(ctx, jobID)
-	if err != nil {
-		return err
-	}
-	job.WorkerID = workerID
-	return r.saveJob(ctx, job)
-}
-
 func (r *Engine) DeleteJob(ctx context.Context, jobID string) error {
 	return r.q(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("job_id = ?", jobID).Delete(&models.QueueDLQ{}).Error; err != nil {
@@ -336,7 +332,7 @@ func (r *Engine) CancelJob(ctx context.Context, jobID string) error {
 		return err
 	}
 	if job.Status != string(enums.QueueJobPending) {
-		return fmt.Errorf("can only cancel pending jobs, status is %s", job.Status)
+		return fmt.Errorf("%w, status is %s", ErrNotCancellable, job.Status)
 	}
 	job.Status = string(enums.QueueJobDead)
 	job.Error = "cancelled"
@@ -358,7 +354,7 @@ func (r *Engine) CancelJob(ctx context.Context, jobID string) error {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return fmt.Errorf("can only cancel pending jobs, status is %s", job.Status)
+		return fmt.Errorf("%w, status is %s", ErrNotCancellable, job.Status)
 	}
 	return nil
 }
@@ -474,20 +470,6 @@ func (r *Engine) PurgeQueue(ctx context.Context, queueName string) (int64, error
 		return nil
 	})
 	return n, err
-}
-
-func (r *Engine) saveJob(ctx context.Context, job *Job) error {
-	data, err := json.Marshal(job)
-	if err != nil {
-		return err
-	}
-	return r.q(ctx).Model(&models.QueueSlot{}).
-		Where("job_id = ?", job.ID).
-		Updates(map[string]interface{}{
-			"payload":       string(data),
-			"queue_name":    job.Queue,
-			"updated_at_ms": nowMilli(),
-		}).Error
 }
 
 // ExpiredLease is a dispatched job whose worker died, hung, or ran past its timeout.

@@ -147,8 +147,8 @@ func TestBuildRuns(t *testing.T) {
 		if harness.StatusOf(err) != http.StatusBadRequest {
 			t.Fatalf("trigger with invalid values: err = %v, want 400", err)
 		}
-		if code := harness.CodeOf(err); code != "invalid_parameters" {
-			t.Errorf("error code = %q, want invalid_parameters", code)
+		if code := harness.CodeOf(err); code != "validation_failed" {
+			t.Errorf("error code = %q, want validation_failed", code)
 		}
 		// The panel renders these next to the offending inputs.
 		fields := harness.FieldsOf(err)

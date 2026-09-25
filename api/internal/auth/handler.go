@@ -2,14 +2,15 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 const RefreshCookieName = "lute_refresh"
@@ -61,16 +62,16 @@ type tokenResponse struct {
 func (h *Handler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		httpx.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	tokens, err := h.svc.Login(c.Request.Context(), req.Email, req.Password, sessionMeta(c))
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+			httpx.Error(c, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
+		httpx.Internal(c, fmt.Errorf("login: %w", err))
 		return
 	}
 	h.setRefreshCookie(c, tokens.RefreshPlaintext, tokens.RefreshExpiresAt)
@@ -80,21 +81,21 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) Refresh(c *gin.Context) {
 	raw, err := c.Cookie(RefreshCookieName)
 	if err != nil || raw == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing refresh token"})
+		httpx.Error(c, http.StatusUnauthorized, "missing refresh token")
 		return
 	}
 	tokens, err := h.svc.Refresh(c.Request.Context(), raw, sessionMeta(c))
 	if err != nil {
 		h.clearRefreshCookie(c)
 		if errors.Is(err, ErrTokenReuse) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "session revoked"})
+			httpx.Error(c, http.StatusUnauthorized, "session revoked")
 			return
 		}
 		if errors.Is(err, ErrInvalidToken) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+			httpx.Error(c, http.StatusUnauthorized, "invalid refresh token")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "refresh failed"})
+		httpx.Internal(c, fmt.Errorf("refresh: %w", err))
 		return
 	}
 	h.setRefreshCookie(c, tokens.RefreshPlaintext, tokens.RefreshExpiresAt)
@@ -111,19 +112,13 @@ func (h *Handler) Logout(c *gin.Context) {
 
 // Me must be mounted under the JWT middleware.
 func (h *Handler) Me(c *gin.Context) {
-	uidStr, ok := c.Get("user_id")
+	uid, ok := httpx.UserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
-		return
-	}
-	uid, err := id.FromHex(uidStr.(string))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
 		return
 	}
 	user, err := h.users.GetByID(c.Request.Context(), uid)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		httpx.NotFoundOrInternal(c, err, "user not found")
 		return
 	}
 	c.JSON(http.StatusOK, userDTO{

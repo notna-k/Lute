@@ -88,11 +88,7 @@ func (h *HeartbeatChecker) check(ctx context.Context) {
 			continue
 		}
 
-		var metrics map[string]interface{}
-		if pong != nil {
-			metrics = metricValueMapToInterface(pong.GetMetrics())
-		}
-		if err := h.workerRepo.UpdateHeartbeat(ctx, w.ID, metrics); err != nil {
+		if err := h.workerRepo.UpdateHeartbeat(ctx, w.ID, metricsOf(pong.GetMetrics())); err != nil {
 			slog.Error("heartbeat: update", "worker_id", workerID, "err", err)
 		} else {
 			slog.Debug("heartbeat: worker ok", "worker_id", workerID)
@@ -125,22 +121,12 @@ var canonicalMetricKeys = map[string]bool{
 	"cpu_load": true, "mem_usage_mb": true, "disk_used_gb": true, "disk_total_gb": true,
 }
 
-func metricValueMapToInterface(proto map[string]*pb.MetricValue) map[string]interface{} {
-	if len(proto) == 0 {
-		return nil
-	}
+// metricsOf keeps the canonical metrics; the worker sends each one as a float.
+func metricsOf(proto map[string]*pb.MetricValue) map[string]interface{} {
 	out := make(map[string]interface{}, len(canonicalMetricKeys))
 	for k, mv := range proto {
-		if !canonicalMetricKeys[k] || mv == nil {
-			continue
-		}
-		switch v := mv.Kind.(type) {
-		case *pb.MetricValue_I:
-			out[k] = v.I
-		case *pb.MetricValue_F:
-			out[k] = v.F
-		case *pb.MetricValue_S:
-			out[k] = v.S
+		if f, ok := mv.GetKind().(*pb.MetricValue_F); ok && canonicalMetricKeys[k] {
+			out[k] = f.F
 		}
 	}
 	if len(out) == 0 {

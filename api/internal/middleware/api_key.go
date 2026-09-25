@@ -12,6 +12,7 @@ import (
 
 	"github.com/lute/api/internal/apikey"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 // APIKeyAuthMiddleware authenticates "Bearer lute_sk_..." and sets user_id. last_used_at
@@ -20,14 +21,12 @@ func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := extractBearer(c.GetHeader("Authorization"))
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing Bearer token"})
-			c.Abort()
+			httpx.Error(c, http.StatusUnauthorized, "missing Bearer token")
 			return
 		}
 		prefix := apikey.PrefixOf(token)
 		if prefix == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid API key format"})
-			c.Abort()
+			httpx.Error(c, http.StatusUnauthorized, "invalid API key format")
 			return
 		}
 
@@ -35,18 +34,16 @@ func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 		k, err := keyRepo.GetByPrefix(ctx, prefix)
 		if err != nil {
 			if errors.Is(err, repos.ErrNotFound) {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
+				httpx.Error(c, http.StatusUnauthorized, "invalid API key")
 			} else {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "auth lookup failed"})
+				httpx.Internal(c, err)
 			}
-			c.Abort()
 			return
 		}
 
 		computed := apikey.Hash(token)
 		if subtle.ConstantTimeCompare([]byte(computed), []byte(k.Hash)) != 1 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
-			c.Abort()
+			httpx.Error(c, http.StatusUnauthorized, "invalid API key")
 			return
 		}
 

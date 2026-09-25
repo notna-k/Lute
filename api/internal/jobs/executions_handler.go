@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 type ExecutionsHandler struct {
@@ -20,7 +21,7 @@ func NewExecutionsHandler(repo *repos.JobExecutionRepository) *ExecutionsHandler
 
 func (h *ExecutionsHandler) ListExecutions(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "executions store unavailable"})
+		httpx.Error(c, http.StatusServiceUnavailable, "executions store unavailable")
 		return
 	}
 
@@ -42,7 +43,7 @@ func (h *ExecutionsHandler) ListExecutions(c *gin.Context) {
 
 	execs, total, err := h.repo.List(c.Request.Context(), filter, offset, limit, order)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -67,12 +68,12 @@ func values(c *gin.Context, key string) []string {
 
 func (h *ExecutionsHandler) ExecutionFilterOptions(c *gin.Context) {
 	if h.repo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "executions store unavailable"})
+		httpx.Error(c, http.StatusServiceUnavailable, "executions store unavailable")
 		return
 	}
 	queues, types, err := h.repo.DistinctQueuesAndTypes(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
