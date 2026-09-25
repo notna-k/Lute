@@ -93,11 +93,12 @@ func (f *fixture) enqueue(t *testing.T, run *models.Run) *models.Run {
 func (f *fixture) runOn(t *testing.T, jobID, workerID string) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := f.queue.Dequeue(ctx, "build"); err != nil {
+	job, err := f.queue.Dequeue(ctx, "build", workerID)
+	if err != nil {
 		t.Fatalf("dequeue: %v", err)
 	}
-	if err := f.queue.SetWorkerID(ctx, jobID, workerID); err != nil {
-		t.Fatalf("set worker: %v", err)
+	if job == nil || job.ID != jobID {
+		t.Fatalf("dequeued %+v, want %s", job, jobID)
 	}
 }
 

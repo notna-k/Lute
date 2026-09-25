@@ -26,14 +26,16 @@ func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 	return NewEngine(db.DB, Timings{}), db.DB
 }
 
-// dispatch enqueues a job and takes it off the queue, leased exactly as the dispatcher would.
+const testWorker = "worker-7"
+
+// dispatch enqueues a job and leases it to testWorker, exactly as the dispatcher would.
 func dispatch(t *testing.T, r *Engine, jobID string, opts EnqueueOpts) *Job {
 	t.Helper()
 	ctx := context.Background()
 	if err := r.Enqueue(ctx, &Job{ID: jobID, Queue: "build", Type: "container"}, opts); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
-	job, err := r.Dequeue(ctx, "build")
+	job, err := r.Dequeue(ctx, "build", testWorker)
 	if err != nil {
 		t.Fatalf("dequeue: %v", err)
 	}
@@ -104,9 +106,6 @@ func TestClaimExpiredLeasesReportsTheLostJob(t *testing.T) {
 	ctx := context.Background()
 
 	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30})
-	if err := r.SetWorkerID(ctx, "job-1", "worker-7"); err != nil {
-		t.Fatalf("set worker id: %v", err)
-	}
 	expireLease(t, db, "job-1")
 
 	claimed, err := r.ClaimExpiredLeases(ctx)
@@ -116,7 +115,7 @@ func TestClaimExpiredLeasesReportsTheLostJob(t *testing.T) {
 	if len(claimed) != 1 {
 		t.Fatalf("got %d claims, want 1: %+v", len(claimed), claimed)
 	}
-	if claimed[0].JobID != "job-1" || claimed[0].Queue != "build" || claimed[0].WorkerID != "worker-7" {
+	if claimed[0].JobID != "job-1" || claimed[0].Queue != "build" || claimed[0].WorkerID != testWorker {
 		t.Fatalf("claim lost the job's identity: %+v", claimed[0])
 	}
 }
