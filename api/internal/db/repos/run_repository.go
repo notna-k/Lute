@@ -47,25 +47,6 @@ type RunListFilter struct {
 	JobSlug string
 }
 
-func (r *RunRepository) ListByJobSlug(ctx context.Context, userID id.ID, slug string, limit int) ([]models.Run, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	var rows []models.Run
-	err := r.q(ctx).
-		Where("user_id = ? AND job_slug = ?", userID.Hex(), slug).
-		Order("created_at DESC").
-		Limit(limit).
-		Find(&rows).Error
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if rows == nil {
-		rows = []models.Run{}
-	}
-	return rows, nil
-}
-
 // ListByJobSlugs returns up to perSlug newest runs per slug in one query.
 func (r *RunRepository) ListByJobSlugs(ctx context.Context, userID id.ID, slugs []string, perSlug int) (map[string][]models.Run, error) {
 	out := make(map[string][]models.Run, len(slugs))

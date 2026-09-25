@@ -10,47 +10,23 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
-	"github.com/lute/api/internal/grpc"
 	"github.com/lute/api/internal/httpx"
-	"github.com/lute/api/internal/queue"
+	"github.com/lute/api/internal/runs"
 )
 
 type Handler struct {
-	defs       *repos.JobDefinitionRepository
-	syncer     *Syncer
-	runs       *repos.RunRepository
-	executions *repos.JobExecutionRepository
-	settings   *repos.SettingRepository
-	engine     *queue.Engine
-	stats      *queue.Stats
-	grpcSrv    *grpc.Server
+	defs     *repos.JobDefinitionRepository
+	syncer   *Syncer
+	settings *repos.SettingRepository
+	runs     *runs.Service
 }
 
-func NewHandler(
-	defs *repos.JobDefinitionRepository,
-	syncer *Syncer,
-	runs *repos.RunRepository,
-	executions *repos.JobExecutionRepository,
-	settings *repos.SettingRepository,
-	engine *queue.Engine,
-	stats *queue.Stats,
-	grpcSrv *grpc.Server,
-) *Handler {
-	return &Handler{
-		defs:       defs,
-		syncer:     syncer,
-		runs:       runs,
-		executions: executions,
-		settings:   settings,
-		engine:     engine,
-		stats:      stats,
-		grpcSrv:    grpcSrv,
-	}
+func NewHandler(defs *repos.JobDefinitionRepository, syncer *Syncer, settings *repos.SettingRepository, svc *runs.Service) *Handler {
+	return &Handler{defs: defs, syncer: syncer, settings: settings, runs: svc}
 }
 
 // JSON keys below match ui/src/types/jobs.ts.
@@ -136,22 +112,22 @@ func (h *Handler) toJobDTO(def *models.JobDefinition, rate float64, median int64
 	}
 }
 
-// withHistory attaches the newest build and the status strip. runs must be newest first.
-func (h *Handler) withHistory(ctx context.Context, dto jobDTO, runs []models.Run, execs map[string]*models.JobExecution) jobDTO {
-	if len(runs) == 0 {
+// withHistory attaches the newest build and the status strip. history must be newest first.
+func (h *Handler) withHistory(ctx context.Context, dto jobDTO, history []models.Run, execs map[string]*models.JobExecution) jobDTO {
+	if len(history) == 0 {
 		return dto
 	}
-	last := h.buildDTO(ctx, &runs[0], execs[runs[0].JobID])
+	last := h.buildDTO(ctx, &history[0], execs[history[0].JobID])
 	dto.LastBuild = &last
-	dto.Recent = recentStatuses(runs, execs, last.Status)
+	dto.Recent = recentStatuses(history, execs, last.Status)
 	return dto
 }
 
 // recentStatuses returns trailing build statuses, oldest first. Only the newest is
 // resolved against the queue (lastStatus); for the rest, no execution record means
 // the build never finished.
-func recentStatuses(runs []models.Run, execs map[string]*models.JobExecution, lastStatus string) []string {
-	window := runs
+func recentStatuses(history []models.Run, execs map[string]*models.JobExecution, lastStatus string) []string {
+	window := history
 	if len(window) > recentWindow {
 		window = window[:recentWindow]
 	}
@@ -186,12 +162,7 @@ func (h *Handler) List(c *gin.Context) {
 	for i := range defs {
 		slugs = append(slugs, defs[i].Slug)
 	}
-	runsBySlug, err := h.runs.ListByJobSlugs(ctx, userID, slugs, 100)
-	if err != nil {
-		httpx.Internal(c, err)
-		return
-	}
-	execs, err := h.execsFor(ctx, runsBySlug)
+	runsBySlug, execs, err := h.runs.History(ctx, userID, slugs, 100)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
@@ -199,9 +170,9 @@ func (h *Handler) List(c *gin.Context) {
 
 	out := make([]jobDTO, 0, len(defs))
 	for i := range defs {
-		runs := runsBySlug[defs[i].Slug]
-		rate, median := statsOf(runs, execs)
-		out = append(out, h.withHistory(ctx, h.toJobDTO(&defs[i], rate, median), runs, execs))
+		history := runsBySlug[defs[i].Slug]
+		rate, median := statsOf(history, execs)
+		out = append(out, h.withHistory(ctx, h.toJobDTO(&defs[i], rate, median), history, execs))
 	}
 	c.JSON(http.StatusOK, gin.H{"jobs": out})
 }
@@ -217,18 +188,14 @@ func (h *Handler) Get(c *gin.Context) {
 		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
-	runs, err := h.runs.ListByJobSlug(ctx, userID, def.Slug, 100)
+	bySlug, execs, err := h.runs.History(ctx, userID, []string{def.Slug}, 100)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
 	}
-	execs, err := h.executions.ListByJobIDs(ctx, jobIDsOf(runs))
-	if err != nil {
-		httpx.Internal(c, err)
-		return
-	}
-	rate, median := statsOf(runs, execs)
-	c.JSON(http.StatusOK, h.withHistory(ctx, h.toJobDTO(def, rate, median), runs, execs))
+	history := bySlug[def.Slug]
+	rate, median := statsOf(history, execs)
+	c.JSON(http.StatusOK, h.withHistory(ctx, h.toJobDTO(def, rate, median), history, execs))
 }
 
 func (h *Handler) Builds(c *gin.Context) {
@@ -238,19 +205,15 @@ func (h *Handler) Builds(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
-	runs, err := h.runs.ListByJobSlug(ctx, userID, slug, 20)
+	bySlug, execs, err := h.runs.History(ctx, userID, []string{slug}, 20)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
 	}
-	execs, err := h.executions.ListByJobIDs(ctx, jobIDsOf(runs))
-	if err != nil {
-		httpx.Internal(c, err)
-		return
-	}
-	out := make([]buildDTO, 0, len(runs))
-	for i := range runs {
-		out = append(out, h.buildDTO(ctx, &runs[i], execs[runs[i].JobID]))
+	history := bySlug[slug]
+	out := make([]buildDTO, 0, len(history))
+	for i := range history {
+		out = append(out, h.buildDTO(ctx, &history[i], execs[history[i].JobID]))
 	}
 	c.JSON(http.StatusOK, gin.H{"builds": out})
 }
@@ -320,7 +283,6 @@ func (h *Handler) Trigger(c *gin.Context) {
 	}
 
 	run := &models.Run{
-		JobID:       uuid.New().String(),
 		UserID:      userID,
 		Queue:       def.Queue,
 		Type:        "container",
@@ -332,26 +294,10 @@ func (h *Handler) Trigger(c *gin.Context) {
 	if adhoc {
 		run.ParamSchema = schema
 	}
-	if err := h.runs.Create(ctx, run); err != nil {
+	run, _, err = h.runs.Enqueue(ctx, run, runs.Job{Payload: payload, Selector: def.LabelSelector})
+	if err != nil {
 		httpx.Internal(c, err)
 		return
-	}
-
-	job := &queue.Job{
-		ID:       run.JobID,
-		Queue:    def.Queue,
-		Type:     "container",
-		Payload:  payload,
-		Meta:     map[string]string{"user_id": userID.Hex(), "run_id": run.ID.Hex(), "job_slug": def.Slug},
-		Selector: def.LabelSelector,
-	}
-	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{}); err != nil {
-		httpx.Internal(c, err)
-		return
-	}
-	h.stats.RecordEnqueued(ctx, def.Queue)
-	if h.grpcSrv != nil {
-		h.grpcSrv.DispatchQueue(ctx, def.Queue)
 	}
 
 	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
@@ -499,7 +445,7 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 		Params:      run.Params,
 		AdHoc:       run.AdHoc,
 	}
-	if job, err := h.engine.GetJob(ctx, run.JobID); err == nil {
+	if job, err := h.runs.Job(ctx, run.JobID); err == nil {
 		switch job.Status {
 		case "running":
 			b.Status = "running"
@@ -529,28 +475,12 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 	return b
 }
 
-func jobIDsOf(runs []models.Run) []string {
-	ids := make([]string, 0, len(runs))
-	for i := range runs {
-		ids = append(ids, runs[i].JobID)
-	}
-	return ids
-}
-
-func (h *Handler) execsFor(ctx context.Context, runsBySlug map[string][]models.Run) (map[string]*models.JobExecution, error) {
-	var ids []string
-	for _, runs := range runsBySlug {
-		ids = append(ids, jobIDsOf(runs)...)
-	}
-	return h.executions.ListByJobIDs(ctx, ids)
-}
-
 // statsOf returns success rate and median duration over a job's builds.
-func statsOf(runs []models.Run, execs map[string]*models.JobExecution) (float64, int64) {
+func statsOf(history []models.Run, execs map[string]*models.JobExecution) (float64, int64) {
 	var durations []int64
 	finished, passed := 0, 0
-	for i := range runs {
-		exec := execs[runs[i].JobID]
+	for i := range history {
+		exec := execs[history[i].JobID]
 		if exec == nil {
 			continue
 		}

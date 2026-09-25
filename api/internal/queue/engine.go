@@ -19,6 +19,9 @@ import (
 // ErrJobNotRunning means the result is stale: the reaper already gave up on this attempt.
 var ErrJobNotRunning = errors.New("job is not running")
 
+// ErrNotCancellable means the job already left the pending state.
+var ErrNotCancellable = errors.New("can only cancel pending jobs")
+
 func nowMilli() int64 { return time.Now().UTC().UnixMilli() }
 func nowUnix() int64  { return time.Now().UTC().Unix() }
 
@@ -336,7 +339,7 @@ func (r *Engine) CancelJob(ctx context.Context, jobID string) error {
 		return err
 	}
 	if job.Status != string(enums.QueueJobPending) {
-		return fmt.Errorf("can only cancel pending jobs, status is %s", job.Status)
+		return fmt.Errorf("%w, status is %s", ErrNotCancellable, job.Status)
 	}
 	job.Status = string(enums.QueueJobDead)
 	job.Error = "cancelled"
@@ -358,7 +361,7 @@ func (r *Engine) CancelJob(ctx context.Context, jobID string) error {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return fmt.Errorf("can only cancel pending jobs, status is %s", job.Status)
+		return fmt.Errorf("%w, status is %s", ErrNotCancellable, job.Status)
 	}
 	return nil
 }

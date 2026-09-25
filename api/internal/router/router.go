@@ -11,6 +11,7 @@ import (
 	"github.com/lute/api/internal/jobs"
 	"github.com/lute/api/internal/middleware"
 	"github.com/lute/api/internal/publicapi"
+	"github.com/lute/api/internal/runs"
 	"github.com/lute/api/internal/settings"
 	"github.com/lute/api/internal/setup"
 	"github.com/lute/api/internal/ui"
@@ -39,19 +40,19 @@ func New(d *setup.Deps, hub *websocket.Hub, grpcServer *luteGrpc.Server) *gin.En
 	worker.MountJWT(v1, workerHandler, authedMW)
 	dashboard.SetupRoutes(v1, dashboard.NewDashboardHandler(cfg, d.Workers, d.WorkerSnapshots), authedMW)
 
+	runSvc := runs.New(d.Queue, d.Stats, d.Runs, d.JobExecutions, grpcServer)
 	authed := v1.Group("", authedMW)
 	jobs.SetupRoutes(authed,
-		jobs.NewJobHandler(d.Queue, d.Stats, grpcServer, d.JobExecutions),
+		jobs.NewJobHandler(runSvc),
 		jobs.NewQueueHandler(d.Queue, d.Stats),
 		jobs.NewDLQHandler(d.Queue, grpcServer),
 		jobs.NewExecutionsHandler(d.JobExecutions),
 	)
-	jobdefs.SetupRoutes(authed, jobdefs.NewHandler(d.JobDefs, d.JobDefSyncer, d.Runs, d.JobExecutions, d.Settings, d.Queue, d.Stats, grpcServer))
+	jobdefs.SetupRoutes(authed, jobdefs.NewHandler(d.JobDefs, d.JobDefSyncer, d.Settings, runSvc))
 	publicapi.SetupAPIKeyRoutes(authed, publicapi.NewAPIKeysHandler(d.APIKeys))
 	settings.SetupRoutes(authed, settings.NewHandler(d.Settings))
 
-	runsHandler := publicapi.NewRunsHandler(d.Queue, d.Stats, grpcServer, d.Runs, d.JobExecutions)
-	publicapi.SetupPublicRoutes(api.Group("/public/v1"), d.APIKeys, runsHandler, workerHandler)
+	publicapi.SetupPublicRoutes(api.Group("/public/v1"), d.APIKeys, publicapi.NewRunsHandler(runSvc), workerHandler)
 
 	ui.Register(r)
 	return r
