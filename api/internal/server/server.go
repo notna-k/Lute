@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 
 	"github.com/lute/api/internal/auth"
@@ -20,6 +23,7 @@ import (
 
 type Server struct {
 	HTTP              *http.Server
+	httpListener      net.Listener
 	GRPC              *grpc.Server
 	Hub               *websocket.Hub
 	HeartbeatChecker  *worker.HeartbeatChecker
@@ -125,11 +129,39 @@ func New(d Deps) *Server {
 		HeartbeatChecker:  heartbeatChecker,
 		WorkerSnapshotJob: workerSnapshotJob,
 		QueueScheduler:    d.QueueScheduler,
-		WebhookDispatcher: webhooks.NewDispatcher(d.WebhookRepo),
+		WebhookDispatcher: webhooks.NewDispatcher(d.WebhookRepo, d.Config.Webhooks.PollInterval),
 	}
 }
 
+// HTTPAddr is the address the HTTP server is listening on, or "" before Start.
+func (s *Server) HTTPAddr() string {
+	if s.httpListener == nil {
+		return ""
+	}
+	return s.httpListener.Addr().String()
+}
+
+// GRPCAddr is the address the gRPC server is listening on, or "" before Start.
+func (s *Server) GRPCAddr() string {
+	return s.GRPC.Addr()
+}
+
+// Start binds both listeners, then serves and starts the background jobs. A port
+// conflict is returned to the caller: binding in the foreground is what makes that
+// possible, and what keeps a failure from killing the process from a goroutine.
 func (s *Server) Start() error {
+	lis, err := net.Listen("tcp", s.HTTP.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", s.HTTP.Addr, err)
+	}
+	s.httpListener = lis
+
+	if err := s.GRPC.Listen(); err != nil {
+		_ = lis.Close()
+		s.httpListener = nil
+		return err
+	}
+
 	s.checkerCtx, s.checkerStop = context.WithCancel(context.Background())
 	go s.HeartbeatChecker.Start(s.checkerCtx)
 
@@ -147,15 +179,15 @@ func (s *Server) Start() error {
 	}
 
 	go func() {
-		if err := s.GRPC.Start(); err != nil {
-			log.Fatalf("Failed to start gRPC server: %v", err)
+		if err := s.GRPC.Serve(); err != nil {
+			log.Printf("gRPC server stopped: %v", err)
 		}
 	}()
 
 	go func() {
-		log.Printf("HTTP server starting on %s", s.HTTP.Addr)
-		if err := s.HTTP.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start HTTP server: %v", err)
+		log.Printf("HTTP server listening on %s", s.HTTPAddr())
+		if err := s.HTTP.Serve(s.httpListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("HTTP server stopped: %v", err)
 		}
 	}()
 
@@ -178,7 +210,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.webhookCancel()
 	}
 
-	s.GRPC.Stop()
+	s.GRPC.StopContext(ctx)
 
 	if err := s.HTTP.Shutdown(ctx); err != nil {
 		return err
