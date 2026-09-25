@@ -25,6 +25,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
+import { useCopy } from '@/hooks/useCopy';
 import { downloadFile, downloadYaml } from '@/features/params/yaml';
 import { exportJob, exportJobs, exportJobsZip, revertJob } from '@/services/jobDefService';
 import type { GitState, JobDefinition } from '@/types/jobs';
@@ -49,17 +50,6 @@ export function GitStateBadge({ state }: { state: GitState }) {
       {GIT_STATE_LABEL[state]}
     </Badge>
   );
-}
-
-/** Copies text, and says so for a moment. */
-function useCopy(): [boolean, (text: string) => Promise<void>] {
-  const [copied, setCopied] = useState(false);
-  async function copy(text: string) {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-  return [copied, copy];
 }
 
 /**

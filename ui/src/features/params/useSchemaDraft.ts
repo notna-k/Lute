@@ -195,3 +195,5 @@ export function useSchemaDraft(source: ParameterField[]) {
     reorderField,
   };
 }
+
+export type SchemaDraft = ReturnType<typeof useSchemaDraft>;
