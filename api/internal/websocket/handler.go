@@ -2,7 +2,7 @@ package websocket
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -59,7 +59,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		// Upgrade has already written the HTTP error response.
-		log.Printf("WebSocket upgrade error: %v", err)
+		slog.Warn("websocket upgrade", "err", err)
 		return
 	}
 

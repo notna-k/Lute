@@ -14,7 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -52,7 +52,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 	run, err := e.runs.GetByJobID(ctx, jobID)
 	if err != nil {
 		if !errors.Is(err, repos.ErrNotFound) {
-			log.Printf("webhooks: lookup run for %s: %v", jobID, err)
+			slog.Error("webhooks: look up run", "job_id", jobID, "err", err)
 		}
 		return
 	}
@@ -70,7 +70,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
-		log.Printf("webhooks: marshal event %s/%s: %v", jobID, event, err)
+		slog.Error("webhooks: marshal event", "job_id", jobID, "event", event, "err", err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 		NextRetryAt:     types.NewMilliTime(time.Now()),
 	}
 	if err := e.deliveries.Create(ctx, d); err != nil {
-		log.Printf("webhooks: persist delivery %s/%s: %v", jobID, event, err)
+		slog.Error("webhooks: persist delivery", "job_id", jobID, "event", event, "err", err)
 	}
 }
 
@@ -132,7 +132,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 func (d *Dispatcher) tick(ctx context.Context) {
 	claimed, err := d.deliveries.ClaimDue(ctx, batchSize)
 	if err != nil {
-		log.Printf("webhooks: claim due: %v", err)
+		slog.Error("webhooks: claim due deliveries", "err", err)
 		return
 	}
 	for i := range claimed {

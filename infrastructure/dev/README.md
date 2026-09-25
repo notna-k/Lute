@@ -76,6 +76,7 @@ Configured in the repo-root `.env` (copy from `.env.example` at the repo root).
 Override the location with `make ENV_FILE=/path/to/env dev-up`. Highlights:
 
 - **Database**: Postgres only. Compose points `POSTGRES_DSN` at the `postgres` service.
+- **Logging**: core logs structured text to stderr; `LOG_LEVEL` is `debug`, `info` (default), `warn` or `error`.
 - **Ports**: `ADMIN_PORT` (8080), `API_HTTP_PORT` (8081), `API_GRPC_PORT` (50051).
 - **Auth**: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, plus optional token TTLs.
 

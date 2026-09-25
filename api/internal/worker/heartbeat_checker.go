@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	pb "github.com/lute/proto"
@@ -52,15 +52,11 @@ func (h *HeartbeatChecker) Run(ctx context.Context) {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
 
-	log.Printf("Heartbeat checker started (interval %s, ping timeout %s, max retries %d)",
-		h.interval, h.pingTimeout, h.maxRetries)
-
 	h.check(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Heartbeat checker stopped")
 			return
 		case <-ticker.C:
 			h.check(ctx)
@@ -73,7 +69,7 @@ func (h *HeartbeatChecker) Run(ctx context.Context) {
 func (h *HeartbeatChecker) check(ctx context.Context) {
 	workers, err := h.workerRepo.ListMonitored(ctx)
 	if err != nil {
-		log.Printf("Heartbeat checker: list monitored: %v", err)
+		slog.Error("heartbeat: list monitored workers", "err", err)
 		return
 	}
 
@@ -86,10 +82,10 @@ func (h *HeartbeatChecker) check(ctx context.Context) {
 			continue
 		}
 
-		log.Printf("Heartbeat checker: pinging worker %s", workerID)
+		slog.Debug("heartbeat: pinging worker", "worker_id", workerID)
 		pong, err := conn.Ping(h.pingTimeout)
 		if err != nil {
-			log.Printf("Heartbeat checker: ping %s failed: %v", workerID, err)
+			slog.Warn("heartbeat: ping failed", "worker_id", workerID, "err", err)
 			h.handleMiss(ctx, workerID)
 			continue
 		}
@@ -99,9 +95,9 @@ func (h *HeartbeatChecker) check(ctx context.Context) {
 			metrics = metricValueMapToInterface(pong.GetMetrics())
 		}
 		if err := h.workerRepo.UpdateHeartbeat(ctx, w.ID, metrics); err != nil {
-			log.Printf("Heartbeat checker: update heartbeat %s: %v", workerID, err)
+			slog.Error("heartbeat: update", "worker_id", workerID, "err", err)
 		} else {
-			log.Printf("Heartbeat checker: worker %s OK", workerID)
+			slog.Debug("heartbeat: worker ok", "worker_id", workerID)
 		}
 	}
 }
@@ -114,16 +110,16 @@ func (h *HeartbeatChecker) handleMiss(ctx context.Context, workerID string) {
 
 	newRetry, err := h.workerRepo.IncrementHeartbeatRetry(ctx, wid)
 	if err != nil {
-		log.Printf("Heartbeat checker: increment retry %s: %v", workerID, err)
+		slog.Error("heartbeat: increment retry", "worker_id", workerID, "err", err)
 		return
 	}
 
 	if newRetry >= h.maxRetries {
 		if err := h.workerRepo.UpdateStatus(ctx, wid, "dead"); err != nil {
-			log.Printf("Heartbeat checker: mark dead %s: %v", workerID, err)
+			slog.Error("heartbeat: mark dead", "worker_id", workerID, "err", err)
 			return
 		}
-		log.Printf("Heartbeat checker: marked %s as dead (retry %d >= %d)", workerID, newRetry, h.maxRetries)
+		slog.Warn("heartbeat: marked worker dead", "worker_id", workerID, "retries", newRetry, "max_retries", h.maxRetries)
 	}
 }
 

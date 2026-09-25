@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/lute/api/internal/db/repos"
@@ -26,14 +26,12 @@ func NewWorkerSnapshotJob(workerRepo *repos.WorkerRepository, snapshotRepo *repo
 }
 
 func (j *WorkerSnapshotJob) Run(ctx context.Context) {
-	log.Printf("worker snapshot: job started (interval %s)", j.interval)
 	ticker := time.NewTicker(j.interval)
 	defer ticker.Stop()
 	j.runOnce(ctx)
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("worker snapshot: job stopped")
 			return
 		case <-ticker.C:
 			j.runOnce(ctx)
@@ -45,30 +43,23 @@ func (j *WorkerSnapshotJob) runOnce(ctx context.Context) {
 	now := time.Now()
 	cutoff := now.Add(-30 * 24 * time.Hour)
 	if err := j.snapshotRepo.PruneOlderThan(ctx, cutoff); err != nil {
-		log.Printf("worker snapshot: prune failed: %v", err)
+		slog.Error("worker snapshot: prune", "err", err)
 	}
 	list, err := j.workerRepo.ListByStatus(ctx, "alive")
 	if err != nil {
-		log.Printf("worker snapshot: list workers failed: %v", err)
+		slog.Error("worker snapshot: list workers", "err", err)
 		return
 	}
-	log.Printf("worker snapshot: run once at %s, %d alive workers", now.Format(time.RFC3339), len(list))
 	written := 0
 	for _, w := range list {
 		metrics := canonicalMetricsFrom(w.Metrics)
 		if err := j.snapshotRepo.Insert(ctx, w.ID, now, metrics); err != nil {
-			log.Printf("worker snapshot: insert for worker %s: %v", w.ID.Hex(), err)
+			slog.Error("worker snapshot: insert", "worker_id", w.ID.Hex(), "err", err)
 			continue
 		}
 		written++
 	}
-	if written > 0 {
-		log.Printf("worker snapshot: wrote %d alive snapshots", written)
-	} else if len(list) == 0 {
-		log.Printf("worker snapshot: no alive workers")
-	} else {
-		log.Printf("worker snapshot: wrote 0/%d (all inserts failed)", len(list))
-	}
+	slog.Debug("worker snapshot: done", "written", written, "alive", len(list))
 }
 
 func canonicalMetricsFrom(src map[string]interface{}) map[string]interface{} {

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -195,7 +194,7 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	if agentIP != "" {
 		conflictingWorker, err := h.reclaimStaleWorkersAtIP(ctx, userID, agentIP)
 		if err != nil {
-			log.Printf("Failed to reclaim workers at IP %s: %v", agentIP, err)
+			slog.Error("reclaim workers at IP", "ip", agentIP, "err", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reclaim stale worker at this IP"})
 			return
 		}
@@ -230,13 +229,13 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 		Metadata:     metadata,
 	}
 	if err := h.workerRepo.Create(ctx, worker); err != nil {
-		log.Printf("Failed to create worker: %v", err)
+		slog.Error("create worker", "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
 		return
 	}
 
 	grpcAddr := h.resolveGRPCAddress(c)
-	log.Printf("Worker registered: id=%s host=%s grpc=%s", worker.ID.Hex(), req.Hostname, grpcAddr)
+	slog.Info("worker registered from agent", "worker_id", worker.ID.Hex(), "host", req.Hostname, "grpc", grpcAddr)
 
 	c.JSON(http.StatusCreated, WorkerSetupResponse{
 		WorkerID:    worker.ID.Hex(),
@@ -268,7 +267,7 @@ func (h *WorkerHandler) reclaimStaleWorkersAtIP(ctx context.Context, userID id.I
 		if err := h.workerRepo.Delete(ctx, worker.ID); err != nil {
 			return nil, fmt.Errorf("delete stale worker %s: %w", worker.ID.Hex(), err)
 		}
-		log.Printf("Reclaimed stale worker id=%s name=%q status=%s on IP %s", worker.ID.Hex(), worker.Name, worker.Status, agentIP)
+		slog.Info("reclaimed stale worker", "worker_id", worker.ID.Hex(), "name", worker.Name, "status", worker.Status, "ip", agentIP)
 	}
 	return nil, nil
 }
@@ -362,7 +361,7 @@ func (h *WorkerHandler) refreshBinaryCache() {
 
 	entries, err := os.ReadDir(h.binaryDir)
 	if err != nil {
-		log.Printf("Warning: cannot read worker binary dir %s: %v", h.binaryDir, err)
+		slog.Warn("cannot read worker binary dir", "dir", h.binaryDir, "err", err)
 		return
 	}
 
@@ -389,7 +388,7 @@ func (h *WorkerHandler) refreshBinaryCache() {
 
 		checksum, err := sha256File(fullPath)
 		if err != nil {
-			log.Printf("Warning: cannot compute checksum for %s: %v", filename, err)
+			slog.Warn("cannot checksum worker binary", "file", filename, "err", err)
 			continue
 		}
 
@@ -402,7 +401,7 @@ func (h *WorkerHandler) refreshBinaryCache() {
 			SHA256:   checksum,
 			Size:     fileInfo.Size(),
 		}
-		log.Printf("Indexed worker binary: %s (%s/%s, %d bytes)", filename, osName, arch, fileInfo.Size())
+		slog.Info("indexed worker binary", "file", filename, "os", osName, "arch", arch, "bytes", fileInfo.Size())
 	}
 
 	h.binaryCache = newCache

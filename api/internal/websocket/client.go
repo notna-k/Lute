@@ -1,7 +1,7 @@
 package websocket
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/lute/api/internal/config"
@@ -57,7 +57,7 @@ func (c *Client) ReadPump(cfg *config.WebSocketConfig) {
 		// every other. Reads continue so pongs and close frames are still processed.
 		if _, _, err := c.conn.ReadMessage(); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error for client %s: %v", c.userID, err)
+				slog.Warn("websocket read", "user_id", c.userID, "err", err)
 			}
 			break
 		}

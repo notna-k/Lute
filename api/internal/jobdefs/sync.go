@@ -3,7 +3,7 @@ package jobdefs
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -57,11 +57,11 @@ func (s *Syncer) Sync(ctx context.Context) (SyncResult, error) {
 
 	res := SyncResult{Skipped: []string{}}
 	if s.dir == "" {
-		log.Println("jobdefs: JOB_DEFS_DIR not set — skipping job-definition sync")
+		slog.Warn("JOB_DEFS_DIR not set, skipping job-definition sync")
 		return res, nil
 	}
 	if info, err := os.Stat(s.dir); err != nil || !info.IsDir() {
-		log.Printf("jobdefs: source dir %q not readable — skipping sync", s.dir)
+		slog.Warn("job-definition dir not readable, skipping sync", "dir", s.dir)
 		return res, nil
 	}
 
@@ -95,8 +95,8 @@ func (s *Syncer) Sync(ctx context.Context) (SyncResult, error) {
 	}
 
 	r := plan.result
-	log.Printf("jobdefs: synced %s — %d added, %d updated, %d unchanged, %d detached, %d pruned, %d skipped",
-		s.dir, r.Added, r.Updated, r.Unchanged, r.Detached, r.Pruned, len(r.Skipped))
+	slog.Info("synced job definitions", "dir", s.dir, "added", r.Added, "updated", r.Updated,
+		"unchanged", r.Unchanged, "detached", r.Detached, "pruned", r.Pruned, "skipped", len(r.Skipped))
 	return r, nil
 }
 
@@ -197,14 +197,14 @@ func loadDir(dir string) ([]*models.JobDefinition, []string, error) {
 		}
 		defs, perr := parseDocs(data, rel)
 		if perr != nil {
-			log.Printf("jobdefs: skipping %s: %v", rel, perr)
+			slog.Warn("skipping job-definition file", "file", rel, "err", perr)
 			skipped = append(skipped, fmt.Sprintf("%s: %v", rel, perr))
 			return nil
 		}
 		for _, def := range defs {
 			if first, dup := seen[def.Slug]; dup {
 				msg := fmt.Sprintf("%s: slug %q already defined in %s", rel, def.Slug, first)
-				log.Printf("jobdefs: skipping %s", msg)
+				slog.Warn("skipping duplicate job definition", "file", rel, "slug", def.Slug, "first", first)
 				skipped = append(skipped, msg)
 				continue
 			}

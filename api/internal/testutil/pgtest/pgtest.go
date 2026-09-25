@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -99,7 +99,7 @@ func Start() (*Server, error) {
 		s.Stop()
 		return nil, err
 	}
-	log.Printf("pgtest: started %s on %s:%s (container %s)", image, host, port, id[:12])
+	slog.Info("pgtest: started postgres", "image", image, "addr", net.JoinHostPort(host, port), "container", id[:12])
 	return s, nil
 }
 
@@ -109,7 +109,7 @@ func (s *Server) Stop() {
 		return
 	}
 	if _, err := docker("rm", "-f", s.containerID); err != nil {
-		log.Printf("pgtest: removing postgres container: %v", err)
+		slog.Warn("pgtest: remove postgres container", "err", err)
 	}
 	s.containerID = ""
 }

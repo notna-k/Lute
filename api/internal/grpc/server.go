@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"time"
 
@@ -101,7 +101,7 @@ func (s *Server) Serve() error {
 	if s.listener == nil {
 		return fmt.Errorf("serve: Listen was not called")
 	}
-	log.Printf("gRPC server listening on %s", s.Addr())
+	slog.Info("gRPC server listening", "addr", s.Addr())
 	if err := s.grpcServer.Serve(s.listener); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)
 	}
@@ -139,7 +139,7 @@ func (s *Server) Stop(ctx context.Context) {
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		log.Printf("gRPC server: %s elapsed with worker streams still open, closing them", timeout)
+		slog.Warn("gRPC streams still open after grace period, closing them", "grace", timeout)
 		s.grpcServer.Stop()
 		<-done
 	}
@@ -176,13 +176,13 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 
 	if w.Status == "pending" {
 		if err := s.workerRepo.UpdateStatus(stream.Context(), wid, "registered"); err != nil {
-			log.Printf("Connect: failed to set worker %s to registered: %v", workerID, err)
+			slog.Error("mark worker registered", "worker_id", workerID, "err", err)
 		} else {
 			w.Status = "registered"
 		}
 	}
 
-	log.Printf("Connect: worker %s connected", workerID)
+	slog.Info("worker connected", "worker_id", workerID)
 
 	conn := s.ConnMgr.Register(workerID, stream)
 	conn.Labels = w.Labels // seed in-memory labels from DB at connect time
@@ -191,7 +191,7 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	}
 	defer func() {
 		s.ConnMgr.Unregister(workerID)
-		log.Printf("Connect: worker %s disconnected", workerID)
+		slog.Info("worker disconnected", "worker_id", workerID)
 	}()
 
 	conn.Run(s.handleJobResult, s.handleWorkerRegistration)
@@ -205,10 +205,10 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 		if err := s.queueEngine.Complete(ctx, result.JobId, result.ElapsedMs); err != nil {
 			if errors.Is(err, queue.ErrJobNotRunning) {
 				// The reaper already requeued this attempt; recording it would contradict the retry.
-				log.Printf("handleJobResult: ignoring late success for %s from worker %s", result.JobId, workerID)
+				slog.Warn("ignoring late success for reaped job", "job_id", result.JobId, "worker_id", workerID)
 				return
 			}
-			log.Printf("handleJobResult: complete %s: %v", result.JobId, err)
+			slog.Error("complete job", "job_id", result.JobId, "err", err)
 		}
 		job, _ = s.queueEngine.GetJob(ctx, result.JobId)
 		if job != nil {
@@ -223,10 +223,10 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 	} else {
 		if err := s.queueEngine.Fail(ctx, result.JobId, result.Error); err != nil {
 			if errors.Is(err, queue.ErrJobNotRunning) {
-				log.Printf("handleJobResult: ignoring late failure for %s from worker %s", result.JobId, workerID)
+				slog.Warn("ignoring late failure for reaped job", "job_id", result.JobId, "worker_id", workerID)
 				return
 			}
-			log.Printf("handleJobResult: fail %s: %v", result.JobId, err)
+			slog.Error("fail job", "job_id", result.JobId, "err", err)
 		}
 		job, _ = s.queueEngine.GetJob(ctx, result.JobId)
 		if job != nil {
@@ -262,13 +262,13 @@ func (s *Server) HandleExpiredLeases(ctx context.Context, leases []queue.Expired
 		if lease.WorkerID == "" {
 			reason = "the assigned worker stopped reporting before the job finished"
 		}
-		log.Printf("HandleExpiredLeases: failing job %s (%s)", lease.JobID, reason)
+		slog.Warn("failing job with expired lease", "job_id", lease.JobID, "reason", reason)
 
 		if err := s.queueEngine.Fail(ctx, lease.JobID, reason); err != nil {
 			if errors.Is(err, queue.ErrJobNotRunning) {
 				continue // the worker's own result landed between the claim and here
 			}
-			log.Printf("HandleExpiredLeases: fail %s: %v", lease.JobID, err)
+			slog.Error("fail job with expired lease", "job_id", lease.JobID, "err", err)
 			continue
 		}
 
@@ -329,12 +329,12 @@ func (s *Server) persistExecution(ctx context.Context, workerID string, result *
 	}
 
 	if err := s.jobExecRepo.Upsert(ctx, exec); err != nil {
-		log.Printf("handleJobResult: persist execution %s: %v", result.JobId, err)
+		slog.Error("persist job execution", "job_id", result.JobId, "err", err)
 	}
 }
 
 func (s *Server) handleWorkerRegistration(workerID string, reg *pb.WorkerRegistration) {
-	log.Printf("Worker %s registered: queues=%v concurrency=%d", workerID, reg.Queues, reg.Concurrency)
+	slog.Info("worker registered", "worker_id", workerID, "queues", reg.Queues, "concurrency", reg.Concurrency)
 	ctx := context.Background()
 	for _, q := range reg.Queues {
 		s.DispatchQueue(ctx, q)
@@ -354,7 +354,7 @@ func (s *Server) DispatchQueue(ctx context.Context, queueName string) {
 func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 	peeked, err := s.queueEngine.PeekNextReadyJob(ctx, queueName)
 	if err != nil {
-		log.Printf("DispatchJob queue=%s: peek error: %v", queueName, err)
+		slog.Error("peek next job", "queue", queueName, "err", err)
 		return false
 	}
 	if peeked == nil {
@@ -364,14 +364,14 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 	worker := s.ConnMgr.FindAvailableWorker(queueName, peeked.Selector)
 	if worker == nil {
 		if len(peeked.Selector) > 0 {
-			log.Printf("DispatchJob queue=%s selector=%v: no eligible worker", queueName, peeked.Selector)
+			slog.Debug("no eligible worker for job", "queue", queueName, "selector", peeked.Selector)
 		}
 		return false
 	}
 
 	job, err := s.queueEngine.Dequeue(ctx, queueName)
 	if err != nil {
-		log.Printf("DispatchJob queue=%s: dequeue error: %v", queueName, err)
+		slog.Error("dequeue job", "queue", queueName, "err", err)
 		return false
 	}
 	if job == nil {
@@ -388,15 +388,15 @@ func (s *Server) DispatchJob(ctx context.Context, queueName string) bool {
 
 	if !worker.AssignJob(assignment) {
 		_ = s.queueEngine.Fail(ctx, job.ID, "worker rejected assignment")
-		log.Printf("DispatchJob: worker %s rejected assignment for job %s", worker.WorkerID, job.ID)
+		slog.Warn("worker rejected job assignment", "worker_id", worker.WorkerID, "job_id", job.ID)
 		return false
 	}
 
 	if err := s.queueEngine.SetWorkerID(ctx, job.ID, worker.WorkerID); err != nil {
-		log.Printf("DispatchJob: set worker id for job %s: %v", job.ID, err)
+		slog.Error("record job worker", "job_id", job.ID, "err", err)
 	}
 
-	log.Printf("DispatchJob: assigned job %s to worker %s", job.ID, worker.WorkerID)
+	slog.Info("assigned job", "job_id", job.ID, "worker_id", worker.WorkerID)
 	s.broadcastJobEvent("started", job)
 	s.emitWebhook(ctx, job.ID, "run.started", map[string]interface{}{
 		"worker_id": worker.WorkerID,

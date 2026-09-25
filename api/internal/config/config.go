@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -8,6 +10,7 @@ import (
 )
 
 type Config struct {
+	LogLevel     slog.Level
 	Server       ServerConfig
 	Database     DatabaseConfig
 	GRPC         GRPCConfig
@@ -106,7 +109,12 @@ type AuthConfig struct {
 }
 
 func Load() (*Config, error) {
+	var logLevel slog.Level
+	if err := logLevel.UnmarshalText([]byte(getEnv("LOG_LEVEL", "info"))); err != nil {
+		return nil, fmt.Errorf("LOG_LEVEL: %w", err)
+	}
 	cfg := &Config{
+		LogLevel: logLevel,
 		Server: ServerConfig{
 			Port:         getEnv("SERVER_PORT", "8080"),
 			Host:         getEnv("SERVER_HOST", "0.0.0.0"),

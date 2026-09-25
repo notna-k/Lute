@@ -28,6 +28,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel})))
 	deps, err := setup.New(ctx, cfg)
 	if err != nil {
 		return err

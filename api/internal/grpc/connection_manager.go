@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -226,7 +226,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				pendingPing.resultCh <- pingResult{Err: err}
 			}
 			wc.failAllLogWaiters(err)
-			log.Printf("Connection %s recv error: %v", wc.WorkerID, err)
+			slog.Warn("worker stream recv", "worker_id", wc.WorkerID, "err", err)
 			return
 
 		case msg := <-recvCh:
@@ -281,7 +281,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				wc.mu.Lock()
 				wc.ActiveJobs--
 				wc.mu.Unlock()
-				log.Printf("Connection %s send job error: %v", wc.WorkerID, err)
+				slog.Warn("send job to worker", "worker_id", wc.WorkerID, "err", err)
 				return
 			}
 
@@ -303,7 +303,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 			})
 			if err != nil {
 				wc.finishLogWaiter(logReq.RequestId, jobLogResult{Err: err})
-				log.Printf("Connection %s send job log request error: %v", wc.WorkerID, err)
+				slog.Warn("send job log request to worker", "worker_id", wc.WorkerID, "err", err)
 				return
 			}
 		}
