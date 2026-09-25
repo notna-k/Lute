@@ -147,7 +147,5 @@ api/internal/ui/web/assets/
 .vscode
 .zed
 
-AGENTS.md
-
 # Diagnostics the e2e suite writes per test (core logs, agent stderr, job logs).
 api/e2e/_artifacts/
