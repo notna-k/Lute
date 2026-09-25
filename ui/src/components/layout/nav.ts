@@ -16,10 +16,7 @@ export interface NavItem {
   match: (pathname: string) => boolean;
 }
 
-/**
- * The sidebar, in the order an operator works: what is happening, what can be
- * run, what has run, what it runs on, and then configuration.
- */
+/** In the order an operator works: what is happening, what can run, what ran, where, then settings. */
 export const NAV_ITEMS: NavItem[] = [
   {
     to: '/',

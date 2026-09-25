@@ -1,14 +1,5 @@
-/**
- * The authoring form for one parameter.
- *
- * Two ideas worth keeping:
- *
- *  1. The *default* is set with the same control the runner will use. Authors
- *     never type `2026-07-25` into a text box to configure a date picker — they
- *     use the date picker. It doubles as a live preview of the field.
- *  2. `name` and `envVar` derive from the label until the author overrides
- *     them, so the common case is one field of typing, not three.
- */
+// The authoring form for one parameter. The default is set with the runner's own control, and
+// `name`/`envVar` derive from the label until the author overrides them.
 import { useState } from 'react';
 import { AlertTriangle, Link2, Link2Off } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -41,8 +32,7 @@ export function ParamEditor({ field, onChange, siblings }: ParamEditorProps) {
 
   function switchType(type: ParameterType) {
     if (type === field.type) return;
-    // Drop type-specific config that no longer applies — a stale `options`
-    // array would silently resurface on a switch back.
+    // Drop type-specific config, or a stale `options` would resurface on a switch back.
     onChange({
       type,
       options: undefined,
@@ -171,7 +161,6 @@ export function ParamEditor({ field, onChange, siblings }: ParamEditorProps) {
         </div>
       )}
 
-      {/* Default value, set with the real control. */}
       {field.type !== 'secret' && (
         <div className='rounded-lg border border-dashed border-border p-3'>
           <div className='mb-2 flex items-center gap-2'>

@@ -1,26 +1,18 @@
-/**
- * One execution — the engine-level view of a run.
- *
- * Same shape as a build page and for the same reason: the frame stays put and
- * the log gets the remaining height. The facts live in a strip above it, because
- * the question on this page is almost always "what does the log say".
- */
-import { useCallback, useEffect, useState } from 'react';
+// One execution: the engine-level view of a run, laid out like a build page.
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { RefreshCw, RotateCcw, X } from 'lucide-react';
-import {
-  Alert,
-  Badge,
-  Button,
-  KeyValueList,
-  Skeleton,
-  type BadgeTone,
-  type KeyValueRow,
-} from '@/components/ui';
-import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { KeyValueList, type KeyValueRow } from '@/components/ui/KeyValueList';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { DetailHeader } from '@/components/layout/DetailHeader';
+import { PageBody, PageScroll } from '@/components/layout/Page';
 import { LogViewer } from '@/features/jobs/LogViewer';
 import { useJobLogs } from '@/hooks/useJobLogs';
-import { jobService, type Job } from '@/services/jobService';
+import { jobService } from '@/services/jobService';
 import { duration, relativeTime, timestamp } from '@/lib/format';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -37,28 +29,16 @@ const ms = (unix?: number) => (unix ? unix * 1000 : undefined);
 export default function ExecutionDetail() {
   const { id } = useParams<{ id: string }>();
 
-  const [job, setJob] = useState<Job | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'retry' | 'cancel' | null>(null);
 
-  const fetchJob = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setJob(await jobService.getJob(id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load job');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    void fetchJob();
-  }, [fetchJob]);
+  const query = useQuery({
+    queryKey: ['execution', id],
+    queryFn: () => jobService.getJob(id!),
+    enabled: Boolean(id),
+  });
+  const job = query.data;
+  const error = query.error?.message;
 
   const logs = useJobLogs(id, {
     live: job?.status === 'running' || job?.status === 'pending',
@@ -71,7 +51,7 @@ export default function ExecutionDetail() {
     try {
       if (kind === 'retry') await jobService.retryJob(id);
       else await jobService.cancelJob(id);
-      await fetchJob();
+      await query.refetch();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : `${kind} failed`);
     } finally {
@@ -79,7 +59,7 @@ export default function ExecutionDetail() {
     }
   }
 
-  if (loading && !job) {
+  if (query.isPending && id) {
     return (
       <PageScroll>
         <PageBody className='space-y-3'>
@@ -147,7 +127,7 @@ export default function ExecutionDetail() {
               variant='outline'
               size='sm'
               onClick={async () => {
-                await fetchJob();
+                await query.refetch();
                 logs.reload();
               }}
             >

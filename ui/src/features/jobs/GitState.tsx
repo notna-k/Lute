@@ -1,13 +1,6 @@
-/**
- * How a definition relates to Git, and the ways out of drift.
- *
- * Git is the source of truth, but the panel may edit a definition or create
- * one. Anything that differs from Git gets a yellow dot; its config can be
- * viewed and copied — one job or all of them — to commit it, which makes the
- * panel's version canonical on the next sync.
- */
-import { Fragment, useState } from 'react';
-import { Menu, Transition } from '@headlessui/react';
+// How a definition relates to Git, and the ways out of drift: view, copy or revert its YAML.
+import { useState } from 'react';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -19,8 +12,13 @@ import {
   MoreVertical,
   Undo2,
 } from 'lucide-react';
-import { Badge, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { IconButton } from '@/components/ui/IconButton';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
+import { useCopy } from '@/hooks/useCopy';
 import { downloadFile, downloadYaml } from '@/features/params/yaml';
 import { exportJob, exportJobs, exportJobsZip, revertJob } from '@/services/jobDefService';
 import type { GitState, JobDefinition } from '@/types/jobs';
@@ -30,23 +28,6 @@ const GIT_STATE_LABEL: Record<Exclude<GitState, 'synced'>, string> = {
   manual: 'Created in the panel',
   removed: 'Removed from Git',
 };
-
-/** The yellow marker on anything that differs from Git; nothing when synced. */
-export function GitStateDot({ state, className }: { state: GitState; className?: string }) {
-  if (state === 'synced') return null;
-  const label = GIT_STATE_LABEL[state];
-  return (
-    <span className={cn('inline-flex', className)}>
-      <Tooltip side='left' content={label}>
-        <span
-          tabIndex={0}
-          aria-label={label}
-          className='block h-2.5 w-2.5 bg-warning ring-2 ring-bg'
-        />
-      </Tooltip>
-    </span>
-  );
-}
 
 /** The state as a labelled chip, for a job's header. */
 export function GitStateBadge({ state }: { state: GitState }) {
@@ -64,21 +45,7 @@ export function GitStateBadge({ state }: { state: GitState }) {
   );
 }
 
-/** Copies text, and says so for a moment. */
-function useCopy(): [boolean, (text: string) => Promise<void>] {
-  const [copied, setCopied] = useState(false);
-  async function copy(text: string) {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-  return [copied, copy];
-}
-
-/**
- * Shows YAML ready to commit — one definition's (`slug`) or, without one, every
- * definition's as a multi-document stream.
- */
+/** YAML ready to commit: one definition (`slug`) or every definition as one stream. */
 export function ConfigDialog({
   open,
   onClose,
@@ -89,9 +56,7 @@ export function ConfigDialog({
   slug?: string;
 }) {
   const [copied, copy] = useCopy();
-  // The zip is a second rendering of the same definitions — one file per job,
-  // at its path in Git — so it is built by the server, not from the stream
-  // shown here.
+  // The zip (one file per job at its Git path) is built by the server, not from the stream shown.
   const zip = useMutation({
     mutationFn: exportJobsZip,
     onSuccess: (blob) => downloadFile(blob, 'jobdefs.zip'),
@@ -203,41 +168,29 @@ export function JobActionsMenu({ job, className }: { job: JobDefinition; classNa
   return (
     <>
       <Menu as='div' className={cn('relative', className)}>
-        <Menu.Button as={IconButton} size='sm' label={`More actions for ${job.name}`}>
+        <MenuButton as={IconButton} size='sm' label={`More actions for ${job.name}`}>
           <MoreVertical className='h-4 w-4' />
-        </Menu.Button>
-        <Transition
-          as={Fragment}
-          enter='transition ease-out duration-100'
-          enterFrom='opacity-0 translate-y-1'
-          enterTo='opacity-100 translate-y-0'
-          leave='transition ease-in duration-75'
-          leaveFrom='opacity-100'
-          leaveTo='opacity-0'
+        </MenuButton>
+        <MenuItems
+          transition
+          className='absolute right-0 z-30 mt-1 w-48 origin-top-right border border-border bg-surface py-1 text-left shadow-popover focus:outline-none transition duration-100 ease-out data-[closed]:translate-y-1 data-[closed]:opacity-0 data-[leave]:duration-75 data-[leave]:ease-in'
         >
-          <Menu.Items className='absolute right-0 z-30 mt-1 w-48 origin-top-right border border-border bg-surface py-1 text-left shadow-popover focus:outline-none'>
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Menu.Item key={item.label}>
-                  {({ active }) => (
-                    <button
-                      type='button'
-                      onClick={item.onClick}
-                      className={cn(
-                        'flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-fg',
-                        active && 'bg-surface-hover',
-                      )}
-                    >
-                      <Icon className='h-4 w-4 text-fg-muted' />
-                      {item.label}
-                    </button>
-                  )}
-                </Menu.Item>
-              );
-            })}
-          </Menu.Items>
-        </Transition>
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <MenuItem key={item.label}>
+                <button
+                  type='button'
+                  onClick={item.onClick}
+                  className='flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-fg data-[focus]:bg-surface-hover'
+                >
+                  <Icon className='h-4 w-4 text-fg-muted' />
+                  {item.label}
+                </button>
+              </MenuItem>
+            );
+          })}
+        </MenuItems>
       </Menu>
       <ConfigDialog open={viewing} onClose={() => setViewing(false)} slug={job.slug} />
     </>

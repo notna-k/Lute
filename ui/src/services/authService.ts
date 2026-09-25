@@ -1,8 +1,5 @@
-// Client-side auth helpers. The refresh token lives in an httpOnly cookie
-// set by the API; the access token is held in memory by AuthContext.
-//
-// These calls deliberately bypass apiClient: they are what produces the access
-// token it attaches, so they cannot depend on having one.
+// Auth calls bypass apiClient: they produce the access token it attaches. The refresh token is an
+// httpOnly cookie; the access token lives in memory in AuthContext.
 import { API_URL as BASE } from './apiBase';
 
 export interface AuthUser {
@@ -38,12 +35,3 @@ export const login = (email: string, password: string) =>
 export const refresh = () => postJSON<LoginResponse>('/api/v1/auth/refresh');
 
 export const logout = () => postJSON<{ ok: true }>('/api/v1/auth/logout');
-
-export const me = async (accessToken: string): Promise<AuthUser> => {
-  const res = await fetch(`${BASE}/api/v1/auth/me`, {
-    credentials: 'include',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<AuthUser>;
-};

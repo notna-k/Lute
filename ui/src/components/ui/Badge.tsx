@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn';
 
 export type BadgeTone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 
-export type BadgeSize = 'sm' | 'md';
+type BadgeSize = 'sm' | 'md';
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   tone?: BadgeTone;
@@ -11,11 +11,7 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   dot?: boolean;
 }
 
-/**
- * A small labelled tag. For build and worker state use StatusBadge instead —
- * those have a fixed shape vocabulary, and this one is for everything else
- * (an environment, a queue, an origin).
- */
+// For build and worker state use StatusBadge; this tag is for everything else (env, queue, origin).
 const TONE_STYLES: Record<BadgeTone, string> = {
   neutral: 'border-border bg-bg-subtle text-fg-muted',
   primary: 'border-border bg-bg-subtle text-fg',

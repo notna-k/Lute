@@ -1,10 +1,4 @@
-/**
- * One worker: what it is labelled with, and what it has been doing.
- *
- * Two tabs rather than one long scroll — labels are edited rarely and read
- * often, metrics are the opposite, and stacking them meant scrolling past the
- * editor every time to reach a chart.
- */
+// One worker: its labels and its metrics, on separate tabs.
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Power } from 'lucide-react';
@@ -12,20 +6,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReEnableWorker, useWorker } from '@/hooks/useWorkers';
 import { useDashboardUptime } from '@/hooks/useDashboard';
 import type { ChartPoint, DashboardUptimePeriod } from '@/services/dashboardService';
-import {
-  Alert,
-  Button,
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Fact,
-  SegmentedControl,
-  Skeleton,
-  StatusBadge,
-  Tabs,
-} from '@/components/ui';
-import { DetailHeader, PageBody, PageScroll, Section } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Fact } from '@/components/ui/PageHeader';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { StatusBadge } from '@/components/ui/Status';
+import { Tabs } from '@/components/ui/Tabs';
+import { DetailHeader } from '@/components/layout/DetailHeader';
+import { PageBody, PageScroll, Section } from '@/components/layout/Page';
 import { MetricsChart, type MetricKey } from '@/features/workers/MetricsChart';
 import { LabelEditor } from '@/features/workers/LabelEditor';
 import { workerState } from '@/features/workers/utils';

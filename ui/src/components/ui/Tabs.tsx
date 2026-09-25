@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
-export interface TabItem<T extends string = string> {
+interface TabItem<T extends string = string> {
   value: T;
   label: ReactNode;
   count?: number;
@@ -60,7 +60,7 @@ export function Tabs<T extends string = string>({
   );
 }
 
-export interface LinkTabItem {
+interface LinkTabItem {
   to: string;
   label: ReactNode;
   count?: number;
@@ -73,10 +73,7 @@ export interface LinkTabsProps {
   className?: string;
 }
 
-/**
- * The same tabs as links. A job's Builds / Run / Definition views are separate
- * URLs so they can be shared and reloaded, which local tab state cannot do.
- */
+/** The same tabs as links, for views that must be shareable URLs. */
 export function LinkTabs({ items, className }: LinkTabsProps) {
   return (
     <nav className={cn('flex gap-6', className)}>

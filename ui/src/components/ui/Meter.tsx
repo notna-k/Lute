@@ -10,11 +10,7 @@ export interface MeterProps {
   label?: string;
 }
 
-/**
- * A utilisation bar the width of a table cell. Deliberately unlabelled axes:
- * it answers "is this machine near its limit" at a glance, and the exact figure
- * sits next to it as text.
- */
+/** A utilisation bar the width of a table cell; the exact figure sits beside it as text. */
 export function Meter({ value, hotAt = 0.75, showValue = true, className, label }: MeterProps) {
   const ratio = Math.max(0, Math.min(1, value));
   const hot = ratio > hotAt;

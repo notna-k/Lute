@@ -1,9 +1,3 @@
-export interface User {
-  id: string;
-  email: string;
-  display_name: string;
-}
-
 // Worker row from API (registered agent / compute node).
 export interface Worker {
   id: string;
@@ -21,20 +15,4 @@ export interface Worker {
   labels?: Record<string, string>;
   created_at: string;
   updated_at: string;
-}
-
-// Job selector: key-value pairs that a worker's labels must contain for the job to be dispatched.
-export type JobSelector = Record<string, string>;
-
-// Legacy VM interface for backward compatibility (can be removed later)
-export interface VM {
-  id: string;
-  name: string;
-  status: 'running' | 'stopped' | 'paused';
-  cpu: number;
-  memory: number;
-  disk: number;
-  ownerId?: string;
-  createdAt: string;
-  updatedAt: string;
 }

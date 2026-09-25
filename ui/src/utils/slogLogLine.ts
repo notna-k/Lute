@@ -1,7 +1,4 @@
-/**
- * Parse lines written by Go log/slog JSONHandler (job-*.log).
- * Handles level as string (common) or numeric (some encodings).
- */
+// Parses lines written by Go's slog JSONHandler (job-*.log); level may be a string or a number.
 
 export type LogSeverity = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL' | 'UNKNOWN';
 
@@ -28,13 +25,9 @@ export interface ParsedSlogLine {
   severity: LogSeverity;
   /** Worker log source: container stdout vs system (shown as "noop" in UI). */
   source: LogSource;
-  /** Short time for console column */
   timestampDisplay: string;
-  /** Primary message */
   message: string;
-  /** Original line (for keys / non-JSON) */
   raw: string;
-  /** True when JSON parsed successfully */
   structured: boolean;
 }
 
@@ -143,27 +136,14 @@ export function parseSlogLogLine(raw: string): ParsedSlogLine {
   }
 }
 
-/** Text and badge background per severity (dark console) */
+/** Text and badge colours per severity, for the dark log console. */
 export const SEVERITY_STYLE: Record<LogSeverity, { color: string; labelBg: string }> = {
-  FATAL: { color: '#ff5252', labelBg: 'rgba(183, 28, 28, 0.55)' }, // dark red (stronger than ERROR)
-  ERROR: { color: '#ffab91', labelBg: 'rgba(211, 47, 47, 0.35)' }, // lighter red
-  WARN: { color: '#fff59d', labelBg: 'rgba(245, 127, 23, 0.25)' }, // yellow
-  INFO: { color: '#fafafa', labelBg: 'rgba(250, 250, 250, 0.08)' }, // white
-  DEBUG: { color: '#b2ebf2', labelBg: 'rgba(128, 203, 196, 0.22)' }, // very light green-cyan / teal
+  FATAL: { color: '#ff5252', labelBg: 'rgba(183, 28, 28, 0.55)' },
+  ERROR: { color: '#ffab91', labelBg: 'rgba(211, 47, 47, 0.35)' },
+  WARN: { color: '#fff59d', labelBg: 'rgba(245, 127, 23, 0.25)' },
+  INFO: { color: '#fafafa', labelBg: 'rgba(250, 250, 250, 0.08)' },
+  DEBUG: { color: '#b2ebf2', labelBg: 'rgba(128, 203, 196, 0.22)' },
   UNKNOWN: { color: '#b0bec5', labelBg: 'rgba(144, 164, 174, 0.15)' },
-};
-
-/**
- * Solid swatches for severity rows in light UI (filters, menus).
- * Do not use SEVERITY_STYLE.color there — those tints are for dark log backgrounds only.
- */
-export const SEVERITY_LIGHT_UI_SWATCH: Record<LogSeverity, string> = {
-  DEBUG: '#00796b',
-  INFO: '#0d47a1',
-  WARN: '#e65100',
-  ERROR: '#c62828',
-  FATAL: '#b71c1c',
-  UNKNOWN: '#455a64',
 };
 
 /** Dark-console badge for log source (container vs worker/system). */
@@ -180,7 +160,7 @@ export const SOURCE_BADGE_LABEL: Record<LogSource, string> = {
   unknown: 'unknown',
 };
 
-/** Tooltip: real slog source value */
+/** Tooltip with the real slog source value. */
 export const SOURCE_BADGE_TITLE: Record<LogSource, string> = {
   container: 'source: container (stdout/stderr from job)',
   system: 'source: system (worker / noop job)',

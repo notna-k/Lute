@@ -1,10 +1,4 @@
-/**
- * Formatting helpers shared by every panel view.
- *
- * Durations and timestamps appear in tables, rails and log gutters, and they
- * must agree everywhere — "2m 04s" in one place and "124s" in another reads as
- * two different numbers. These are the single source for that.
- */
+// Formatting shared by every view, so durations and timestamps read the same everywhere.
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -32,7 +26,7 @@ export function relativeTime(ts: number | null | undefined): string {
 }
 
 /** Wall clock in local time: `14:32`, or `14:32:10` with `withSeconds`. */
-export function clockTime(ts: number, withSeconds = false): string {
+function clockTime(ts: number, withSeconds = false): string {
   const d = new Date(ts);
   const base = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   return withSeconds ? `${base}:${pad2(d.getSeconds())}` : base;
@@ -56,13 +50,6 @@ export function timestamp(ts: number): string {
     'Dec',
   ][d.getMonth()];
   return `${month} ${d.getDate()}, ${clockTime(ts)}`;
-}
-
-/** Elapsed time inside a build log: `0:41.2`, `12:07.9`. */
-export function elapsed(seconds: number): string {
-  const whole = Math.floor(seconds);
-  const tenths = Math.floor((seconds % 1) * 10);
-  return `${Math.floor(whole / 60)}:${pad2(whole % 60)}.${tenths}`;
 }
 
 /** `0.93` → `93%`. */

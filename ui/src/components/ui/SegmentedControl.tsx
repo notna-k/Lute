@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-export interface SegmentOption<T extends string> {
+interface SegmentOption<T extends string> {
   value: T;
   label: ReactNode;
   /** Trailing count, e.g. how many builds the filter would show. */
@@ -18,11 +18,7 @@ export interface SegmentedControlProps<T extends string> {
   className?: string;
 }
 
-/**
- * A joined row of mutually exclusive filters — one border around the group,
- * hairlines between the segments. Used for status filters, preview modes and
- * the settings toggles, so those choices all look and behave alike.
- */
+/** A joined row of mutually exclusive choices. */
 export function SegmentedControl<T extends string>({
   value,
   options,

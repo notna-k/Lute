@@ -17,12 +17,7 @@ export interface TapeProps {
   className?: string;
 }
 
-/**
- * Recent history as a strip of bars, oldest on the left.
- *
- * Passes stay deliberately quiet so a red bar is what the eye lands on: the
- * question this answers is "has this job been failing", not "how many ran".
- */
+/** Recent history as a strip of bars, oldest left. Passes stay quiet so failures stand out. */
 export function Tape({ states, limit = 16, className }: TapeProps) {
   const shown = states.slice(-limit);
   if (!shown.length) return null;

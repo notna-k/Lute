@@ -14,16 +14,12 @@ export interface KeyValueListProps {
   className?: string;
 }
 
-/**
- * A two-column definition list for build facts: parameters, placement, source.
- * Keys are monospaced and dimmed so the values form the readable column.
- */
+/** A two-column definition list for build facts: parameters, placement, source. */
 export function KeyValueList({ rows, className }: KeyValueListProps) {
   return (
     <dl className={cn('grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1', className)}>
       {rows.map((row) => (
-        // dt/dd are the grid items themselves, so the two columns line up
-        // across every row without a wrapper per pair.
+        // dt/dd are the grid items, so columns line up without a wrapper per pair.
         <Fragment key={row.key}>
           <dt className='font-mono text-[11.5px] text-fg-subtle'>{row.key}</dt>
           <dd className='m-0 truncate font-mono text-xs' title={row.title}>

@@ -1,8 +1,8 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
-export type IconButtonVariant = 'ghost' | 'outline' | 'solid' | 'danger';
-export type IconButtonSize = 'sm' | 'md';
+type IconButtonVariant = 'ghost' | 'outline' | 'solid' | 'danger';
+type IconButtonSize = 'sm' | 'md';
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: IconButtonVariant;

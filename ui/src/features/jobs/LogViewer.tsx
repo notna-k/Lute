@@ -1,11 +1,4 @@
-/**
- * The build log pane.
- *
- * Dark in both themes on purpose: log output carries its own severity colours,
- * and those are legible against ink, not paper. The pane is a self-contained
- * column — a toolbar that never scrolls and a body that does — so it can be
- * dropped into a page that already has a fixed header.
- */
+// The build log pane: dark in both themes because log severity colours are tuned for ink.
 import { useMemo, useState } from 'react';
 import { Search, WrapText } from 'lucide-react';
 import {
@@ -17,11 +10,11 @@ import {
   SOURCE_STYLE,
   type LogSeverity,
 } from '@/utils/slogLogLine';
-import { Spinner } from '@/components/ui';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
 import type { useJobLogs } from '@/hooks/useJobLogs';
 
-export type JobLogs = ReturnType<typeof useJobLogs>;
+type JobLogs = ReturnType<typeof useJobLogs>;
 
 export interface LogViewerProps {
   logs: JobLogs;

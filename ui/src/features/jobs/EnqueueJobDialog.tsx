@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { Alert, Button, Dialog, Field, IconButton, Input, Select, Textarea } from '@/components/ui';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Field, Input, Textarea } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import { jobService, type EnqueueRequest } from '@/services/jobService';
 
 const RUNTIME_OPTIONS = [
@@ -307,5 +312,3 @@ export function EnqueueJobDialog({
     </Dialog>
   );
 }
-
-export default EnqueueJobDialog;

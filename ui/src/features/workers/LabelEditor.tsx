@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { Button, IconButton, Input } from '@/components/ui';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Input } from '@/components/ui/Input';
 
 const LABEL_KEY_RE = /^[a-zA-Z0-9_\-.]{1,63}$/;
 
@@ -113,5 +115,3 @@ export function LabelEditor({ initialLabels, onSave, saving }: LabelEditorProps)
     </div>
   );
 }
-
-export default LabelEditor;

@@ -7,11 +7,7 @@ import {
 } from 'react';
 import { cn } from '@/lib/cn';
 
-/**
- * Text entry is monospaced throughout the panel: nearly every value typed here
- * is an identifier, a tag, a path or a cron expression, and a proportional font
- * makes those harder to compare character by character.
- */
+// Monospaced: nearly every value typed here is an identifier, a tag, a path or a cron expression.
 const BASE_FIELD =
   'w-full border border-border bg-surface px-2 font-mono text-[12.5px] text-fg outline-none transition-colors focus:border-border-strong disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -73,8 +69,6 @@ export const NativeSelect = forwardRef<HTMLSelectElement, NativeSelectProps>(fun
   return (
     <select
       ref={ref}
-      // The chevron is drawn with currentColor so it follows the theme
-      // without a second asset per palette.
       className={cn(
         BASE_FIELD,
         'h-[30px] appearance-none bg-no-repeat pr-7 [background-position:right_8px_center] [background-size:14px]',
@@ -107,11 +101,7 @@ export interface FieldProps {
   children: ReactNode;
 }
 
-/**
- * One parameter of a build. The label row carries everything the operator needs
- * to judge the value — whether it is required, which env var it lands in, and
- * whether they have changed it from the committed default.
- */
+/** One labelled field; the label row shows required, the env var and whether it changed. */
 export function Field({
   label,
   htmlFor,

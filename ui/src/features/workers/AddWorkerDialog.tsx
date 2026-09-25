@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 import { apiClient } from '@/services/api';
-import { Alert, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
+import { useCopy } from '@/hooks/useCopy';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { IconButton } from '@/components/ui/IconButton';
+import { Spinner } from '@/components/ui/Spinner';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface AddWorkerDialogProps {
   open: boolean;
@@ -44,27 +50,9 @@ function useClaimCode(open: boolean) {
   return { code, error, loading };
 }
 
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      document.body.removeChild(ta);
-    }
-    return true;
-  }
-}
-
 export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
   const { code, error, loading } = useClaimCode(open);
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopy();
 
   const origin = apiHttpOrigin();
   const installCommand = `curl -sSL ${origin}/api/public/v1/workers/bootstrap/install.sh | bash`;
@@ -73,9 +61,7 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
 
   const handleCopy = async () => {
     if (!fullCommand) return;
-    await copyText(fullCommand);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    await copy(fullCommand);
   };
 
   return (
@@ -149,5 +135,3 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
     </Dialog>
   );
 }
-
-export default AddWorkerDialog;

@@ -1,9 +1,7 @@
-import { Fragment } from 'react';
-import { Menu, Transition } from '@headlessui/react';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { cn } from '@/lib/cn';
 
 export interface UserMenuProps {
   /** Avatar only, for the collapsed rail. */
@@ -40,7 +38,7 @@ export function UserMenu({ compact }: UserMenuProps) {
 
   return (
     <Menu as='div' className='relative flex min-w-0'>
-      <Menu.Button
+      <MenuButton
         title={name}
         className='flex min-w-0 items-center gap-2.5 text-[12.5px] text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg'
       >
@@ -48,40 +46,28 @@ export function UserMenu({ compact }: UserMenuProps) {
           {initials}
         </span>
         {!compact && <span className='truncate'>{name}</span>}
-      </Menu.Button>
-      <Transition
-        as={Fragment}
-        enter='transition ease-out duration-100'
-        enterFrom='opacity-0 translate-y-1'
-        enterTo='opacity-100 translate-y-0'
-        leave='transition ease-in duration-75'
-        leaveFrom='opacity-100'
-        leaveTo='opacity-0'
+      </MenuButton>
+      <MenuItems
+        transition
+        className='absolute bottom-full left-0 z-50 mb-2 w-56 border border-border bg-surface py-1 shadow-popover focus:outline-none transition duration-100 ease-out data-[closed]:translate-y-1 data-[closed]:opacity-0 data-[leave]:duration-75 data-[leave]:ease-in'
       >
-        <Menu.Items className='absolute bottom-full left-0 z-50 mb-2 w-56 border border-border bg-surface py-1 shadow-popover focus:outline-none'>
-          <div className='border-b border-border px-3 py-2'>
-            <div className='truncate text-[13px] font-medium text-fg'>
-              {user.display_name || 'User'}
-            </div>
-            <div className='truncate font-mono text-[11px] text-fg-muted'>{user.email}</div>
+        <div className='border-b border-border px-3 py-2'>
+          <div className='truncate text-[13px] font-medium text-fg'>
+            {user.display_name || 'User'}
           </div>
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                type='button'
-                onClick={handleSignOut}
-                className={cn(
-                  'flex w-full items-center gap-2 px-3 py-2 text-[13px] text-fg',
-                  active && 'bg-surface-hover',
-                )}
-              >
-                <LogOut className='h-3.5 w-3.5' />
-                Sign out
-              </button>
-            )}
-          </Menu.Item>
-        </Menu.Items>
-      </Transition>
+          <div className='truncate font-mono text-[11px] text-fg-muted'>{user.email}</div>
+        </div>
+        <MenuItem>
+          <button
+            type='button'
+            onClick={handleSignOut}
+            className='flex w-full items-center gap-2 px-3 py-2 text-[13px] text-fg data-[focus]:bg-surface-hover'
+          >
+            <LogOut className='h-3.5 w-3.5' />
+            Sign out
+          </button>
+        </MenuItem>
+      </MenuItems>
     </Menu>
   );
 }

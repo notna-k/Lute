@@ -8,18 +8,12 @@ export interface PageHeaderProps {
   actions?: ReactNode;
   /** A trail, or a single label naming where the page sits. */
   breadcrumb?: ReactNode;
-  /**
-   * Standing facts about the page's subject — counts, a repo, a last-sync time.
-   * Compose with <Fact>; they wrap on narrow screens.
-   */
+  /** Standing facts (counts, a repo, a sync time), composed with <Fact>. */
   facts?: ReactNode;
   className?: string;
 }
 
-/**
- * The header of a list page. Non-scrolling: it stays put while the table below
- * it scrolls, so the page's identity and actions never leave the screen.
- */
+/** The non-scrolling header of a list page. */
 export function PageHeader({
   title,
   description,

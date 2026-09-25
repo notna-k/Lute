@@ -21,7 +21,7 @@ export function Kbd({ children, className }: KbdProps) {
 }
 
 /** True on Apple platforms, so shortcut hints show ⌘ rather than Ctrl. */
-export function isAppleOS(): boolean {
+function isAppleOS(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent);
 }

@@ -4,23 +4,9 @@ import { CommandPalette } from './CommandPalette';
 import { Sidebar } from './Sidebar';
 import { NAV_ITEMS } from './nav';
 import { useUiPreferences } from '@/contexts/UiPreferencesContext';
+import { isTypingTarget } from '@/lib/dom';
 
-/** True when the keystroke belongs to whatever the user is typing into. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  return (
-    el.isContentEditable ||
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT'
-  );
-}
-
-/**
- * Global keys: the palette on Ctrl/⌘ K or `/`, the rail width on `[`, and one
- * letter per nav entry. Bare keys are ignored while the user is typing.
- */
+/** Global keys: palette on Ctrl/⌘K or `/`, rail on `[`, one letter per nav entry; ignored while typing. */
 function useHotkeys(openCommand: () => void, toggleSidebar: () => void) {
   const navigate = useNavigate();
   useEffect(() => {
@@ -57,13 +43,7 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-/**
- * The application frame: a collapsible rail and one full-height page column.
- *
- * Nothing here scrolls. Each page owns its own scrolling regions, which is what
- * lets a job's header and tabs stay fixed while its build log streams, and lets
- * the build list and the log scroll past each other independently.
- */
+/** The app frame. Nothing here scrolls: each page owns its scroll regions, so headers stay put. */
 export function AppShell({ children }: AppShellProps) {
   const { sidebarExpanded, toggleSidebar } = useUiPreferences();
   const [commandOpen, setCommandOpen] = useState(false);

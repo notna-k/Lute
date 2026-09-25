@@ -6,11 +6,7 @@ export interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   selected?: boolean;
 }
 
-/**
- * A standalone toggle, unlike SegmentedControl's joined row. Used where the
- * options are shortcuts rather than a filter — "start from defaults", "start
- * from build #412", a job template.
- */
+/** A standalone toggle for shortcuts ("start from build #412"), unlike SegmentedControl's joined row. */
 export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
   { selected, className, type = 'button', children, ...rest },
   ref,

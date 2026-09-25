@@ -1,20 +1,14 @@
 import { type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-/**
- * The status vocabulary.
- *
- * Every build state has one shape and one colour, and they are declared here
- * once so a marker means the same thing in a table, a rail, a log header and a
- * toast. Shape carries the meaning as much as colour does — a diamond reads as
- * "failed" for a viewer who cannot separate red from green.
- */
+// The status vocabulary: one shape and colour per state everywhere. Shape carries meaning for
+// colour-blind viewers (a diamond is "failed").
 
 export type BuildState = 'passed' | 'failed' | 'running' | 'queued' | 'aborted';
 export type WorkerState = 'idle' | 'busy' | 'draining' | 'offline';
-export type State = BuildState | WorkerState;
+type State = BuildState | WorkerState;
 
-export const BUILD_STATE_LABEL: Record<BuildState, string> = {
+const BUILD_STATE_LABEL: Record<BuildState, string> = {
   passed: 'Passed',
   failed: 'Failed',
   running: 'Running',
@@ -22,14 +16,14 @@ export const BUILD_STATE_LABEL: Record<BuildState, string> = {
   aborted: 'Cancelled',
 };
 
-export const WORKER_STATE_LABEL: Record<WorkerState, string> = {
+const WORKER_STATE_LABEL: Record<WorkerState, string> = {
   idle: 'Idle',
   busy: 'Busy',
   draining: 'Draining',
   offline: 'Offline',
 };
 
-export function stateLabel(state: State): string {
+function stateLabel(state: State): string {
   return (
     (BUILD_STATE_LABEL as Record<string, string>)[state] ??
     (WORKER_STATE_LABEL as Record<string, string>)[state] ??

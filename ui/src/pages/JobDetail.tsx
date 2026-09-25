@@ -1,11 +1,4 @@
-/**
- * One job: its builds, a form to run it, and the definition behind it.
- *
- * The three views are routes rather than local tab state, so a build, a
- * half-filled run form or the YAML can all be linked to and reloaded. The header
- * is fixed; only the view below it scrolls, which is what lets a log stream
- * without the page drifting.
- */
+// One job: builds, run form and definition, as routes so each view can be linked and reloaded.
 import { useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,17 +8,15 @@ import { ApiError } from '@/services/api';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
 import { BuildList } from '@/features/jobs/BuildList';
 import { BuildPane } from '@/features/jobs/BuildPane';
-import {
-  Alert,
-  Button,
-  Fact,
-  LinkTabs,
-  Spinner,
-  Tape,
-  toastSubject,
-  useToast,
-} from '@/components/ui';
-import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Fact } from '@/components/ui/PageHeader';
+import { LinkTabs } from '@/components/ui/Tabs';
+import { Spinner } from '@/components/ui/Spinner';
+import { Tape } from '@/components/ui/Tape';
+import { toastSubject, useToast } from '@/components/ui/Toast';
+import { DetailHeader } from '@/components/layout/DetailHeader';
+import { PageBody, PageScroll } from '@/components/layout/Page';
 import { GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { duration, percent } from '@/lib/format';
 import type { Build, ParameterField, ParameterValues } from '@/types/jobs';
@@ -35,7 +26,6 @@ type View = 'builds' | 'run' | 'config';
 /** Stable empty list, so the selected-build memo has stable dependencies. */
 const NO_BUILDS: Build[] = [];
 
-/** Which of the three views the current URL selects. */
 function viewOf(pathname: string, slug: string): View {
   const rest = pathname.replace(`/jobs/${slug}`, '');
   if (rest.startsWith('/run')) return 'run';
@@ -58,8 +48,7 @@ export default function JobDetail() {
   const { data: builds } = useQuery({
     queryKey: ['builds', slug],
     queryFn: () => listBuilds(slug),
-    // Builds move through queued → running → passed/failed on the worker, so
-    // keep polling while any of them is still in flight.
+    // Keep polling while any build is still in flight.
     refetchInterval: (query) =>
       query.state.data?.some((b) => b.status === 'queued' || b.status === 'running') ? 2000 : 15000,
   });
@@ -71,9 +60,7 @@ export default function JobDetail() {
   );
 
   const trigger = useMutation({
-    // The authored schema goes with the values: the server validates against
-    // what the user actually saw, so an added parameter is applied rather than
-    // silently dropped.
+    // The authored schema goes with the values, so the server validates what the user saw.
     mutationFn: ({ values, fields }: { values: ParameterValues; fields: ParameterField[] }) =>
       triggerBuild(slug, values, fields),
     onSuccess: (build) => {
@@ -133,12 +120,10 @@ export default function JobDetail() {
   }
 
   const fieldErrors = trigger.error instanceof ApiError ? trigger.error.fields : undefined;
-  // A field-level rejection is already rendered on the inputs; repeating the
-  // summary line above them would just say "invalid parameters" twice.
+  // Field-level rejections already show on the inputs.
   const runError = trigger.isError && !fieldErrors ? (trigger.error as Error).message : undefined;
 
-  // Any definition can be saved. One that came from Git then differs from it
-  // until its file changes — or until the saved config is committed.
+  // Saving a Git definition makes it differ from Git until its file changes.
   const editFooter = (parameters: ParameterField[]) => (
     <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
       <Button

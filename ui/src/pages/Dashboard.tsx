@@ -1,11 +1,4 @@
-/**
- * The overview: what is running, what is broken, what the fleet looks like.
- *
- * Built from the same three queries the other pages use, so it costs nothing
- * extra and can never disagree with them. Ordered by urgency — in-flight builds
- * first, then failures, then the fleet — because that is the order an operator
- * reads a panel in.
- */
+// The overview, ordered by urgency: in-flight builds, failures, then the fleet.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Plus, Server } from 'lucide-react';
@@ -15,28 +8,17 @@ import { useUserWorkers } from '@/hooks/useWorkers';
 import type { Worker } from '@/types';
 import { listJobs } from '@/services/jobDefService';
 import { executionService } from '@/services/executionService';
-import {
-  Alert,
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  LinkButton,
-  PageHeader,
-  RowLink,
-  Skeleton,
-  Slots,
-  StatusText,
-  TBody,
-  Table,
-  Tape,
-  Td,
-  Th,
-  THead,
-  Tr,
-} from '@/components/ui';
-import { PageBody, PageScroll, Section } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button, LinkButton } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { RowLink, TBody, Table, Td, Th, THead, Tr } from '@/components/ui/Table';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Slots } from '@/components/ui/Meter';
+import { StatusText } from '@/components/ui/Status';
+import { Tape } from '@/components/ui/Tape';
+import { PageBody, PageScroll, Section } from '@/components/layout/Page';
 import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
 import { workerState } from '@/features/workers/utils';
 import { duration, relativeTime, toEpochMs } from '@/lib/format';
@@ -74,7 +56,7 @@ function Stat({
   );
 }
 
-/** Stable empty list, so the fleet memo does not re-run on every render. */
+/** Stable empty list, so the fleet memo keeps its dependencies. */
 const NO_WORKERS: Worker[] = [];
 
 export default function Dashboard() {

@@ -1,10 +1,4 @@
-/**
- * Author-side config editors: the type-specific half of the schema editor.
- *
- * The common half (name / label / env / required / description / default) is
- * rendered generically by `ParamEditor`, so a type only declares what makes it
- * different.
- */
+// Type-specific config editors; ParamEditor renders the fields common to every type.
 import { GripVertical, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { TONE_TAG, TONES } from './tones';

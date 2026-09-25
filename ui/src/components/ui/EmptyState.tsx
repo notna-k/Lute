@@ -9,11 +9,7 @@ export interface EmptyStateProps {
   className?: string;
 }
 
-/**
- * The nothing-here state. Centred, unboxed and quiet: it usually sits inside a
- * table or panel that already has a border, and a second dashed box around it
- * reads as a broken layout rather than an explanation.
- */
+/** The nothing-here state. Unboxed, since it usually sits inside a bordered table or panel. */
 export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
     <div

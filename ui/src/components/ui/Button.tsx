@@ -3,15 +3,11 @@ import { Link, type LinkProps } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'link';
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'link';
 
-export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
+type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'icon';
 
-/**
- * Square, hairline-bordered control. `primary` is the inverted fill — there is
- * no brand hue in this palette, so emphasis comes from contrast, and colour is
- * left to mean build status.
- */
+// `primary` is the inverted fill: the palette has no brand hue, so colour is left to build status.
 const BASE =
   'inline-flex shrink-0 items-center justify-center gap-[7px] whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-fg focus-visible:ring-offset-1 focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-45';
 
@@ -84,10 +80,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
 export interface LinkButtonProps extends LinkProps, CommonProps {}
 
-/**
- * A router link wearing the button's clothes. Navigation stays an anchor, so
- * middle-click and "open in new tab" keep working.
- */
+/** A router link styled as a button, so middle-click and "open in new tab" keep working. */
 export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(function LinkButton(
   {
     variant = 'secondary',

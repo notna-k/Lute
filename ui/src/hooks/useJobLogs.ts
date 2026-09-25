@@ -1,12 +1,5 @@
-/**
- * Tail-following log pagination for one engine job (a build's run).
- *
- * The API serves a window from the end of the log file with a cursor for the
- * lines before it, so the viewer starts at the tail — where a running build is
- * interesting — and pages backwards as the user scrolls up. The scroll anchor is
- * restored after a prepend, otherwise loading older lines would yank the reader
- * away from the line they were reading.
- */
+// Tail-first log pagination for one engine job: starts at the end and pages backwards on scroll-up,
+// restoring the scroll anchor after each prepend.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { jobService } from '@/services/jobService';
 

@@ -1,14 +1,5 @@
-/**
- * Filter state that lives in the URL.
- *
- * A filtered list is a finding — "the release jobs that are failing" — and a
- * finding is worth sending to someone. Keeping the filters in the query string
- * makes the address bar the share link, survives a reload, and gives Back its
- * usual meaning instead of dropping the operator into an unfiltered page.
- *
- * Writes replace rather than push: typing into a search box should not bury the
- * previous page under thirty history entries.
- */
+// Filter state in the URL, so a filtered list can be shared and survives reloads.
+// Writes replace rather than push, so typing in a search box does not flood history.
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -40,15 +31,11 @@ export function useFilterParam<T extends string = string>(
   return [value, set];
 }
 
-/**
- * A multi-valued facet, carried as one repeated key (`?queue=a&queue=b`) so the
- * values stay readable and a value containing a comma still round-trips.
- */
+/** A multi-valued facet as one repeated key (`?queue=a&queue=b`), so commas round-trip. */
 export function useFilterList(key: string): [string[], (values: string[]) => void] {
   const [params, setParams] = useSearchParams();
 
-  // getAll() hands back a fresh array every call, which would re-run every memo
-  // downstream. params only changes when the URL does, so tie the array to it.
+  // getAll() returns a fresh array every call; tie it to params so memos downstream stay put.
   const values = useMemo(() => {
     const raw = params.getAll(key);
     return raw.length ? raw : EMPTY;

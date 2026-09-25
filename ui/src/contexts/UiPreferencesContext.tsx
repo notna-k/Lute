@@ -8,11 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
-/**
- * Per-operator view preferences: how wide the rail is and how tall table rows
- * are. Local to the browser, never sent to the server — they say nothing about
- * the workspace, only about the person looking at it.
- */
+// Per-browser view preferences (rail width, row density); never sent to the server.
 
 export type Density = 'roomy' | 'compact';
 
@@ -51,8 +47,7 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
     read(DENSITY_KEY, 'roomy') === 'compact' ? 'compact' : 'roomy',
   );
 
-  // Density is a CSS concern (row padding, base font size), so it rides on the
-  // document element where the stylesheet can key off it.
+  // Density rides on the document element so the stylesheet can key off it.
   useEffect(() => {
     if (density === 'compact') {
       document.documentElement.dataset.density = 'compact';

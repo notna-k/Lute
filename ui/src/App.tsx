@@ -2,9 +2,10 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'rea
 import { AuthProvider, AuthBridgeUpdater, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { UiPreferencesProvider } from './contexts/UiPreferencesContext';
-import { AppShell } from './components/layout';
+import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Spinner, ToastProvider } from './components/ui';
+import { Spinner } from '@/components/ui/Spinner';
+import { ToastProvider } from '@/components/ui/Toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Workers from './pages/Workers';
@@ -59,8 +60,7 @@ function AppRoutes() {
           <Route path='/settings' element={<Settings />} />
           <Route path='/jobs' element={<Jobs />} />
           <Route path='/jobs/new' element={<JobNew />} />
-          {/* A job's views are routes, not local tab state, so a build or a
-              half-filled run form can be linked to and reloaded. */}
+          {/* A job's views are routes so each can be linked and reloaded. */}
           <Route path='/jobs/:slug' element={<JobDetail />} />
           <Route path='/jobs/:slug/run' element={<JobDetail />} />
           <Route path='/jobs/:slug/config' element={<JobDetail />} />
