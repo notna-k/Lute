@@ -16,6 +16,7 @@ import (
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
+	"github.com/lute/api/internal/httpx"
 	"github.com/lute/api/internal/queue"
 	pb "github.com/lute/proto"
 )
@@ -39,7 +40,7 @@ func NewRunsHandler(
 }
 
 func (h *RunsHandler) Create(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -52,11 +53,11 @@ func (h *RunsHandler) Create(c *gin.Context) {
 
 	var req CreateRunRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if req.Webhook != nil && req.Webhook.URL == "" {
-		writeError(c, http.StatusBadRequest, "invalid_request", "webhook.url is required when webhook is provided")
+		httpx.Error(c, http.StatusBadRequest, "webhook.url is required when webhook is provided")
 		return
 	}
 
@@ -69,7 +70,7 @@ func (h *RunsHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusOK, CreateRunResponse{RunResponse: resp})
 			return
 		} else if !errors.Is(err, repos.ErrNotFound) {
-			writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+			httpx.Internal(c, err)
 			return
 		}
 	}
@@ -95,7 +96,7 @@ func (h *RunsHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.runs.Create(ctx, run); err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -116,7 +117,7 @@ func (h *RunsHandler) Create(c *gin.Context) {
 		opts.Delay = time.Duration(req.DelayMs) * time.Millisecond
 	}
 	if err := h.engine.Enqueue(ctx, job, opts); err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	h.stats.RecordEnqueued(ctx, req.Queue)
@@ -132,7 +133,7 @@ func (h *RunsHandler) Create(c *gin.Context) {
 }
 
 func (h *RunsHandler) Get(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -144,7 +145,7 @@ func (h *RunsHandler) Get(c *gin.Context) {
 }
 
 func (h *RunsHandler) List(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -157,7 +158,7 @@ func (h *RunsHandler) List(c *gin.Context) {
 		Type:   c.Query("type"),
 	}, offset, limit)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -175,7 +176,7 @@ func (h *RunsHandler) List(c *gin.Context) {
 }
 
 func (h *RunsHandler) Retry(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -187,7 +188,7 @@ func (h *RunsHandler) Retry(c *gin.Context) {
 	ctx := c.Request.Context()
 	job, err := h.engine.GetJob(ctx, run.JobID)
 	if err != nil {
-		writeError(c, http.StatusNotFound, "not_found", "queue state lost for this run; create a new run")
+		httpx.Error(c, http.StatusNotFound, "queue state lost for this run; create a new run")
 		return
 	}
 	job.Status = "pending"
@@ -196,7 +197,7 @@ func (h *RunsHandler) Retry(c *gin.Context) {
 	job.DoneAt = 0
 	job.WorkerID = ""
 	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{MaxRetries: job.MaxRetries, TimeoutSec: job.TimeoutSec}); err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	h.stats.RecordEnqueued(ctx, job.Queue)
@@ -207,7 +208,7 @@ func (h *RunsHandler) Retry(c *gin.Context) {
 }
 
 func (h *RunsHandler) Cancel(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -216,14 +217,14 @@ func (h *RunsHandler) Cancel(c *gin.Context) {
 		return
 	}
 	if err := h.engine.CancelJob(c.Request.Context(), run.JobID); err != nil {
-		writeError(c, http.StatusBadRequest, "invalid_state", err.Error())
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, h.buildRunResponse(c.Request.Context(), run))
 }
 
 func (h *RunsHandler) Logs(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -235,7 +236,7 @@ func (h *RunsHandler) Logs(c *gin.Context) {
 	ctx := c.Request.Context()
 	job, err := h.engine.GetJob(ctx, run.JobID)
 	if err != nil {
-		writeError(c, http.StatusNotFound, "not_found", "run has no active queue state")
+		httpx.Error(c, http.StatusNotFound, "run has no active queue state")
 		return
 	}
 
@@ -246,11 +247,11 @@ func (h *RunsHandler) Logs(c *gin.Context) {
 		}
 	}
 	if workerID == "" {
-		writeError(c, http.StatusNotFound, "not_found", "no worker has executed this run yet")
+		httpx.Error(c, http.StatusNotFound, "no worker has executed this run yet")
 		return
 	}
 	if h.grpcSrv == nil {
-		writeError(c, http.StatusServiceUnavailable, "unavailable", "worker gateway unavailable")
+		httpx.Error(c, http.StatusServiceUnavailable, "worker gateway unavailable")
 		return
 	}
 
@@ -262,7 +263,7 @@ func (h *RunsHandler) Logs(c *gin.Context) {
 	case "tail":
 		dir = pb.LogReadDirection_LOG_READ_TAIL
 	default:
-		writeError(c, http.StatusBadRequest, "invalid_request", "direction must be tail or head")
+		httpx.Error(c, http.StatusBadRequest, "direction must be tail or head")
 		return
 	}
 	limit := 200
@@ -282,10 +283,10 @@ func (h *RunsHandler) Logs(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, grpc.ErrNoConnection) {
-			writeError(c, http.StatusServiceUnavailable, "unavailable", "worker not connected")
+			httpx.Error(c, http.StatusServiceUnavailable, "worker not connected")
 			return
 		}
-		writeError(c, http.StatusBadGateway, "bad_gateway", err.Error())
+		httpx.Error(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	out := gin.H{
@@ -302,14 +303,14 @@ func (h *RunsHandler) loadOwnedRun(c *gin.Context, userID id.ID) (*models.Run, i
 	run, err := h.runs.GetByJobID(c.Request.Context(), jobID)
 	if err != nil {
 		if errors.Is(err, repos.ErrNotFound) {
-			writeError(c, http.StatusNotFound, "not_found", "run not found")
+			httpx.Error(c, http.StatusNotFound, "run not found")
 			return nil, http.StatusNotFound
 		}
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return nil, http.StatusInternalServerError
 	}
 	if run.UserID != userID {
-		writeError(c, http.StatusNotFound, "not_found", "run not found")
+		httpx.Error(c, http.StatusNotFound, "run not found")
 		return nil, http.StatusNotFound
 	}
 	return run, 0
@@ -354,24 +355,6 @@ func (h *RunsHandler) buildRunResponse(ctx context.Context, run *models.Run) Run
 		resp.EnqueuedAt = run.CreatedAt.UTC()
 	}
 	return resp
-}
-
-func requireUserID(c *gin.Context) (id.ID, bool) {
-	raw, exists := c.Get("user_id")
-	if !exists {
-		writeError(c, http.StatusUnauthorized, "unauthorized", "authentication required")
-		return id.ID(""), false
-	}
-	uid, err := id.FromHex(raw.(string))
-	if err != nil {
-		writeError(c, http.StatusUnauthorized, "unauthorized", "invalid user context")
-		return id.ID(""), false
-	}
-	return uid, true
-}
-
-func writeError(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
 }
 
 func normalizeEvents(events []string) []string {

@@ -141,8 +141,9 @@ func TestPublicRunsAPI(t *testing.T) {
 		}
 
 		// There is no second account yet, so this only checks a foreign run id reads as absent.
-		if _, err := api.GetRun("000000000000000000000000"); harness.StatusOf(err) != http.StatusNotFound {
-			t.Errorf("get a run id that belongs to nobody: err = %v, want 404", err)
+		_, err = api.GetRun("000000000000000000000000")
+		if harness.StatusOf(err) != http.StatusNotFound || harness.CodeOf(err) != "not_found" {
+			t.Errorf("get a run id that belongs to nobody: err = %v, want 404 not_found", err)
 		}
 		if _, err := api.GetRun(mine.ID); err != nil {
 			t.Errorf("get my own run: %v", err)

@@ -23,8 +23,8 @@ async function postJSON<T>(path: string, body?: unknown): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(body.error?.message || `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }

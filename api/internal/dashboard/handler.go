@@ -10,6 +10,7 @@ import (
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 type DashboardHandler struct {
@@ -37,21 +38,15 @@ func (h *DashboardHandler) GetConfig(c *gin.Context) {
 }
 
 func (h *DashboardHandler) GetStats(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-	userIDObj, err := id.FromHex(userID.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+	userIDObj, ok := httpx.UserID(c)
+	if !ok {
 		return
 	}
 
 	ctx := c.Request.Context()
 	workersList, err := h.workerRepo.GetByUserID(ctx, userIDObj)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -207,14 +202,8 @@ func ptrFloat(f float64) *float64 { return &f }
 
 // GetUptime serves metric charts for all of the caller's workers, or one with ?worker_id=.
 func (h *DashboardHandler) GetUptime(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-	userIDObj, err := id.FromHex(userID.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+	userIDObj, ok := httpx.UserID(c)
+	if !ok {
 		return
 	}
 
@@ -244,21 +233,20 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	if workerIDHex != "" {
 		workerOID, err := id.FromHex(workerIDHex)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
+			httpx.Error(c, http.StatusBadRequest, "invalid worker id")
 			return
 		}
 		w, err := h.workerRepo.GetByID(ctx, workerOID)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
-			return
+		if err == nil && w.UserID != userIDObj {
+			err = repos.ErrNotFound
 		}
-		if w.UserID != userIDObj {
-			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
+		if err != nil {
+			httpx.NotFoundOrInternal(c, err, "worker not found")
 			return
 		}
 		snapshots, err := h.snapshotRepo.GetByWorkerID(ctx, workerOID, periodStart)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			httpx.Internal(c, err)
 			return
 		}
 		points, diskMax := buildChartPerWorker(snapshots, periodStart, periodEnd, bucketDur)
@@ -275,7 +263,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 
 	workersList, err := h.workerRepo.GetByUserID(ctx, userIDObj)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	if len(workersList) == 0 {
@@ -294,7 +282,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 	}
 	snapshots, err := h.snapshotRepo.GetByWorkerIDs(ctx, workerOIDs, periodStart)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	points, diskMax := buildChartAggregated(snapshots, periodStart, periodEnd, bucketDur)

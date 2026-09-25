@@ -16,6 +16,7 @@ import (
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
+	"github.com/lute/api/internal/httpx"
 	"github.com/lute/api/internal/queue"
 )
 
@@ -171,14 +172,14 @@ func recentStatuses(runs []models.Run, execs map[string]*models.JobExecution, la
 }
 
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
 	defs, err := h.defs.List(ctx)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	slugs := make([]string, 0, len(defs))
@@ -187,12 +188,12 @@ func (h *Handler) List(c *gin.Context) {
 	}
 	runsBySlug, err := h.runs.ListByJobSlugs(ctx, userID, slugs, 100)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	execs, err := h.execsFor(ctx, runsBySlug)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -206,24 +207,24 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
 	def, err := h.defs.GetBySlug(ctx, c.Param("slug"))
 	if err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 	runs, err := h.runs.ListByJobSlug(ctx, userID, def.Slug, 100)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	execs, err := h.executions.ListByJobIDs(ctx, jobIDsOf(runs))
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	rate, median := statsOf(runs, execs)
@@ -231,7 +232,7 @@ func (h *Handler) Get(c *gin.Context) {
 }
 
 func (h *Handler) Builds(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -239,12 +240,12 @@ func (h *Handler) Builds(c *gin.Context) {
 	slug := c.Param("slug")
 	runs, err := h.runs.ListByJobSlug(ctx, userID, slug, 20)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	execs, err := h.executions.ListByJobIDs(ctx, jobIDsOf(runs))
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	out := make([]buildDTO, 0, len(runs))
@@ -262,20 +263,20 @@ type triggerRequest struct {
 }
 
 func (h *Handler) Trigger(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
 	def, err := h.defs.GetBySlug(ctx, c.Param("slug"))
 	if err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 
 	var req triggerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, err.Error())
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -284,16 +285,12 @@ func (h *Handler) Trigger(c *gin.Context) {
 	if req.Parameters != nil && schemaDiffers(def.Parameters, req.Parameters) {
 		allowed, err := h.settings.GetBool(ctx, models.AllowAdhocBuilds)
 		if err != nil {
-			writeError(c, http.StatusInternalServerError, err.Error())
+			httpx.Internal(c, err)
 			return
 		}
 		if !allowed {
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-				"error": "this build's parameters differ from the definition in Git, " +
-					"and ad-hoc builds are turned off — commit your changes, or enable " +
-					"ad-hoc builds in Settings",
-				"code": "adhoc_builds_disabled",
-			})
+			httpx.Error(c, http.StatusConflict, "this build's parameters differ from the definition in Git, "+
+				"and ad-hoc builds are turned off — commit your changes, or enable ad-hoc builds in Settings")
 			return
 		}
 		schema = req.Parameters
@@ -304,15 +301,10 @@ func (h *Handler) Trigger(c *gin.Context) {
 	if verr != nil {
 		var ve *ValidationError
 		if errors.As(verr, &ve) {
-			// `error` stays a plain string like everywhere else; `fields` has per-input detail.
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error":  ve.Error(),
-				"code":   "invalid_parameters",
-				"fields": ve.Fields,
-			})
+			httpx.Invalid(c, ve.Error(), ve.Fields)
 			return
 		}
-		writeError(c, http.StatusBadRequest, verr.Error())
+		httpx.Error(c, http.StatusBadRequest, verr.Error())
 		return
 	}
 
@@ -323,7 +315,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 		Command:          def.Command,
 	})
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -341,7 +333,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 		run.ParamSchema = schema
 	}
 	if err := h.runs.Create(ctx, run); err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -354,7 +346,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 		Selector: def.LabelSelector,
 	}
 	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{}); err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	h.stats.RecordEnqueued(ctx, def.Queue)
@@ -377,26 +369,32 @@ type createRequest struct {
 	Parameters  []models.ParameterField `json:"parameters"`
 }
 
-// validate returns a message for the panel, or "" if the template can be saved.
-func (r createRequest) validate() string {
-	if strings.TrimSpace(r.Name) == "" {
-		return "name is required"
+// validate returns a message and what is wrong per input, or nil fields if the template can be saved.
+func (r createRequest) validate() (string, map[string]string) {
+	var msgs []string
+	fields := map[string]string{}
+	add := func(field, msg string) {
+		if _, seen := fields[field]; !seen {
+			fields[field] = msg
+			msgs = append(msgs, msg)
+		}
 	}
-	if strings.TrimSpace(r.Runtime) == "" {
-		return "runtime is required"
-	}
-	if strings.TrimSpace(r.Command) == "" {
-		return "command is required"
+	for _, f := range []struct{ name, value string }{{"name", r.Name}, {"runtime", r.Runtime}, {"command", r.Command}} {
+		if strings.TrimSpace(f.value) == "" {
+			add(f.name, f.name+" is required")
+		}
 	}
 	for _, p := range r.Parameters {
 		if strings.TrimSpace(p.Name) == "" {
-			return "every parameter needs a name"
-		}
-		if !KnownTypes[p.Type] {
-			return fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type)
+			add("parameters", "every parameter needs a name")
+		} else if !KnownTypes[p.Type] {
+			add("parameters", fmt.Sprintf("parameter %q has unknown type %q", p.Name, p.Type))
 		}
 	}
-	return ""
+	if len(msgs) == 0 {
+		return "", nil
+	}
+	return strings.Join(msgs, "; "), fields
 }
 
 func (r createRequest) spec() models.JobSpec {
@@ -419,40 +417,37 @@ func (r createRequest) spec() models.JobSpec {
 // Create saves a panel-authored template. With no Git snapshot it shows as "not in
 // Git" until a file with its slug is committed, or a pruning sync deletes it.
 func (h *Handler) Create(c *gin.Context) {
-	if _, ok := requireUserID(c); !ok {
+	if _, ok := httpx.UserID(c); !ok {
 		return
 	}
 	ctx := c.Request.Context()
 
 	var req createRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, err.Error())
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if msg := req.validate(); msg != "" {
-		writeError(c, http.StatusBadRequest, msg)
+	if msg, fields := req.validate(); fields != nil {
+		httpx.Invalid(c, msg, fields)
 		return
 	}
 
 	slug := slugify(req.Name)
 	if slug == "" {
-		writeError(c, http.StatusBadRequest, "could not derive a slug from the name")
+		httpx.Error(c, http.StatusBadRequest, "could not derive a slug from the name")
 		return
 	}
 	if _, err := h.defs.GetBySlug(ctx, slug); err == nil {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": fmt.Sprintf("a job definition named %q already exists", slug),
-			"code":  "slug_taken",
-		})
+		httpx.Error(c, http.StatusConflict, fmt.Sprintf("a job definition named %q already exists", slug))
 		return
 	} else if !errors.Is(err, repos.ErrNotFound) {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
 	def := &models.JobDefinition{Slug: slug, JobSpec: req.spec()}
 	if err := h.defs.Create(ctx, def); err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, h.toJobDTO(def, 0, 0))
@@ -460,23 +455,23 @@ func (h *Handler) Create(c *gin.Context) {
 
 // Update rewrites a definition's spec. A Git definition drifts until its file changes.
 func (h *Handler) Update(c *gin.Context) {
-	if _, ok := requireUserID(c); !ok {
+	if _, ok := httpx.UserID(c); !ok {
 		return
 	}
 	ctx := c.Request.Context()
 
 	def, err := h.defs.GetBySlug(ctx, c.Param("slug"))
 	if err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 	var req createRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, err.Error())
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if msg := req.validate(); msg != "" {
-		writeError(c, http.StatusBadRequest, msg)
+	if msg, fields := req.validate(); fields != nil {
+		httpx.Invalid(c, msg, fields)
 		return
 	}
 
@@ -484,7 +479,7 @@ func (h *Handler) Update(c *gin.Context) {
 	def.JobSpec = req.spec()
 
 	if err := h.defs.Update(ctx, def); err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 	c.JSON(http.StatusOK, h.toJobDTO(def, 0, 0))
@@ -585,31 +580,4 @@ func shortID(i id.ID) string {
 		return s[:8]
 	}
 	return s
-}
-
-func requireUserID(c *gin.Context) (id.ID, bool) {
-	raw, exists := c.Get("user_id")
-	if !exists {
-		writeError(c, http.StatusUnauthorized, "authentication required")
-		return id.ID(""), false
-	}
-	uid, err := id.FromHex(raw.(string))
-	if err != nil {
-		writeError(c, http.StatusUnauthorized, "invalid user context")
-		return id.ID(""), false
-	}
-	return uid, true
-}
-
-func notFoundOrInternal(c *gin.Context, err error) {
-	if errors.Is(err, repos.ErrNotFound) {
-		writeError(c, http.StatusNotFound, "job not found")
-		return
-	}
-	writeError(c, http.StatusInternalServerError, err.Error())
-}
-
-// writeError keeps the flat {"error": "message"} shape; the UI renders a nested object as "[object Object]".
-func writeError(c *gin.Context, status int, message string) {
-	c.AbortWithStatusJSON(status, gin.H{"error": message})
 }

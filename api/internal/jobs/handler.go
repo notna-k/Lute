@@ -13,6 +13,7 @@ import (
 
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
+	"github.com/lute/api/internal/httpx"
 	"github.com/lute/api/internal/queue"
 	pb "github.com/lute/proto"
 )
@@ -42,7 +43,7 @@ type EnqueueRequest struct {
 func (h *JobHandler) Enqueue(c *gin.Context) {
 	var req EnqueueRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -65,7 +66,7 @@ func (h *JobHandler) Enqueue(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if err := h.engine.Enqueue(ctx, job, opts); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -86,7 +87,7 @@ func (h *JobHandler) GetJob(c *gin.Context) {
 	jobID := c.Param("id")
 	job, err := h.engine.GetJob(c.Request.Context(), jobID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		httpx.Error(c, http.StatusNotFound, "job not found")
 		return
 	}
 	c.JSON(http.StatusOK, job)
@@ -98,7 +99,7 @@ func (h *JobHandler) RetryJob(c *gin.Context) {
 
 	job, err := h.engine.GetJob(ctx, jobID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		httpx.Error(c, http.StatusNotFound, "job not found")
 		return
 	}
 
@@ -108,7 +109,7 @@ func (h *JobHandler) RetryJob(c *gin.Context) {
 	job.DoneAt = 0
 	job.WorkerID = ""
 	if err := h.engine.Enqueue(ctx, job, queue.EnqueueOpts{MaxRetries: job.MaxRetries, TimeoutSec: job.TimeoutSec}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -122,7 +123,7 @@ func (h *JobHandler) RetryJob(c *gin.Context) {
 func (h *JobHandler) CancelJob(c *gin.Context) {
 	jobID := c.Param("id")
 	if err := h.engine.CancelJob(c.Request.Context(), jobID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Job cancelled"})
@@ -141,13 +142,13 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 
 	job, err := h.engine.GetJob(ctx, jobID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		httpx.Error(c, http.StatusNotFound, "job not found")
 		return
 	}
 
 	workerID, err := h.resolveLogWorker(ctx, job)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -159,7 +160,7 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 	case "tail":
 		dir = pb.LogReadDirection_LOG_READ_TAIL
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "direction must be tail or head"})
+		httpx.Error(c, http.StatusBadRequest, "direction must be tail or head")
 		return
 	}
 
@@ -167,7 +168,7 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 	if ls := c.Query("limit"); ls != "" {
 		n, err := strconv.Atoi(ls)
 		if err != nil || n < 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+			httpx.Error(c, http.StatusBadRequest, "invalid limit")
 			return
 		}
 		if n > maxLogLimit {
@@ -180,13 +181,13 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 	if cur := c.Query("cursor"); cur != "" {
 		anchor, err = strconv.ParseInt(cur, 10, 64)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid cursor"})
+			httpx.Error(c, http.StatusBadRequest, "invalid cursor")
 			return
 		}
 	}
 
 	if h.grpcSrv == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "worker gateway unavailable"})
+		httpx.Error(c, http.StatusServiceUnavailable, "worker gateway unavailable")
 		return
 	}
 
@@ -203,10 +204,10 @@ func (h *JobHandler) GetJobLogs(c *gin.Context) {
 	resp, err := h.grpcSrv.RequestJobLog(rpcCtx, workerID, pbReq)
 	if err != nil {
 		if errors.Is(err, grpc.ErrNoConnection) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "worker not connected"})
+			httpx.Error(c, http.StatusServiceUnavailable, "worker not connected")
 			return
 		}
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadGateway, err.Error())
 		return
 	}
 
@@ -266,7 +267,7 @@ func (h *QueueHandler) ListQueues(c *gin.Context) {
 	ctx := c.Request.Context()
 	names, err := h.engine.ListQueues(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -292,7 +293,7 @@ func (h *QueueHandler) ListQueueJobs(c *gin.Context) {
 	ctx := c.Request.Context()
 	jobIDs, err := h.engine.ListQueueJobs(ctx, name, offset, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -311,7 +312,7 @@ func (h *QueueHandler) PurgeQueue(c *gin.Context) {
 	name := c.Param("name")
 	count, err := h.engine.PurgeQueue(c.Request.Context(), name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Queue purged", "deleted": count})
@@ -326,7 +327,7 @@ func (h *QueueHandler) GetStats(c *gin.Context) {
 
 	stats, err := h.stats.GetTimeSeries(c.Request.Context(), name, minutes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -337,7 +338,7 @@ func (h *QueueHandler) GetAllStats(c *gin.Context) {
 	ctx := c.Request.Context()
 	names, err := h.engine.ListQueues(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -374,7 +375,7 @@ func (h *DLQHandler) ListDLQ(c *gin.Context) {
 	ctx := c.Request.Context()
 	jobIDs, err := h.engine.DLQList(ctx, queueName, offset, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -394,7 +395,7 @@ func (h *DLQHandler) RetryAll(c *gin.Context) {
 	ctx := c.Request.Context()
 	count, err := h.engine.DLQRetryAll(ctx, queueName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	if h.grpcSrv != nil && count > 0 {

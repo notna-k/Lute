@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/lute/api/internal/httpx"
 )
 
 //go:embed all:web
@@ -31,7 +33,7 @@ func Register(r *gin.Engine) {
 	r.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api") {
 			if !c.Writer.Written() {
-				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				httpx.Error(c, http.StatusNotFound, "not found")
 			}
 			return
 		}

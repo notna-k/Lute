@@ -8,6 +8,7 @@ import (
 
 	"github.com/lute/api/internal/auth"
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/httpx"
 
 	"github.com/gin-gonic/gin"
 	gorillaWS "github.com/gorilla/websocket"
@@ -51,7 +52,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Authenticate before upgrading: the hub broadcasts every build's resolved parameters.
 	claims, err := h.authenticate(c.Request)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid access token"})
+		httpx.Error(c, http.StatusUnauthorized, "missing or invalid access token")
 		return
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 // APIKeysHandler manages the caller's public-API tokens; Create shows the plaintext once.
@@ -43,19 +44,19 @@ type keySummary struct {
 }
 
 func (h *APIKeysHandler) Create(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	var req createKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, "invalid_request", err.Error())
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	token, prefix, hash, err := apikey.Generate()
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -66,7 +67,7 @@ func (h *APIKeysHandler) Create(c *gin.Context) {
 		Hash:   hash,
 	}
 	if err := h.repo.Create(c.Request.Context(), k); err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -80,13 +81,13 @@ func (h *APIKeysHandler) Create(c *gin.Context) {
 }
 
 func (h *APIKeysHandler) List(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	keys, err := h.repo.ListByUser(c.Request.Context(), userID)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	out := make([]keySummary, 0, len(keys))
@@ -108,21 +109,21 @@ func (h *APIKeysHandler) List(c *gin.Context) {
 }
 
 func (h *APIKeysHandler) Revoke(c *gin.Context) {
-	userID, ok := requireUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	keyID, err := id.FromHex(c.Param("id"))
 	if err != nil {
-		writeError(c, http.StatusBadRequest, "invalid_request", "invalid id")
+		httpx.Error(c, http.StatusBadRequest, "invalid id")
 		return
 	}
 	if err := h.repo.Revoke(c.Request.Context(), keyID, userID); err != nil {
 		if errors.Is(err, repos.ErrNotFound) {
-			writeError(c, http.StatusNotFound, "not_found", "API key not found")
+			httpx.Error(c, http.StatusNotFound, "API key not found")
 			return
 		}
-		writeError(c, http.StatusInternalServerError, "internal_error", err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)

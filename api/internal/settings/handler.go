@@ -8,6 +8,7 @@ import (
 
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 type Handler struct {
@@ -26,7 +27,7 @@ type settingsDTO struct {
 func (h *Handler) Get(c *gin.Context) {
 	all, err := h.settings.All(c.Request.Context())
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	allow, _ := strconv.ParseBool(all[models.AllowAdhocBuilds])
@@ -44,7 +45,7 @@ type updateRequest struct {
 func (h *Handler) Update(c *gin.Context) {
 	var req updateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	for key, v := range map[string]*bool{
@@ -55,7 +56,7 @@ func (h *Handler) Update(c *gin.Context) {
 			continue
 		}
 		if err := h.settings.Set(c.Request.Context(), key, strconv.FormatBool(*v)); err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			httpx.Internal(c, err)
 			return
 		}
 	}

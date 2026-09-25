@@ -14,6 +14,7 @@ import (
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
+	"github.com/lute/api/internal/httpx"
 )
 
 var labelKeyRe = regexp.MustCompile(`^[a-zA-Z0-9_\-.]{1,63}$`)
@@ -37,39 +38,25 @@ func validateLabels(labels map[string]string) error {
 	return nil
 }
 
-func currentUserID(c *gin.Context) (id.ID, bool) {
-	raw, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return "", false
-	}
-	uid, err := id.FromHex(raw.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return "", false
-	}
-	return uid, true
-}
-
 // ownedWorker loads the :id worker if it belongs to the caller. A foreign worker is
 // reported as missing, so its existence is not revealed.
 func (h *WorkerHandler) ownedWorker(c *gin.Context) (*models.Worker, bool) {
 	wid, err := id.FromHex(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
+		httpx.Error(c, http.StatusBadRequest, "invalid worker id")
 		return nil, false
 	}
-	userID, ok := currentUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return nil, false
 	}
 	w, err := h.workerRepo.GetByID(c.Request.Context(), wid)
 	if errors.Is(err, repos.ErrNotFound) || (err == nil && w.UserID != userID) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
+		httpx.Error(c, http.StatusNotFound, "worker not found")
 		return nil, false
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return nil, false
 	}
 	return w, true
@@ -94,18 +81,18 @@ func (h *WorkerHandler) PatchLabels(c *gin.Context) {
 	}
 	var req patchLabelsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := validateLabels(req.Labels); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Invalid(c, err.Error(), map[string]string{"labels": err.Error()})
 		return
 	}
 
 	w.Labels = req.Labels
 	updated, err := h.save(c.Request.Context(), w)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -122,10 +109,10 @@ func (h *WorkerHandler) PatchLabels(c *gin.Context) {
 func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 	var w models.Worker
 	if err := c.ShouldBindJSON(&w); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	userID, ok := currentUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -134,7 +121,7 @@ func (h *WorkerHandler) CreateWorker(c *gin.Context) {
 		w.Status = enums.WorkerPending
 	}
 	if err := h.workerRepo.Create(c.Request.Context(), &w); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, &w)
@@ -147,7 +134,7 @@ func (h *WorkerHandler) GetWorker(c *gin.Context) {
 }
 
 func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
-	userID, ok := currentUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
@@ -159,7 +146,7 @@ func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 	}
 	list, err := h.workerRepo.GetByUserIDAndLabels(c.Request.Context(), userID, filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, list)
@@ -172,13 +159,13 @@ func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
 	}
 	var w models.Worker
 	if err := c.ShouldBindJSON(&w); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	w.ID, w.UserID = existing.ID, existing.UserID
 	updated, err := h.save(c.Request.Context(), &w)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -191,17 +178,17 @@ func (h *WorkerHandler) ReEnableWorker(c *gin.Context) {
 		return
 	}
 	if w.Status != enums.WorkerDead {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "worker is not dead; only dead workers can be re-enabled"})
+		httpx.Error(c, http.StatusBadRequest, "worker is not dead; only dead workers can be re-enabled")
 		return
 	}
 	ctx := c.Request.Context()
 	if err := h.workerRepo.UpdateStatus(ctx, w.ID, enums.WorkerPending); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	updated, err := h.workerRepo.GetByID(ctx, w.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -218,7 +205,7 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 		stopped = true
 	}
 	if err := h.workerRepo.Delete(c.Request.Context(), w.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		httpx.Internal(c, err)
 		return
 	}
 	msg := "Worker deleted successfully"

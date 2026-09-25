@@ -11,12 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lute/api/internal/db/models"
+	"github.com/lute/api/internal/httpx"
 )
 
 func (h *Handler) Sync(c *gin.Context) {
 	res, err := h.syncer.Sync(c.Request.Context())
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -25,7 +26,7 @@ func (h *Handler) Sync(c *gin.Context) {
 func (h *Handler) Export(c *gin.Context) {
 	defs, err := h.defs.List(c.Request.Context())
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	writeYAML(c, defs)
@@ -34,7 +35,7 @@ func (h *Handler) Export(c *gin.Context) {
 func (h *Handler) ExportOne(c *gin.Context) {
 	def, err := h.defs.GetBySlug(c.Request.Context(), c.Param("slug"))
 	if err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 	writeYAML(c, []models.JobDefinition{*def})
@@ -44,18 +45,18 @@ func (h *Handler) ExportOne(c *gin.Context) {
 func (h *Handler) ExportZip(c *gin.Context) {
 	defs, err := h.defs.List(c.Request.Context())
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	files, err := ExportSplit(defs)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	// Built in memory so a failure halfway is a JSON error, not a truncated download.
 	var buf bytes.Buffer
 	if err := writeZip(&buf, files, time.Now()); err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	c.Header("Content-Disposition", `attachment; filename="jobdefs.zip"`)
@@ -86,19 +87,16 @@ func (h *Handler) Revert(c *gin.Context) {
 	ctx := c.Request.Context()
 	def, err := h.defs.GetBySlug(ctx, c.Param("slug"))
 	if err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 	if def.GitSpec == nil {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "this definition is not in Git — there is nothing to revert to",
-			"code":  "not_in_git",
-		})
+		httpx.Error(c, http.StatusConflict, "this definition is not in Git — there is nothing to revert to")
 		return
 	}
 	def.JobSpec = *def.GitSpec
 	if err := h.defs.Update(ctx, def); err != nil {
-		notFoundOrInternal(c, err)
+		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
 	c.JSON(http.StatusOK, h.toJobDTO(def, 0, 0))
@@ -108,7 +106,7 @@ func (h *Handler) Revert(c *gin.Context) {
 func writeYAML(c *gin.Context, defs []models.JobDefinition) {
 	out, err := Export(defs)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err.Error())
+		httpx.Internal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"yaml": string(out)})

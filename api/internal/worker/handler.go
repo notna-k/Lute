@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/db/types"
 	luteGrpc "github.com/lute/api/internal/grpc"
+	"github.com/lute/api/internal/httpx"
 )
 
 const claimCodeExpiry = 15 * time.Minute
@@ -102,16 +104,13 @@ func NewWorkerHandler(
 }
 
 func (h *WorkerHandler) CreateClaimCode(c *gin.Context) {
-	rawUserID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+	userID, ok := httpx.UserID(c)
+	if !ok {
 		return
 	}
-	userIDStr, _ := rawUserID.(string)
-
-	code, expiresAt, err := h.issueClaimCode(userIDStr)
+	code, expiresAt, err := h.issueClaimCode(userID.Hex())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate claim code"})
+		httpx.Internal(c, err)
 		return
 	}
 
@@ -159,13 +158,11 @@ func (h *WorkerHandler) consumeClaimCode(code string) (string, bool) {
 func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	var req WorkerSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if req.ClaimCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "claim_code is required. Open the Add Worker dialog in the Lute UI (while logged in), copy the full command including --claim-code, and run it on this host.",
-		})
+		httpx.Error(c, http.StatusBadRequest, "claim_code is required. Open the Add Worker dialog in the Lute UI (while logged in), copy the full command including --claim-code, and run it on this host.")
 		return
 	}
 
@@ -173,15 +170,13 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 
 	userIDStr, ok := h.consumeClaimCode(req.ClaimCode)
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid or expired claim code. Codes are single-use and expire after 15 minutes. Open the Add Worker dialog in the Lute UI, copy the full command again, and run it on this host.",
-		})
+		httpx.Error(c, http.StatusBadRequest, "invalid or expired claim code. Codes are single-use and expire after 15 minutes. Open the Add Worker dialog in the Lute UI, copy the full command again, and run it on this host.")
 		return
 	}
 
 	userID, err := id.FromHex(userIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid claim code format. Use the exact command from the Add Worker dialog in the Lute UI."})
+		httpx.Error(c, http.StatusBadRequest, "invalid claim code format. Use the exact command from the Add Worker dialog in the Lute UI.")
 		return
 	}
 
@@ -193,14 +188,11 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	if agentIP != "" {
 		conflictingWorker, err := h.reclaimStaleWorkersAtIP(ctx, userID, agentIP)
 		if err != nil {
-			slog.Error("reclaim workers at IP", "ip", agentIP, "err", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reclaim stale worker at this IP"})
+			httpx.Internal(c, fmt.Errorf("reclaim stale workers at %s: %w", agentIP, err))
 			return
 		}
 		if conflictingWorker != nil {
-			c.JSON(http.StatusConflict, gin.H{
-				"error": fmt.Sprintf("a worker (%q, id %s) is already registered and alive at IP %s; delete it first or stop its agent before registering a new one", conflictingWorker.Name, conflictingWorker.ID.Hex(), agentIP),
-			})
+			httpx.Error(c, http.StatusConflict, fmt.Sprintf("a worker (%q, id %s) is already registered and alive at IP %s; delete it first or stop its agent before registering a new one", conflictingWorker.Name, conflictingWorker.ID.Hex(), agentIP))
 			return
 		}
 	}
@@ -228,8 +220,7 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 		Metadata:     metadata,
 	}
 	if err := h.workerRepo.Create(ctx, worker); err != nil {
-		slog.Error("create worker", "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
+		httpx.Internal(c, fmt.Errorf("register worker: %w", err))
 		return
 	}
 
@@ -316,19 +307,17 @@ func (h *WorkerHandler) serveBinary(c *gin.Context, osName, arch string) {
 
 	h.binaryMu.RLock()
 	binaryInfo, ok := h.binaryCache[cacheKey]
-	availableKeys := make([]string, 0, len(h.binaryCache))
+	var available []string
 	if !ok {
 		for key := range h.binaryCache {
-			availableKeys = append(availableKeys, key)
+			available = append(available, key)
 		}
 	}
 	h.binaryMu.RUnlock()
 
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":     fmt.Sprintf("no worker binary for %s/%s", osName, arch),
-			"available": availableKeys,
-		})
+		sort.Strings(available)
+		httpx.Error(c, http.StatusNotFound, fmt.Sprintf("no worker binary for %s/%s (available: %s)", osName, arch, strings.Join(available, ", ")))
 		return
 	}
 
@@ -470,11 +459,11 @@ func (h *WorkerHandler) SendCommand(c *gin.Context) {
 	}
 	var req SendCommandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if worker.Status == "" || worker.Status == enums.WorkerPending {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "worker has no active agent connection"})
+		httpx.Error(c, http.StatusBadRequest, "worker has no active agent connection")
 		return
 	}
 
@@ -486,8 +475,7 @@ func (h *WorkerHandler) SendCommand(c *gin.Context) {
 		Status:   enums.CommandPending,
 	}
 	if err := h.commandRepo.Create(c.Request.Context(), cmd); err != nil {
-		slog.Error("create command", "worker_id", worker.ID.Hex(), "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to queue command"})
+		httpx.Internal(c, fmt.Errorf("queue command: %w", err))
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{
@@ -504,8 +492,7 @@ func (h *WorkerHandler) ListCommands(c *gin.Context) {
 	}
 	commands, err := h.commandRepo.GetByWorkerID(c.Request.Context(), worker.ID, 50)
 	if err != nil {
-		slog.Error("list commands", "worker_id", worker.ID.Hex(), "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list commands"})
+		httpx.Internal(c, fmt.Errorf("list commands: %w", err))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"commands": commands, "count": len(commands)})
@@ -533,21 +520,21 @@ func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
 func (h *WorkerHandler) GetCommandResult(c *gin.Context) {
 	cmdID, err := id.FromHex(c.Param("commandId"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid command_id"})
+		httpx.Error(c, http.StatusBadRequest, "invalid command_id")
 		return
 	}
-	userID, ok := currentUserID(c)
+	userID, ok := httpx.UserID(c)
 	if !ok {
 		return
 	}
 	ctx := c.Request.Context()
 	cmd, err := h.commandRepo.GetByID(ctx, cmdID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
+		httpx.Error(c, http.StatusNotFound, "command not found")
 		return
 	}
 	if w, err := h.workerRepo.GetByID(ctx, cmd.WorkerID); err != nil || w.UserID != userID {
-		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
+		httpx.Error(c, http.StatusNotFound, "command not found")
 		return
 	}
 	c.JSON(http.StatusOK, cmd)

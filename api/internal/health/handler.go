@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lute/api/internal/db/connection"
+	"github.com/lute/api/internal/httpx"
 )
 
 type HealthHandler struct {
@@ -21,10 +22,7 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if err := h.db.HealthCheck(ctx); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "unhealthy",
-			"error":  err.Error(),
-		})
+		httpx.Error(c, http.StatusServiceUnavailable, "database unreachable: "+err.Error())
 		return
 	}
 
@@ -38,10 +36,7 @@ func (h *HealthHandler) Readiness(c *gin.Context) {
 	ctx := context.Background()
 
 	if err := h.db.HealthCheck(ctx); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"ready": false,
-			"error": err.Error(),
-		})
+		httpx.Error(c, http.StatusServiceUnavailable, "database unreachable: "+err.Error())
 		return
 	}
 

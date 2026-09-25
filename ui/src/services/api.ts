@@ -2,20 +2,37 @@ import { authBridge } from '../contexts/AuthContext';
 import { API_URL } from './apiBase';
 
 /**
- * An error response from the API. `fields` carries per-input messages when the
- * server rejected a payload against a schema (see the job-definition trigger
- * endpoint) so callers can attach them to the inputs that produced them.
+ * An error response from the API: `{"error": {"code", "message", "fields"}}`.
+ * `code` is one of a small fixed set (e.g. `not_found`, `conflict`,
+ * `validation_failed`); `fields` maps an input to what is wrong with it.
  */
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string;
   readonly fields?: Record<string, string>;
 
-  constructor(message: string, status: number, fields?: Record<string, string>) {
+  constructor(message: string, status: number, code: string, fields?: Record<string, string>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
     this.fields = fields;
   }
+}
+
+interface ErrorBody {
+  error?: { code?: string; message?: string; fields?: Record<string, string> };
+}
+
+async function toApiError(response: Response): Promise<ApiError> {
+  const body = (await response.json().catch(() => ({}))) as ErrorBody;
+  const err = body.error ?? {};
+  return new ApiError(
+    err.message || response.statusText || `HTTP ${response.status}`,
+    response.status,
+    err.code ?? '',
+    err.fields,
+  );
 }
 
 class ApiClient {
@@ -61,12 +78,7 @@ class ApiClient {
       }
     }
 
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      const message =
-        typeof body.error === 'string' ? body.error : `HTTP error! status: ${response.status}`;
-      throw new ApiError(message, response.status, body.fields);
-    }
+    if (!response.ok) throw await toApiError(response);
     return response.json() as Promise<T>;
   }
 
@@ -93,12 +105,7 @@ class ApiClient {
       if (refreshed) response = await send(refreshed);
       else await authBridge.signOut();
     }
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      const message =
-        typeof body.error === 'string' ? body.error : `HTTP error! status: ${response.status}`;
-      throw new ApiError(message, response.status, body.fields);
-    }
+    if (!response.ok) throw await toApiError(response);
     return response.blob();
   }
 

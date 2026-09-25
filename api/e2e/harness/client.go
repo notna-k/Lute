@@ -130,27 +130,18 @@ func (c *Client) request(method, path string, body any) (int, []byte, error) {
 }
 
 func decodeAPIError(status int, raw []byte) error {
-	var envelope struct {
-		Error  any               `json:"error"`
-		Code   string            `json:"code"`
-		Fields map[string]string `json:"fields"`
+	var body struct {
+		Error struct {
+			Code    string            `json:"code"`
+			Message string            `json:"message"`
+			Fields  map[string]string `json:"fields"`
+		} `json:"error"`
 	}
 	apiErr := &APIError{Status: status, Body: string(raw)}
-	if err := json.Unmarshal(raw, &envelope); err == nil {
-		apiErr.Code = envelope.Code
-		apiErr.Fields = envelope.Fields
-		switch msg := envelope.Error.(type) {
-		case string:
-			apiErr.Message = msg
-		case map[string]any:
-			// The public API nests {"error": {"code": ..., "message": ...}}.
-			if s, ok := msg["message"].(string); ok {
-				apiErr.Message = s
-			}
-			if s, ok := msg["code"].(string); ok && apiErr.Code == "" {
-				apiErr.Code = s
-			}
-		}
+	if err := json.Unmarshal(raw, &body); err == nil {
+		apiErr.Code = body.Error.Code
+		apiErr.Message = body.Error.Message
+		apiErr.Fields = body.Error.Fields
 	}
 	if apiErr.Message == "" {
 		apiErr.Message = strings.TrimSpace(string(raw))
