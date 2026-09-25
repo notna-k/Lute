@@ -18,6 +18,21 @@ jobs:
     name: Go
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      # Repository tests run against real Postgres; pgtest fails (not skips) under CI without one.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lute
+          POSTGRES_PASSWORD: lute
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -30,6 +45,8 @@ jobs:
       - name: Check formatting
         run: make go-format-check
       - name: Test
+        env:
+          LUTE_E2E_POSTGRES_DSN: postgres://lute:lute@localhost:5432/postgres?sslmode=disable
         run: make go-test
       - name: Lint
         run: make go-lint

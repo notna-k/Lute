@@ -124,7 +124,7 @@ func loadConfig() (*config.Config, error) {
 }
 
 func initializeDatabase(cfg *config.Config) (*connection.Database, error) {
-	return connection.Open(context.Background(), cfg)
+	return connection.Open(context.Background(), cfg.Database.DSN)
 }
 
 // seedAdminUser creates the bootstrap admin if ADMIN_EMAIL / ADMIN_PASSWORD are set

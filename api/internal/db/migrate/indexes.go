@@ -2,9 +2,7 @@ package migrate
 
 import "gorm.io/gorm"
 
-// ApplySecondaryIndexes creates partial indexes and composite indexes shared by SQLite and PostgreSQL.
-//
-// DDL lives here—not in repositories—because GORM struct tags cannot express every partial UNIQUE.
+// ApplySecondaryIndexes creates the partial and composite indexes GORM struct tags cannot express.
 func ApplySecondaryIndexes(db *gorm.DB) error {
 	stmts := []string{
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_nonempty ON users(email) WHERE email IS NOT NULL AND email != ''`,

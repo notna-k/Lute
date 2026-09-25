@@ -13,10 +13,11 @@ import (
 	"testing"
 
 	"github.com/lute/api/e2e/harness"
+	"github.com/lute/api/internal/testutil/pgtest"
 )
 
 // pg is the database server every stack carves a database out of.
-var pg *harness.Postgres
+var pg *pgtest.Server
 
 func TestMain(m *testing.M) {
 	code, err := run(m)
@@ -47,7 +48,7 @@ func run(m *testing.M) (int, error) {
 	// that appear from here on are, including those a killed agent left behind.
 	existing := harness.SnapshotContainers()
 
-	started, err := harness.StartPostgres()
+	started, err := pgtest.Start()
 	if err != nil {
 		return 0, err
 	}

@@ -124,13 +124,11 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 		q = q.Where("success = ?", false)
 	}
 	if s := strings.TrimSpace(filter.Search); s != "" {
-		// LIKE over lowered columns rather than ILIKE: the same statement has to
-		// run on Postgres and on the SQLite used by the tests.
-		like := "%" + strings.ToLower(s) + "%"
+		like := "%" + s + "%"
 		q = q.Where(
-			r.q(ctx).Where("LOWER(job_id) LIKE ?", like).
-				Or("LOWER(worker_id) LIKE ?", like).
-				Or("LOWER(error) LIKE ?", like),
+			r.q(ctx).Where("job_id ILIKE ?", like).
+				Or("worker_id ILIKE ?", like).
+				Or("error ILIKE ?", like),
 		)
 	}
 

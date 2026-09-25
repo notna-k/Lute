@@ -76,22 +76,8 @@ type ServerConfig struct {
 	AllowedOrigins []string
 }
 
-// SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
-type SQLiteConfig struct {
-	Path        string
-	BusyTimeout time.Duration
-}
-
-// PostgresConfig holds libpq/pg connection parameters (when DB_DRIVER is postgres).
-type PostgresConfig struct {
-	DSN string
-}
-
-// DatabaseConfig selects SQLite or PostgreSQL and supplies driver-specific tuning.
 type DatabaseConfig struct {
-	Driver   string // sqlite (default) or postgres
-	SQLite   SQLiteConfig
-	Postgres PostgresConfig
+	DSN string
 }
 
 type GRPCConfig struct {
@@ -135,16 +121,7 @@ func Load() (*Config, error) {
 			}),
 		},
 		Database: DatabaseConfig{
-			// Postgres is the primary/deployed database. SQLite remains available
-			// for quick local runs by setting DB_DRIVER=sqlite.
-			Driver: getEnv("DB_DRIVER", "postgres"),
-			SQLite: SQLiteConfig{
-				Path:        getEnv("SQLITE_PATH", "lute.db"),
-				BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
-			},
-			Postgres: PostgresConfig{
-				DSN: getEnv("POSTGRES_DSN", "postgres://lute:lute@localhost:5432/lute?sslmode=disable"),
-			},
+			DSN: getEnv("POSTGRES_DSN", "postgres://lute:lute@localhost:5432/lute?sslmode=disable"),
 		},
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),

@@ -15,6 +15,7 @@ import (
 	"github.com/lute/api/internal/config"
 	"github.com/lute/api/internal/server"
 	"github.com/lute/api/internal/setup"
+	"github.com/lute/api/internal/testutil/pgtest"
 )
 
 // Credentials of the admin seeded into every stack.
@@ -67,7 +68,7 @@ func WithLeaseGrace(grace, reclaimAfter time.Duration) StackOption {
 }
 
 // NewStack boots core against a fresh database and tears everything down on cleanup.
-func NewStack(t *testing.T, pg *Postgres, opts ...StackOption) *Stack {
+func NewStack(t *testing.T, pg *pgtest.Server, opts ...StackOption) *Stack {
 	t.Helper()
 
 	s := &Stack{
@@ -111,11 +112,8 @@ func (s *Stack) baseConfig() *config.Config {
 			// and the rejected case.
 			AllowedOrigins: []string{"http://localhost:8080"},
 		},
-		Database: config.DatabaseConfig{
-			Driver:   "postgres",
-			Postgres: config.PostgresConfig{DSN: s.DSN},
-		},
-		GRPC: config.GRPCConfig{Host: "127.0.0.1", Port: "0"},
+		Database: config.DatabaseConfig{DSN: s.DSN},
+		GRPC:     config.GRPCConfig{Host: "127.0.0.1", Port: "0"},
 		// Effectively off unless a test asks for WithFastHeartbeat.
 		Heartbeat: config.HeartbeatConfig{
 			CheckInterval: time.Hour,

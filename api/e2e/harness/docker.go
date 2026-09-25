@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"testing"
 )
 
 // TestImages are pulled once per suite run so an individual test does not pay for
@@ -25,14 +24,6 @@ var TestImages = []string{"bash:5", "alpine:3"}
 // DockerAvailable reports whether a Docker daemon is reachable.
 func DockerAvailable() bool {
 	return exec.Command("docker", "info").Run() == nil
-}
-
-// RequireDocker skips the calling test when no daemon is reachable.
-func RequireDocker(t *testing.T) {
-	t.Helper()
-	if !DockerAvailable() {
-		t.Skip("docker daemon not reachable")
-	}
 }
 
 var pullOnce sync.Once
@@ -95,20 +86,6 @@ func ReapJobContainers(before ContainerSet) int {
 		}
 	}
 	return removed
-}
-
-// ReapLabelled removes containers carrying a label, so a run interrupted before its
-// cleanup does not leave the next one sharing a database server with a ghost.
-func ReapLabelled(label string) {
-	out, err := docker("ps", "-aq", "--no-trunc", "--filter", "label="+label)
-	if err != nil {
-		return
-	}
-	for line := range strings.SplitSeq(out, "\n") {
-		if id := strings.TrimSpace(line); id != "" {
-			_, _ = docker("rm", "-f", id)
-		}
-	}
 }
 
 // docker runs a docker subcommand and returns its trimmed stdout.
