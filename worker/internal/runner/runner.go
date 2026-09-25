@@ -1,3 +1,4 @@
+// Package runner runs "container" jobs in Docker.
 package runner
 
 import (
