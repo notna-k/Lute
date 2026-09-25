@@ -9,7 +9,8 @@
  * search would only ever search the twenty-five rows already on screen and
  * quietly lie about the rest.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Boxes, CircleDot, Layers, Plus, RefreshCw } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
@@ -27,11 +28,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { PageScroll } from '@/components/layout/Page';
 import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import { EnqueueJobDialog } from '@/features/jobs/EnqueueJobDialog';
-import {
-  executionService,
-  type ExecutionSort,
-  type JobExecution,
-} from '@/services/executionService';
+import { executionService, type ExecutionSort } from '@/services/executionService';
 import { duration, relativeTime, timestamp, toEpochMs } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -54,48 +51,32 @@ function useDebounced<T>(value: T, ms = 250): T {
 
 export default function Executions() {
   const navigate = useNavigate();
-  const [rows, setRows] = useState<JobExecution[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [search, setSearch] = useFilterParam<string>('q', '');
   const [queues, setQueues] = useFilterList('queue');
   const [types, setTypes] = useFilterList('type');
   const [status, setStatus] = useFilterParam<StatusFilter>('state', 'all');
   const [sort, setSort] = useFilterParam<ExecutionSort>('sort', 'finished_at_desc');
   const debouncedSearch = useDebounced(search);
-
-  // null once the lookup fails: the facets then fall back to free text.
-  const [queueOptions, setQueueOptions] = useState<string[] | null>([]);
-  const [typeOptions, setTypeOptions] = useState<string[] | null>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const o = await executionService.filterOptions();
-        setQueueOptions(o.queues ?? []);
-        setTypeOptions(o.types ?? []);
-      } catch {
-        setQueueOptions(null);
-        setTypeOptions(null);
-      }
-    })();
-  }, []);
+  const filterOptions = useQuery({
+    queryKey: ['execution-filter-options'],
+    queryFn: executionService.filterOptions,
+  });
+  // null once the lookup fails: the facets then fall back to free text.
+  const queueOptions = filterOptions.isError ? null : (filterOptions.data?.queues ?? []);
+  const typeOptions = filterOptions.isError ? null : (filterOptions.data?.types ?? []);
 
-  // Any change to what is being asked for starts again at the first page: page
-  // 4 of the old result set is not page 4 of the new one.
+  // Page 4 of the old result set is not page 4 of the new one.
   useEffect(() => {
     setPage(0);
   }, [debouncedSearch, queues, types, status, sort]);
 
-  const fetchExecutions = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await executionService.list({
+  const list = useQuery({
+    queryKey: ['executions', { queues, types, status, debouncedSearch, page, sort }],
+    queryFn: () =>
+      executionService.list({
         queues,
         types,
         status: status === 'all' ? undefined : status,
@@ -103,21 +84,13 @@ export default function Executions() {
         offset: page * PAGE_SIZE,
         limit: PAGE_SIZE,
         sort,
-      });
-      setRows(res.executions ?? []);
-      setTotal(res.total ?? 0);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load executions');
-      setRows([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, page, queues, sort, status, types]);
-
-  useEffect(() => {
-    void fetchExecutions();
-  }, [fetchExecutions]);
+      }),
+    placeholderData: keepPreviousData,
+  });
+  const rows = list.data?.executions ?? [];
+  const total = list.data?.total ?? 0;
+  const loading = list.isFetching;
+  const error = list.error?.message;
 
   const filtering =
     Boolean(search.trim()) || queues.length > 0 || types.length > 0 || status !== 'all';
@@ -204,7 +177,7 @@ export default function Executions() {
           <IconButton
             label='Refresh'
             variant='outline'
-            onClick={() => void fetchExecutions()}
+            onClick={() => void list.refetch()}
             disabled={loading}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />

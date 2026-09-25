@@ -1,6 +1,6 @@
 import { apiClient } from './api';
 
-export interface JobExecution {
+interface JobExecution {
   id: string;
   created_at: string;
   updated_at: string;
