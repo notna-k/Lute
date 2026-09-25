@@ -1,0 +1,79 @@
+name: E2E
+
+# The heavy suite: it starts a real agent process per test and runs job bodies in real
+# containers, so it lives apart from the fast CI workflow and keeps its own signal.
+on:
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - 'ui/**'
+      - 'docs/**'
+      - '**.md'
+  push:
+    branches: [master]
+  # Nightly, to catch flakiness and image drift that a green PR would not show.
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      # The suite starts its own Postgres container when it has to; on a runner a
+      # service container is cheaper, and LUTE_E2E_POSTGRES_DSN tells it to use this one.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lute
+          POSTGRES_PASSWORD: lute
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: |
+            api/go.sum
+            worker/go.sum
+            shared/proto/go.sum
+
+      - name: Pull job images
+        run: docker pull bash:5 && docker pull alpine:3
+
+      - name: Vet
+        run: make e2e-vet
+
+      - name: Run end-to-end suite
+        env:
+          LUTE_E2E_POSTGRES_DSN: postgres://lute:lute@localhost:5432/postgres?sslmode=disable
+        run: make e2e
+
+      # A failure here is hard to reproduce locally without core's and the agents' own
+      # account of it, so the suite writes both to disk as it runs.
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: api/e2e/_artifacts/
+          retention-days: 7

@@ -1,4 +1,4 @@
-.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-all worker-build-linux go-format-check go-test go-lint ui-build api-build
+.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-all worker-build-linux go-format-check go-test go-lint e2e e2e-vet ui-build api-build
 
 export DOCKER_BUILDKIT := 1
 export WORKER_VERSION ?= 0.1.0
@@ -53,6 +53,17 @@ go-test:
 go-lint:
 	cd api && $(LINT) run ./...
 	cd worker && $(LINT) run ./...
+
+# End-to-end suite: core in-process, the real worker binary as a child process, real
+# containers for job bodies, and a throwaway Postgres. The agent is compiled up front so
+# no test pays for the build; -p 1 because each test runs its own stack and Docker.
+# Point LUTE_E2E_POSTGRES_DSN at an existing server to skip starting a container.
+e2e: worker-build-linux
+	cd api && go test -tags e2e -count=1 -p 1 -timeout 20m ./e2e/...
+
+e2e-vet:
+	cd api && go vet -tags e2e ./e2e/...
+	cd api && $(LINT) run --build-tags e2e ./e2e/...
 
 ui-build:
 	cd ui && npm ci && VITE_API_URL= npm run build
