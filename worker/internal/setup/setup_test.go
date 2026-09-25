@@ -40,8 +40,8 @@ func TestRegisterErrors(t *testing.T) {
 		body   string
 		want   string
 	}{
-		{"conflict", http.StatusConflict, `{"error":"host taken"}`, "already registered for this machine: host taken"},
-		{"json error", http.StatusBadRequest, `{"error":"claim_code is required"}`, "server returned 400: claim_code is required"},
+		{"conflict", http.StatusConflict, `{"error":{"code":"conflict","message":"host taken"}}`, "already registered for this machine: host taken"},
+		{"json error", http.StatusBadRequest, `{"error":{"code":"bad_request","message":"claim_code is required"}}`, "server returned 400: claim_code is required"},
 		{"plain error", http.StatusInternalServerError, "boom\n", "server returned 500: boom"},
 	}
 	for _, tt := range tests {

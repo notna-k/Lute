@@ -182,13 +182,15 @@ func register(apiURL string, req *registerRequest) (*registerResponse, error) {
 	return &out, nil
 }
 
-// errorMessage pulls "error" out of a JSON error body, falling back to the raw body.
+// errorMessage pulls the message out of core's {"error": {"message"}} body, falling back to the raw body.
 func errorMessage(body []byte) string {
 	var envelope struct {
-		Error string `json:"error"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
 	}
-	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Error != "" {
-		return envelope.Error
+	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Error.Message != "" {
+		return envelope.Error.Message
 	}
 	return strings.TrimSpace(string(body))
 }
