@@ -27,7 +27,7 @@ type Handler struct {
 	executions *repos.JobExecutionRepository
 	settings   *repos.SettingRepository
 	engine     *queue.Engine
-	stats      *queue.StatsAggregator
+	stats      *queue.Stats
 	grpcSrv    *grpc.Server
 }
 
@@ -38,7 +38,7 @@ func NewHandler(
 	executions *repos.JobExecutionRepository,
 	settings *repos.SettingRepository,
 	engine *queue.Engine,
-	stats *queue.StatsAggregator,
+	stats *queue.Stats,
 	grpcSrv *grpc.Server,
 ) *Handler {
 	return &Handler{

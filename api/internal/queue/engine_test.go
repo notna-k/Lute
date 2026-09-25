@@ -1,4 +1,4 @@
-package repos
+package queue
 
 import (
 	"context"
@@ -11,27 +11,26 @@ import (
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/db/enums"
 	"github.com/lute/api/internal/db/models"
-	"github.com/lute/api/internal/queuejob"
 	"github.com/lute/api/internal/testutil/pgtest"
 )
 
 func TestMain(m *testing.M) { os.Exit(pgtest.Main(m)) }
 
-func newTestRepo(t *testing.T) (*JobQueueRepository, *gorm.DB) {
+func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 	t.Helper()
 	db, err := connection.Open(context.Background(), pgtest.NewDatabase(t))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return NewJobQueueRepository(db.DB, QueueTimings{}), db.DB
+	return NewEngine(db.DB, Timings{}), db.DB
 }
 
 // dispatch enqueues a job and takes it off the queue, leased exactly as the dispatcher would.
-func dispatch(t *testing.T, r *JobQueueRepository, jobID string, opts queuejob.EnqueueOpts) *queuejob.Job {
+func dispatch(t *testing.T, r *Engine, jobID string, opts EnqueueOpts) *Job {
 	t.Helper()
 	ctx := context.Background()
-	if err := r.Enqueue(ctx, &queuejob.Job{ID: jobID, Queue: "build", Type: "container"}, opts); err != nil {
+	if err := r.Enqueue(ctx, &Job{ID: jobID, Queue: "build", Type: "container"}, opts); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 	job, err := r.Dequeue(ctx, "build")
@@ -63,10 +62,10 @@ func expireLease(t *testing.T, db *gorm.DB, jobID string) {
 }
 
 func TestDequeueLeasesTheJobAndCompleteReleasesIt(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30})
 
 	leased := slotOf(t, db, "job-1")
 	if leased.LeaseExpiresAtMS <= nowMilli() {
@@ -101,10 +100,10 @@ func TestDequeueLeasesTheJobAndCompleteReleasesIt(t *testing.T) {
 }
 
 func TestClaimExpiredLeasesReportsTheLostJob(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30})
 	if err := r.SetWorkerID(ctx, "job-1", "worker-7"); err != nil {
 		t.Fatalf("set worker id: %v", err)
 	}
@@ -123,10 +122,10 @@ func TestClaimExpiredLeasesReportsTheLostJob(t *testing.T) {
 }
 
 func TestClaimExpiredLeasesIsExclusive(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30})
 	expireLease(t, db, "job-1")
 
 	first, err := r.ClaimExpiredLeases(ctx)
@@ -148,10 +147,10 @@ func TestClaimExpiredLeasesIsExclusive(t *testing.T) {
 }
 
 func TestReapedJobIsRetriedAndStopsLookingRunning(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30, MaxRetries: 3})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30, MaxRetries: 3})
 	expireLease(t, db, "job-1")
 
 	if _, err := r.ClaimExpiredLeases(ctx); err != nil {
@@ -179,10 +178,10 @@ func TestReapedJobIsRetriedAndStopsLookingRunning(t *testing.T) {
 }
 
 func TestReapedJobWithNoRetriesLeftGoesToTheDLQ(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30, MaxRetries: 1})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30, MaxRetries: 1})
 	expireLease(t, db, "job-1")
 
 	if _, err := r.ClaimExpiredLeases(ctx); err != nil {
@@ -213,10 +212,10 @@ func TestReapedJobWithNoRetriesLeftGoesToTheDLQ(t *testing.T) {
 }
 
 func TestLateResultForAReapedJobIsRejected(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30, MaxRetries: 3})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30, MaxRetries: 3})
 	expireLease(t, db, "job-1")
 	if _, err := r.ClaimExpiredLeases(ctx); err != nil {
 		t.Fatalf("claim: %v", err)
@@ -239,11 +238,11 @@ func TestLateResultForAReapedJobIsRejected(t *testing.T) {
 }
 
 func TestLateSuccessCannotRevivADeadLetteredJob(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
 	// Out of retries: the reap dead-letters the job but leaves it in the dispatched lane.
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30, MaxRetries: 1})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30, MaxRetries: 1})
 	expireLease(t, db, "job-1")
 	if _, err := r.ClaimExpiredLeases(ctx); err != nil {
 		t.Fatalf("claim: %v", err)
@@ -266,10 +265,10 @@ func TestLateSuccessCannotRevivADeadLetteredJob(t *testing.T) {
 }
 
 func TestRequeuedJobClearsItsOldLease(t *testing.T) {
-	r, db := newTestRepo(t)
+	r, db := newTestEngine(t)
 	ctx := context.Background()
 
-	dispatch(t, r, "job-1", queuejob.EnqueueOpts{TimeoutSec: 30, MaxRetries: 1})
+	dispatch(t, r, "job-1", EnqueueOpts{TimeoutSec: 30, MaxRetries: 1})
 	expireLease(t, db, "job-1")
 	if _, err := r.ClaimExpiredLeases(ctx); err != nil {
 		t.Fatalf("claim: %v", err)

@@ -19,12 +19,12 @@ import (
 
 type JobHandler struct {
 	engine      *queue.Engine
-	stats       *queue.StatsAggregator
+	stats       *queue.Stats
 	grpcSrv     *grpc.Server
 	jobExecRepo *repos.JobExecutionRepository
 }
 
-func NewJobHandler(engine *queue.Engine, stats *queue.StatsAggregator, grpcSrv *grpc.Server, jobExecRepo *repos.JobExecutionRepository) *JobHandler {
+func NewJobHandler(engine *queue.Engine, stats *queue.Stats, grpcSrv *grpc.Server, jobExecRepo *repos.JobExecutionRepository) *JobHandler {
 	return &JobHandler{engine: engine, stats: stats, grpcSrv: grpcSrv, jobExecRepo: jobExecRepo}
 }
 
@@ -257,10 +257,10 @@ func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (stri
 
 type QueueHandler struct {
 	engine *queue.Engine
-	stats  *queue.StatsAggregator
+	stats  *queue.Stats
 }
 
-func NewQueueHandler(engine *queue.Engine, stats *queue.StatsAggregator) *QueueHandler {
+func NewQueueHandler(engine *queue.Engine, stats *queue.Stats) *QueueHandler {
 	return &QueueHandler{engine: engine, stats: stats}
 }
 

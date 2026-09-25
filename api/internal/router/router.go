@@ -38,7 +38,7 @@ type SetupRouterDeps struct {
 	SettingRepo        *repos.SettingRepository
 	Hub                *websocket.Hub
 	QueueEngine        *queue.Engine
-	StatsAgg           *queue.StatsAggregator
+	StatsAgg           *queue.Stats
 	GRPCServer         *luteGrpc.Server
 	TokenService       *auth.TokenService
 	AuthService        *auth.Service

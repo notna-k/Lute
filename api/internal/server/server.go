@@ -57,7 +57,7 @@ type Deps struct {
 	SettingRepo        *repos.SettingRepository
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
-	StatsAgg           *queue.StatsAggregator
+	StatsAgg           *queue.Stats
 	TokenService       *auth.TokenService
 	AuthService        *auth.Service
 }

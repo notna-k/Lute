@@ -40,7 +40,7 @@ type Server struct {
 	workerRepo             *repos.WorkerRepository
 	jobExecRepo            *repos.JobExecutionRepository
 	queueEngine            *queue.Engine
-	statsAgg               *queue.StatsAggregator
+	statsAgg               *queue.Stats
 	hub                    *websocket.Hub
 	ConnMgr                *ConnectionManager
 	grpcServer             *grpc.Server
@@ -54,7 +54,7 @@ func NewServer(
 	workerRepo *repos.WorkerRepository,
 	jobExecRepo *repos.JobExecutionRepository,
 	queueEngine *queue.Engine,
-	statsAgg *queue.StatsAggregator,
+	statsAgg *queue.Stats,
 	hub *websocket.Hub,
 ) *Server {
 	return &Server{
@@ -216,7 +216,7 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 	var job *queue.Job
 	if result.Success {
 		if err := s.queueEngine.Complete(ctx, result.JobId, result.ElapsedMs); err != nil {
-			if errors.Is(err, repos.ErrJobNotRunning) {
+			if errors.Is(err, queue.ErrJobNotRunning) {
 				// The reaper already requeued this attempt; recording it would contradict the retry.
 				log.Printf("handleJobResult: ignoring late success for %s from worker %s", result.JobId, workerID)
 				return
@@ -235,7 +235,7 @@ func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
 		})
 	} else {
 		if err := s.queueEngine.Fail(ctx, result.JobId, result.Error); err != nil {
-			if errors.Is(err, repos.ErrJobNotRunning) {
+			if errors.Is(err, queue.ErrJobNotRunning) {
 				log.Printf("handleJobResult: ignoring late failure for %s from worker %s", result.JobId, workerID)
 				return
 			}
@@ -278,7 +278,7 @@ func (s *Server) HandleExpiredLeases(ctx context.Context, leases []queue.Expired
 		log.Printf("HandleExpiredLeases: failing job %s (%s)", lease.JobID, reason)
 
 		if err := s.queueEngine.Fail(ctx, lease.JobID, reason); err != nil {
-			if errors.Is(err, repos.ErrJobNotRunning) {
+			if errors.Is(err, queue.ErrJobNotRunning) {
 				continue // the worker's own result landed between the claim and here
 			}
 			log.Printf("HandleExpiredLeases: fail %s: %v", lease.JobID, err)

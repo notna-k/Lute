@@ -4,12 +4,7 @@ import (
 	"context"
 	"log"
 	"time"
-
-	"github.com/lute/api/internal/db/repos"
 )
-
-// ExpiredLease is a dispatched job whose worker stopped accounting for it.
-type ExpiredLease = repos.ExpiredLease
 
 // Scheduler sweeps the queue tables each tick: promote due delayed jobs, reap expired leases.
 type Scheduler struct {

@@ -21,7 +21,7 @@ type Dependencies struct {
 	Database           *connection.Database
 	QueueEngine        *queue.Engine
 	QueueScheduler     *queue.Scheduler
-	StatsAggregator    *queue.StatsAggregator
+	StatsAggregator    *queue.Stats
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository
@@ -55,13 +55,12 @@ func InitializeWith(cfg *config.Config) (*Dependencies, error) {
 	if err != nil {
 		return nil, err
 	}
-	jobQ := repos.NewJobQueueRepository(db.DB, repos.QueueTimings{
+	queueEngine := queue.NewEngine(db.DB, queue.Timings{
 		LeaseGrace:   cfg.Queue.LeaseGrace,
 		ReclaimAfter: cfg.Queue.ReclaimAfter,
 	})
-	queueEngine := queue.NewEngine(jobQ)
 	queueScheduler := queue.NewScheduler(queueEngine, cfg.Queue.PollInterval)
-	statsAgg := queue.NewStatsAggregator(repos.NewQueueStatsRepository(db.DB))
+	statsAgg := queue.NewStats(db.DB)
 
 	reposInit := initializeRepositories(db)
 

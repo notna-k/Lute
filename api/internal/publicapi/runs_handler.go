@@ -24,7 +24,7 @@ import (
 // middleware that set the "user_id" context value.
 type RunsHandler struct {
 	engine     *queue.Engine
-	stats      *queue.StatsAggregator
+	stats      *queue.Stats
 	grpcSrv    *grpc.Server
 	runs       *repos.RunRepository
 	executions *repos.JobExecutionRepository
@@ -32,7 +32,7 @@ type RunsHandler struct {
 
 func NewRunsHandler(
 	engine *queue.Engine,
-	stats *queue.StatsAggregator,
+	stats *queue.Stats,
 	grpcSrv *grpc.Server,
 	runs *repos.RunRepository,
 	executions *repos.JobExecutionRepository,

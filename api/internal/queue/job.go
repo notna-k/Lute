@@ -1,4 +1,4 @@
-package queuejob
+package queue
 
 import (
 	"encoding/json"
