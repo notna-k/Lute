@@ -110,8 +110,9 @@ func TestNotFoundOrInternal(t *testing.T) {
 		NotFoundOrInternal(c, errors.New("connection reset"), "job not found")
 		logged = c.Errors.Errors()
 	})
-	if got := decode(t, w); w.Code != http.StatusInternalServerError || got.Code != CodeInternal {
-		t.Fatalf("other error: %d %+v, want 500 internal", w.Code, got)
+	if got := decode(t, w); w.Code != http.StatusInternalServerError || got.Code != CodeInternal ||
+		got.Message != "internal server error" {
+		t.Fatalf("other error: %d %+v, want 500 internal without the cause", w.Code, got)
 	}
 	if len(logged) != 1 {
 		t.Fatalf("the internal error was not recorded for the request log: %v", logged)

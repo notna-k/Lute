@@ -45,10 +45,10 @@ func Invalid(c *gin.Context, message string, fields map[string]string) {
 	c.AbortWithStatusJSON(http.StatusBadRequest, Body{Detail{Code: CodeValidation, Message: message, Fields: fields}})
 }
 
-// Internal aborts with 500 and records err for the request log.
+// Internal aborts with 500 and records err for the request log; clients never see its text.
 func Internal(c *gin.Context, err error) {
 	_ = c.Error(err)
-	Error(c, http.StatusInternalServerError, err.Error())
+	Error(c, http.StatusInternalServerError, "internal server error")
 }
 
 // NotFoundOrInternal answers 404 with notFound for repos.ErrNotFound, else 500.
