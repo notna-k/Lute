@@ -19,7 +19,12 @@ import {
   MoreVertical,
   Undo2,
 } from 'lucide-react';
-import { Badge, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { IconButton } from '@/components/ui/IconButton';
+import { Spinner } from '@/components/ui/Spinner';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/cn';
 import { downloadFile, downloadYaml } from '@/features/params/yaml';
 import { exportJob, exportJobs, exportJobsZip, revertJob } from '@/services/jobDefService';

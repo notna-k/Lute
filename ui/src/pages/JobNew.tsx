@@ -10,17 +10,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 
-import {
-  Alert,
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  Field,
-  Input,
-  PageHeader,
-} from '@/components/ui';
-import { PageBody, PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Field, Input } from '@/components/ui/Input';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageBody, PageScroll } from '@/components/layout/Page';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
 import { createJob } from '@/services/jobDefService';
 import type { JobDefinition, ParameterField } from '@/types/jobs';

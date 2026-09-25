@@ -12,27 +12,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Boxes, CircleDot, Layers, Plus, RefreshCw } from 'lucide-react';
-import {
-  Alert,
-  Button,
-  EmptyState,
-  facetOptions,
-  FilterBar,
-  IconButton,
-  NoFilterMatches,
-  Pagination,
-  RowLink,
-  Skeleton,
-  StatusText,
-  TBody,
-  Table,
-  Td,
-  Th,
-  THead,
-  PageHeader,
-  Tr,
-} from '@/components/ui';
-import { PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { facetOptions, FilterBar, NoFilterMatches } from '@/components/ui/FilterBar';
+import { IconButton } from '@/components/ui/IconButton';
+import { Pagination } from '@/components/ui/Pagination';
+import { RowLink, TBody, Table, Td, Th, THead, Tr } from '@/components/ui/Table';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { StatusText } from '@/components/ui/Status';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageScroll } from '@/components/layout/Page';
 import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import { EnqueueJobDialog } from '@/features/jobs/EnqueueJobDialog';
 import {

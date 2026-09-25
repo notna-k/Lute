@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 import { apiClient } from '@/services/api';
-import { Alert, Button, Dialog, IconButton, Spinner, Tooltip } from '@/components/ui';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { IconButton } from '@/components/ui/IconButton';
+import { Spinner } from '@/components/ui/Spinner';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface AddWorkerDialogProps {
   open: boolean;

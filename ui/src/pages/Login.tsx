@@ -2,7 +2,10 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Terminal } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Alert, Button, Card, Field, Input } from '@/components/ui';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Field, Input } from '@/components/ui/Input';
 
 const Login = () => {
   const [email, setEmail] = useState('');

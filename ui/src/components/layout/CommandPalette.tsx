@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Play, Search, Server } from 'lucide-react';
 import { listJobs } from '@/services/jobDefService';
 import { useUserWorkers } from '@/hooks/useWorkers';
-import { Kbd } from '@/components/ui';
+import { Kbd } from '@/components/ui/Kbd';
 import { cn } from '@/lib/cn';
 import { NAV_ITEMS } from './nav';
 

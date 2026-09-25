@@ -5,15 +5,12 @@
  * the log is the reason the page exists, so everything else is a caption.
  */
 import { Download, RotateCcw } from 'lucide-react';
-import {
-  Badge,
-  Button,
-  EmptyState,
-  KeyValueList,
-  ProgressTrack,
-  StatusBadge,
-  type KeyValueRow,
-} from '@/components/ui';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { KeyValueList, type KeyValueRow } from '@/components/ui/KeyValueList';
+import { ProgressTrack } from '@/components/ui/ProgressTrack';
+import { StatusBadge } from '@/components/ui/Status';
 import { LogViewer } from './LogViewer';
 import { useJobLogs } from '@/hooks/useJobLogs';
 import { duration, relativeTime, timestamp } from '@/lib/format';

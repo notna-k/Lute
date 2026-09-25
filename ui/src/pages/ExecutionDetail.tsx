@@ -8,16 +8,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { RefreshCw, RotateCcw, X } from 'lucide-react';
-import {
-  Alert,
-  Badge,
-  Button,
-  KeyValueList,
-  Skeleton,
-  type BadgeTone,
-  type KeyValueRow,
-} from '@/components/ui';
-import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { KeyValueList, type KeyValueRow } from '@/components/ui/KeyValueList';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { DetailHeader } from '@/components/layout/DetailHeader';
+import { PageBody, PageScroll } from '@/components/layout/Page';
 import { LogViewer } from '@/features/jobs/LogViewer';
 import { useJobLogs } from '@/hooks/useJobLogs';
 import { jobService, type Job } from '@/services/jobService';

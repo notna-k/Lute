@@ -17,7 +17,7 @@ import {
   SOURCE_STYLE,
   type LogSeverity,
 } from '@/utils/slogLogLine';
-import { Spinner } from '@/components/ui';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/cn';
 import type { useJobLogs } from '@/hooks/useJobLogs';
 

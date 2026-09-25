@@ -39,17 +39,13 @@ import { ParamEditor } from '@/features/params/ParamEditor';
 import { toEnvPairs, typeDef, valuesFromEnv } from '@/features/params/registry';
 import { downloadYaml, toYaml } from '@/features/params/yaml';
 import { stripIds, useSchemaDraft } from '@/features/params/useSchemaDraft';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  Chip,
-  IconButton,
-  SegmentedControl,
-  StatusMark,
-} from '@/components/ui';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
+import { IconButton } from '@/components/ui/IconButton';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { StatusMark } from '@/components/ui/Status';
 import { relativeTime } from '@/lib/format';
 import type { Build, JobDefinition, ParameterField, ParameterValues } from '@/types/jobs';
 

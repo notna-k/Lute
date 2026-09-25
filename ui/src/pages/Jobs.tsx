@@ -21,27 +21,16 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { listJobs, syncJobs, type SyncResult } from '@/services/jobDefService';
-import {
-  Alert,
-  Button,
-  EmptyState,
-  facetOptions,
-  FilterBar,
-  NoFilterMatches,
-  LinkButton,
-  PageHeader,
-  RowLink,
-  Skeleton,
-  StatusText,
-  TBody,
-  Table,
-  Tape,
-  Td,
-  Th,
-  THead,
-  Tr,
-} from '@/components/ui';
-import { PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button, LinkButton } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { facetOptions, FilterBar, NoFilterMatches } from '@/components/ui/FilterBar';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { RowLink, TBody, Table, Td, Th, THead, Tr } from '@/components/ui/Table';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { StatusText } from '@/components/ui/Status';
+import { Tape } from '@/components/ui/Tape';
+import { PageScroll } from '@/components/layout/Page';
 import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import { ConfigDialog, GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { duration, percent, relativeTime } from '@/lib/format';

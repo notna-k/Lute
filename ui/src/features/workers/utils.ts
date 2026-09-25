@@ -1,4 +1,5 @@
-import type { BadgeTone, WorkerState } from '@/components/ui';
+import type { BadgeTone } from '@/components/ui/Badge';
+import type { WorkerState } from '@/components/ui/Status';
 import type { Worker } from '@/types';
 
 export function statusTone(status: Worker['status']): BadgeTone {

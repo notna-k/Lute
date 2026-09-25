@@ -10,21 +10,13 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Power, Trash2 } from 'lucide-react';
 import type { Worker } from '@/types';
-import {
-  Button,
-  IconButton,
-  LabelChips,
-  Meter,
-  RowLink,
-  Skeleton,
-  StatusText,
-  TBody,
-  Table,
-  Td,
-  Th,
-  THead,
-  Tr,
-} from '@/components/ui';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { LabelChips } from '@/components/ui/KeyValueList';
+import { Meter } from '@/components/ui/Meter';
+import { RowLink, TBody, Table, Td, Th, THead, Tr } from '@/components/ui/Table';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { StatusText } from '@/components/ui/Status';
 import { relativeTime, toEpochMs } from '@/lib/format';
 import { metric, workerState } from './utils';
 

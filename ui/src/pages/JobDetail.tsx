@@ -15,17 +15,15 @@ import { ApiError } from '@/services/api';
 import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
 import { BuildList } from '@/features/jobs/BuildList';
 import { BuildPane } from '@/features/jobs/BuildPane';
-import {
-  Alert,
-  Button,
-  Fact,
-  LinkTabs,
-  Spinner,
-  Tape,
-  toastSubject,
-  useToast,
-} from '@/components/ui';
-import { DetailHeader, PageBody, PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Fact } from '@/components/ui/PageHeader';
+import { LinkTabs } from '@/components/ui/Tabs';
+import { Spinner } from '@/components/ui/Spinner';
+import { Tape } from '@/components/ui/Tape';
+import { toastSubject, useToast } from '@/components/ui/Toast';
+import { DetailHeader } from '@/components/layout/DetailHeader';
+import { PageBody, PageScroll } from '@/components/layout/Page';
 import { GitStateBadge, JobActionsMenu } from '@/features/jobs/GitState';
 import { duration, percent } from '@/lib/format';
 import type { Build, ParameterField, ParameterValues } from '@/types/jobs';

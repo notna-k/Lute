@@ -8,7 +8,8 @@ import {
   YAxis,
 } from 'recharts';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Card, Skeleton } from '@/components/ui';
+import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import type { ChartPoint } from '@/services/dashboardService';
 
 const THEME_TOKENS = {

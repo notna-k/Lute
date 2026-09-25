@@ -1,4 +1,5 @@
-import { Button, Dialog } from '@/components/ui';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import type { Worker } from '@/types';
 
 interface DeleteWorkerDialogProps {

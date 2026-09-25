@@ -15,28 +15,17 @@ import { useUserWorkers } from '@/hooks/useWorkers';
 import type { Worker } from '@/types';
 import { listJobs } from '@/services/jobDefService';
 import { executionService } from '@/services/executionService';
-import {
-  Alert,
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  LinkButton,
-  PageHeader,
-  RowLink,
-  Skeleton,
-  Slots,
-  StatusText,
-  TBody,
-  Table,
-  Tape,
-  Td,
-  Th,
-  THead,
-  Tr,
-} from '@/components/ui';
-import { PageBody, PageScroll, Section } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button, LinkButton } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { RowLink, TBody, Table, Td, Th, THead, Tr } from '@/components/ui/Table';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Slots } from '@/components/ui/Meter';
+import { StatusText } from '@/components/ui/Status';
+import { Tape } from '@/components/ui/Tape';
+import { PageBody, PageScroll, Section } from '@/components/layout/Page';
 import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
 import { workerState } from '@/features/workers/utils';
 import { duration, relativeTime, toEpochMs } from '@/lib/format';

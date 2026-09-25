@@ -8,20 +8,15 @@
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
-import {
-  Alert,
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  Input,
-  Kbd,
-  PageHeader,
-  SegmentedControl,
-  Switch,
-} from '@/components/ui';
-import { PageBody, PageScroll, Section } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Input, Switch } from '@/components/ui/Input';
+import { Kbd } from '@/components/ui/Kbd';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { PageBody, PageScroll, Section } from '@/components/layout/Page';
 import { useTheme, type ThemeMode } from '@/contexts/ThemeContext';
 import { useUiPreferences, type Density } from '@/contexts/UiPreferencesContext';
 import { getSettings, updateSettings } from '@/services/settingsService';

@@ -2,9 +2,10 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'rea
 import { AuthProvider, AuthBridgeUpdater, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { UiPreferencesProvider } from './contexts/UiPreferencesContext';
-import { AppShell } from './components/layout';
+import { AppShell } from '@/components/layout/AppShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Spinner, ToastProvider } from './components/ui';
+import { Spinner } from '@/components/ui/Spinner';
+import { ToastProvider } from '@/components/ui/Toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Workers from './pages/Workers';

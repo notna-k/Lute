@@ -12,16 +12,12 @@ import { Plus, Server, Signal, Tag, Tags } from 'lucide-react';
 import { useDeleteWorker, useReEnableWorker, useUserWorkers } from '@/hooks/useWorkers';
 import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import type { Worker } from '@/types';
-import {
-  Alert,
-  Button,
-  EmptyState,
-  facetOptions,
-  FilterBar,
-  NoFilterMatches,
-  PageHeader,
-} from '@/components/ui';
-import { PageScroll } from '@/components/layout';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { facetOptions, FilterBar, NoFilterMatches } from '@/components/ui/FilterBar';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageScroll } from '@/components/layout/Page';
 import { AddWorkerDialog } from '@/features/workers/AddWorkerDialog';
 import { DeleteWorkerDialog } from '@/features/workers/DeleteWorkerDialog';
 import { WorkerList } from '@/features/workers/WorkerList';

@@ -6,7 +6,8 @@
  * log. Each entry is a real link, so a build can be opened in a new tab.
  */
 import { NavLink } from 'react-router-dom';
-import { Tape, StatusMark } from '@/components/ui';
+import { Tape } from '@/components/ui/Tape';
+import { StatusMark } from '@/components/ui/Status';
 import { duration, relativeTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import type { Build } from '@/types/jobs';
