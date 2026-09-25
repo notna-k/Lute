@@ -18,16 +18,9 @@ import {
   ToggleLeft,
   Type,
 } from 'lucide-react';
-import {
-  DateInput,
-  DateTimeInput,
-  MultiSelectInput,
-  NumberInput,
-  SecretInput,
-  SelectInput,
-  TextInput,
-  ToggleInput,
-} from './controls';
+import { NumberInput, SecretInput, TextInput, ToggleInput } from './controls';
+import { DateInput, DateTimeInput } from './dateControls';
+import { MultiSelectInput, SelectInput } from './selectControls';
 import { SecretConfig, SelectConfig } from './configs';
 import type { ParamTypeDef } from './types';
 import type { ParameterField, ParameterType, ParameterValue } from '@/types/jobs';
