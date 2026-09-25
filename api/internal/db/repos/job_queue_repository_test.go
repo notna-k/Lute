@@ -35,7 +35,7 @@ func newTestRepo(t *testing.T) (*JobQueueRepository, *gorm.DB) {
 	if err := migrate.Run(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return NewJobQueueRepository(db), db
+	return NewJobQueueRepository(db, QueueTimings{}), db
 }
 
 // dispatch enqueues a job and takes it off the queue, leased exactly as the dispatcher would.
@@ -89,6 +89,16 @@ func TestDequeueLeasesTheJobAndCompleteReleasesIt(t *testing.T) {
 	}
 	if got := slotOf(t, db, "job-1").LeaseExpiresAtMS; got != 0 {
 		t.Fatalf("complete left the lease behind: lease_expires_at_ms = %d", got)
+	}
+
+	// The reported runtime is kept on the job: it is what a build shows as its duration
+	// in the window before the execution record is written.
+	done, err := r.GetJob(ctx, "job-1")
+	if err != nil {
+		t.Fatalf("get job: %v", err)
+	}
+	if done.ElapsedMs != 1234 {
+		t.Errorf("elapsed_ms = %d, want the 1234 reported to Complete", done.ElapsedMs)
 	}
 
 	// A finished job must never look reapable, or the sweep would fail a build that passed.

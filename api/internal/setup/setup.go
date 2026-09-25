@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/lute/api/internal/auth"
 	"github.com/lute/api/internal/config"
@@ -40,20 +39,29 @@ type Dependencies struct {
 	AuthService        *auth.Service
 }
 
-// Initialize loads configuration and initializes all dependencies
+// Initialize loads configuration from the environment and initializes all dependencies.
 func Initialize() (*Dependencies, error) {
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, err
 	}
+	return InitializeWith(cfg)
+}
 
+// InitializeWith initializes all dependencies against an already-built config, so a
+// caller that does not get its settings from the environment (a test harness, an
+// embedder) boots along exactly the same path as the binary.
+func InitializeWith(cfg *config.Config) (*Dependencies, error) {
 	db, err := initializeDatabase(cfg)
 	if err != nil {
 		return nil, err
 	}
-	jobQ := repos.NewJobQueueRepository(db.DB)
+	jobQ := repos.NewJobQueueRepository(db.DB, repos.QueueTimings{
+		LeaseGrace:   cfg.Queue.LeaseGrace,
+		ReclaimAfter: cfg.Queue.ReclaimAfter,
+	})
 	queueEngine := queue.NewEngine(jobQ)
-	queueScheduler := queue.NewScheduler(queueEngine, time.Second)
+	queueScheduler := queue.NewScheduler(queueEngine, cfg.Queue.PollInterval)
 	statsAgg := queue.NewStatsAggregator(repos.NewQueueStatsRepository(db.DB))
 
 	reposInit := initializeRepositories(db)
