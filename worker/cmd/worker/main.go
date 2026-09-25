@@ -79,13 +79,6 @@ func main() {
 	case "help", "--help", "-h":
 		printUsage(os.Stdout)
 	default:
-		// Backward compatibility: if first arg is a flag (-foo / --foo),
-		// fall back to the legacy flat flag parser. This keeps existing
-		// install scripts and background auto-starts working.
-		if strings.HasPrefix(cmd, "-") {
-			legacyMain(os.Args[1:])
-			return
-		}
 		_, _ = fmt.Fprintf(os.Stderr, "unknown command: %q\n\n", cmd)
 		printUsage(os.Stderr)
 		os.Exit(2)
@@ -259,63 +252,6 @@ func tailLoop(f *os.File) error {
 			return err
 		}
 	}
-}
-
-// ---------- legacy flat-flag entry point (backward compatibility) ----------
-
-type legacyFlags struct {
-	serverAddr  string
-	apiURL      string
-	workerID    string
-	claimCode   string
-	queues      string
-	concurrency int
-	jobLogsDir  string
-	version     bool
-	setupMode   bool
-}
-
-func legacyMain(args []string) {
-	fs := flag.NewFlagSet("lute-worker", flag.ExitOnError)
-	f := &legacyFlags{}
-	fs.StringVar(&f.serverAddr, "server", defaultGRPCAddr, "gRPC server address")
-	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API origin (scheme+host; setup uses /api/public/v1/workers/bootstrap/register)")
-	fs.StringVar(&f.workerID, "worker-id", "", "Worker ID (skip REST registration if provided)")
-	fs.StringVar(&f.claimCode, "claim-code", "", "Claim code from UI to link this worker to your account")
-	fs.StringVar(&f.queues, "queues", defaultQueues, "Comma-separated list of queues to process")
-	fs.IntVar(&f.concurrency, "concurrency", defaultConcurrency, "Maximum concurrent jobs")
-	fs.StringVar(&f.jobLogsDir, "job-logs-dir", defaultJobLogsDir, "Directory for per-job log files")
-	fs.BoolVar(&f.version, "version", false, "Print version and exit")
-	fs.BoolVar(&f.setupMode, "setup", false, "Run interactive setup")
-	_ = fs.Parse(args)
-
-	if f.version {
-		fmt.Printf("lute-worker %s (built %s)\n", Version, BuildTime)
-		return
-	}
-
-	if f.setupMode {
-		if f.claimCode == "" {
-			fmt.Fprintln(os.Stderr, "error: --claim-code is required for setup.")
-			os.Exit(2)
-		}
-		setup.Run(f.apiURL, Version, BuildTime, f.claimCode)
-		return
-	}
-
-	if f.workerID == "" {
-		fmt.Fprintln(os.Stderr, "error: --worker-id is required to run the agent.")
-		fmt.Fprintln(os.Stderr, "Run `lute-worker setup --claim-code <CODE>` first (copy the command from the Add Worker dialog).")
-		os.Exit(2)
-	}
-
-	runWorker(&runFlags{
-		serverAddr:  f.serverAddr,
-		workerID:    f.workerID,
-		queues:      f.queues,
-		concurrency: f.concurrency,
-		jobLogsDir:  f.jobLogsDir,
-	})
 }
 
 // ---------- worker main loop (shared) ----------
