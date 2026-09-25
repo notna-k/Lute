@@ -1,24 +1,11 @@
-/**
- * Operator settings — panel-managed policy switches (see api/internal/settings).
- *
- * These are deliberately not job-definition config: PRODUCT.md's canonical
- * serialization rule governs definitions, and nothing here may encode something
- * a definition could express.
- */
+// Operator policy switches (api/internal/settings). Never job-definition config.
 
 import { apiClient } from './api';
 
 export interface Settings {
-  /**
-   * Whether a template whose schema differs from the definition in Git — edited
-   * in the workbench, or created from scratch — may be run. Off means every
-   * build must come from a committed definition.
-   */
+  /** Whether a schema that differs from Git (edited or panel-created) may be run. */
   allowAdhocBuilds: boolean;
-  /**
-   * Whether a Git sync deletes every definition no YAML file defines — panel
-   * templates included. Off keeps them, flagged as not in Git.
-   */
+  /** Whether a Git sync deletes definitions no YAML file defines, panel templates included. */
   pruneDefinitions: boolean;
 }
 

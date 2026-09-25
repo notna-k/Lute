@@ -11,14 +11,7 @@ import {
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
-/**
- * Transient confirmations.
- *
- * An action that changes something elsewhere — queueing a build, cancelling one,
- * draining a worker — says so here and offers the one link that follows up. It
- * is not an error channel: failures belong next to the control that caused them,
- * where the user is still looking.
- */
+// Transient confirmations with one follow-up link. Not an error channel: errors stay by their control.
 
 interface ToastLink {
   to: string;
@@ -73,8 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [dismiss],
   );
 
-  // Clear pending timers on unmount so a late fire cannot set state on a
-  // provider that is already gone.
+  // Clear pending timers on unmount so a late fire cannot set state on a gone provider.
   useEffect(
     () => () => {
       timers.current.forEach(clearTimeout);

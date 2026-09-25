@@ -1,14 +1,4 @@
-/**
- * Every run the engine has recorded, newest first.
- *
- * This is the cross-job view: the same rows a job's Builds tab shows, without
- * the job filter. Status is the first thing the eye needs, so it leads the row
- * and carries the shape vocabulary rather than a colour alone.
- *
- * Filtering happens on the server — the list is paginated, so a client-side
- * search would only ever search the twenty-five rows already on screen and
- * quietly lie about the rest.
- */
+// Every run the engine has recorded. Filtering is server-side because the list is paginated.
 import { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -36,10 +26,8 @@ const PAGE_SIZE = 25;
 
 type StatusFilter = 'all' | 'success' | 'failed';
 
-/** Shortens an opaque id to something a row can hold without wrapping. */
 const shortId = (id: string, keep = 10) => (id.length > keep + 2 ? `${id.slice(0, keep)}…` : id);
 
-/** Debounces the search box: one request per pause, not one per keystroke. */
 function useDebounced<T>(value: T, ms = 250): T {
   const [settled, setSettled] = useState(value);
   useEffect(() => {

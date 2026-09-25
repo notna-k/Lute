@@ -60,8 +60,7 @@ function AppRoutes() {
           <Route path='/settings' element={<Settings />} />
           <Route path='/jobs' element={<Jobs />} />
           <Route path='/jobs/new' element={<JobNew />} />
-          {/* A job's views are routes, not local tab state, so a build or a
-              half-filled run form can be linked to and reloaded. */}
+          {/* A job's views are routes so each can be linked and reloaded. */}
           <Route path='/jobs/:slug' element={<JobDetail />} />
           <Route path='/jobs/:slug/run' element={<JobDetail />} />
           <Route path='/jobs/:slug/config' element={<JobDetail />} />

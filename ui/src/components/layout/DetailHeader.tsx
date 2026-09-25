@@ -11,28 +11,19 @@ interface Crumb {
 export interface DetailHeaderProps {
   /** Ancestors of this record, rendered inline before the title. */
   crumbs?: Crumb[];
-  /** The record's identity — monospaced, because it is an identifier. */
   title: ReactNode;
   /** A short description, truncated to one line: the header must not grow. */
   subtitle?: ReactNode;
   /** Status or drift markers sitting beside the title. */
   tags?: ReactNode;
   actions?: ReactNode;
-  /** The record's tab strip. */
   tabs?: ReactNode;
   /** Standing facts, right-aligned on the tab row where there is spare width. */
   meta?: ReactNode;
   className?: string;
 }
 
-/**
- * The header of a single record's page — a job, a worker, a build.
- *
- * Two rows and no more. The first answers "what am I looking at and what can I
- * do to it"; the second carries the tabs, with the record's unchanging facts
- * parked in the space beside them rather than in a block of their own. That
- * keeps the frame short enough that a build log gets the screen.
- */
+/** The two-row header of a record's page (job, worker, build), kept short so a log gets the screen. */
 export function DetailHeader({
   crumbs,
   title,

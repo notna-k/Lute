@@ -23,8 +23,7 @@ export function NumberInput({ value, onChange, invalid, disabled }: ParamInputPr
       type='number'
       value={value === '' || value === undefined ? '' : String(value)}
       disabled={disabled}
-      // An emptied number input stays empty rather than coercing to 0 — 0 is a
-      // real value and coercing would defeat the `required` check.
+      // Stays empty rather than coercing to 0, which would defeat the `required` check.
       onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
       className={cn(FIELD_BASE, ring(invalid), 'font-mono')}
     />

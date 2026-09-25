@@ -1,10 +1,4 @@
-/**
- * Job-definition service — talks to the Core API.
- *
- * Endpoints (see api/internal/jobdefs): job definitions are synced from Git
- * into Postgres and may be edited here; the parameter schema both renders the
- * trigger UI and is validated server-side on trigger.
- */
+// Job-definition endpoints (api/internal/jobdefs).
 
 import { apiClient } from './api';
 import type { Build, JobDefinition, ParameterField, ParameterValues } from '@/types/jobs';
@@ -26,13 +20,8 @@ export async function listBuilds(slug: string): Promise<Build[]> {
 }
 
 /**
- * Triggers a build of a Git-managed definition.
- *
- * `parameters` is the schema the panel actually rendered. Sending it makes the
- * server validate against what the user saw: when it differs from the committed
- * definition the build is recorded as ad-hoc, and it is rejected with 409
- * `adhoc_builds_disabled` if the operator has turned ad-hoc builds off. Omitting
- * it silently dropped values for any parameter added in the workbench.
+ * Triggers a build. `parameters` is the schema the panel rendered: if it differs from the
+ * committed one the build is ad-hoc, and gets 409 `adhoc_builds_disabled` when those are off.
  */
 export function triggerBuild(
   slug: string,
@@ -57,18 +46,12 @@ export interface NewJobTemplate {
   parameters: ParameterField[];
 }
 
-/**
- * Saves a panel-authored template. It shows as "not in Git" until a file with
- * its slug is committed.
- */
+/** Saves a panel-authored template; it shows as "not in Git" until committed. */
 export function createJob(template: NewJobTemplate): Promise<JobDefinition> {
   return apiClient.post<JobDefinition>('/api/v1/job-definitions', template);
 }
 
-/**
- * Saves edits to a definition. On one that came from Git this makes it drift:
- * the edit stands until its file changes in Git.
- */
+/** Saves edits; on a Git definition they stand until its file changes in Git. */
 export function updateJob(slug: string, template: NewJobTemplate): Promise<JobDefinition> {
   return apiClient.put<JobDefinition>(
     `/api/v1/job-definitions/${encodeURIComponent(slug)}`,

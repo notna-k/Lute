@@ -1,16 +1,4 @@
-/**
- * The parameter-type contract.
- *
- * PRODUCT.md §5 makes the parameter schema the crown jewel: one definition
- * drives both the trigger UI and server-side validation. This module is built
- * so that *adding an input type is one registry entry plus a control* — no
- * `switch` in a form component, no consumer to update.
- *
- * The schema shape itself is `ParameterField` from `@/types/jobs`, which
- * mirrors `models.ParameterField` on the server. Deliberately not extended
- * here: a key the server does not understand would be dropped at sync time,
- * so the UI would promise a constraint nothing enforces.
- */
+// The parameter-type contract: adding an input type is one registry entry plus a control.
 import type { ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { ParameterField, ParameterType, ParameterValue } from '@/types/jobs';
@@ -29,10 +17,7 @@ export interface ParamConfigProps {
   onChange: (patch: Partial<ParameterField>) => void;
 }
 
-/**
- * Everything the app knows about one input type, in one place: how it is
- * authored, rendered, validated, serialised, and handed to the container.
- */
+/** Everything the app knows about one input type, from authoring to the container env. */
 export interface ParamTypeDef {
   id: ParameterType;
   label: string;
@@ -49,17 +34,10 @@ export interface ParamTypeDef {
   Input: ComponentType<ParamInputProps>;
   /** Type-specific controls in the schema editor, beyond the common ones. */
   Config?: ComponentType<ParamConfigProps>;
-  /**
-   * Returns an error message, or null when the value satisfies the field.
-   * Must mirror `coerce` in api/internal/jobdefs/validate.go — the panel is a
-   * fast path for the same rules, never a different set of them.
-   */
+  /** Error message or null. Must mirror `coerce` in api/internal/jobdefs/validate.go. */
   validate?: (field: ParameterField, value: ParameterValue) => string | null;
   /** How the value reaches the container (the stored `request_params` form). */
   toEnv: (field: ParameterField, value: ParameterValue) => string;
-  /**
-   * The inverse of `toEnv`: turns a stored env string back into a form value,
-   * so a build can be prefilled from a previous one.
-   */
+  /** Inverse of `toEnv`, so a build can be prefilled from a previous one. */
   fromEnv: (field: ParameterField, raw: string) => ParameterValue;
 }

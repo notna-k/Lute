@@ -1,10 +1,4 @@
-/**
- * A job's builds as a narrow column beside the selected build.
- *
- * Deliberately not a table: the only questions here are "which build" and "did
- * it pass", and a column of links answers both while leaving the width to the
- * log. Each entry is a real link, so a build can be opened in a new tab.
- */
+// A job's builds as a narrow column of links beside the selected build, leaving width to the log.
 import { NavLink } from 'react-router-dom';
 import { Tape } from '@/components/ui/Tape';
 import { StatusMark } from '@/components/ui/Status';

@@ -1,10 +1,7 @@
 import type { WorkerState } from '@/components/ui/Status';
 import type { Worker } from '@/types';
 
-/**
- * Maps the registry's worker status onto the panel's status vocabulary, so a
- * worker row and a build row use the same shapes for the same meaning.
- */
+/** Maps the registry's worker status onto the shared status vocabulary. */
 export function workerState(status: Worker['status']): WorkerState {
   switch (status) {
     case 'running':

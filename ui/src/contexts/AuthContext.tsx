@@ -79,7 +79,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, []);
 
-  // On mount, try to silently restore a session using the refresh cookie.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -99,10 +98,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-/**
- * Exported so non-React modules (e.g. the api client) can read the current token
- * and request a refresh. AuthProvider sets these on each render.
- */
+/** Lets non-React modules (the api client) read the token and request a refresh. */
 export const authBridge: {
   getAccessToken: () => string | null;
   refresh: () => Promise<string | null>;

@@ -1,8 +1,5 @@
-// Client-side auth helpers. The refresh token lives in an httpOnly cookie
-// set by the API; the access token is held in memory by AuthContext.
-//
-// These calls deliberately bypass apiClient: they are what produces the access
-// token it attaches, so they cannot depend on having one.
+// Auth calls bypass apiClient: they produce the access token it attaches. The refresh token is an
+// httpOnly cookie; the access token lives in memory in AuthContext.
 import { API_URL as BASE } from './apiBase';
 
 export interface AuthUser {

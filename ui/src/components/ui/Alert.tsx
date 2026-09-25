@@ -4,13 +4,7 @@ import { cn } from '@/lib/cn';
 
 type AlertTone = 'info' | 'success' | 'warning' | 'danger';
 
-/**
- * A banner about the state of the thing on the page, not a coloured box.
- *
- * The tone lives in a 2px left edge and the icon; the body stays on the panel
- * background. A full-bleed tint at the top of a page competes with the build
- * status markers below it, which are the colours that actually carry data.
- */
+// Tone lives in a 2px left edge and the icon, so a banner does not compete with status colours.
 const EDGE: Record<AlertTone, string> = {
   info: 'border-l-border-strong',
   success: 'border-l-success',

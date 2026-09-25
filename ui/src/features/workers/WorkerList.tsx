@@ -1,11 +1,4 @@
-/**
- * The worker fleet as a table.
- *
- * A fleet is read by comparing rows — who is busy, who is behind on load, who
- * stopped reporting — and a table is the only layout where the numbers line up
- * for that. The per-row menu is gone: re-enable and delete sit in the row, since
- * they are the only two actions and hiding them behind a kebab saved nothing.
- */
+// The worker fleet as a table, with re-enable and delete inline on each row.
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Power, Trash2 } from 'lucide-react';
@@ -49,8 +42,7 @@ export function WorkerList({
     );
   }
 
-  // The page owns the empty state's framing: filtered-to-nothing and
-  // nothing-yet are different sentences with different padding.
+  // The page frames the empty state: filtered-to-nothing and nothing-yet read differently.
   if (!workers.length) return <>{empty}</>;
 
   return (

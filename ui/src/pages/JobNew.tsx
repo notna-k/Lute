@@ -1,10 +1,4 @@
-/**
- * From-scratch template authoring.
- *
- * This page only *saves* — there is nothing to run yet. The template shows as
- * "created in the panel" until its config is committed to Git, and you run it
- * from its detail page like any other definition.
- */
+// From-scratch template authoring. It only saves; the new definition is run from its detail page.
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,11 +14,7 @@ import { BuildWorkbench } from '@/features/jobs/BuildWorkbench';
 import { createJob } from '@/services/jobDefService';
 import type { JobDefinition, ParameterField } from '@/types/jobs';
 
-/**
- * Stable empty schema. The workbench reseeds its draft whenever the incoming
- * parameters change by content, so this must not be rebuilt each render — a
- * fresh [] every time would wipe the fields as they are authored.
- */
+// Stable: the workbench reseeds its draft when this changes, so a fresh [] would wipe authored fields.
 const NO_PARAMETERS: ParameterField[] = [];
 
 export default function JobNew() {
@@ -37,8 +27,7 @@ export default function JobNew() {
   const [command, setCommand] = useState('');
   const [sourceRepo, setSourceRepo] = useState('');
 
-  // A stand-in definition so the workbench can render. Empty source marks it as
-  // uncommitted, which is what drives the "new" badge.
+  // A stand-in definition; its empty source marks it as uncommitted.
   const draftJob = useMemo<JobDefinition>(
     () => ({
       slug: '',
@@ -74,13 +63,11 @@ export default function JobNew() {
     },
   });
 
-  // The server requires all three; checking here keeps the user from losing an
-  // authored schema to a round trip that was never going to succeed.
+  // The server requires all three; checking here avoids a pointless round trip.
   const missing = !name.trim() || !runtime.trim() || !command.trim();
   const saveError = save.isError ? (save.error as Error).message : undefined;
 
-  // The workbench holds the authored fields, so the save button lives in its
-  // footer where it can be handed the current schema.
+  // The save button lives in the workbench footer, which is handed the current schema.
   const footer = (fields: ParameterField[]) => (
     <div className='flex flex-wrap items-center gap-3 border-t border-border pt-4'>
       <Button

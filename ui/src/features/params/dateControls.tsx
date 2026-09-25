@@ -7,11 +7,7 @@ import type { ParamInputProps } from './types';
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * Formats a Date as YYYY-MM-DD in LOCAL time. `toISOString()` converts to UTC
- * first and shifts the day by one for any timezone east of UTC — the picker
- * would then submit yesterday's date.
- */
+/** YYYY-MM-DD in local time; toISOString() would shift the day for timezones east of UTC. */
 function toISODate(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

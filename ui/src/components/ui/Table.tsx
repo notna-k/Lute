@@ -8,15 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
-/**
- * Dense data table.
- *
- * Headers stick to the top of the scroll pane, rows are separated by the faint
- * hairline rather than a stripe, and cells do not wrap: these tables are read
- * by scanning a column, so a row that grows to two lines breaks the rhythm.
- * Edge cells carry the page gutter so the first column lines up with the
- * page heading above it.
- */
+/** Dense data table. Cells never wrap, since these tables are read by scanning a column. */
 export const Table = forwardRef<HTMLTableElement, TableHTMLAttributes<HTMLTableElement>>(
   function Table({ className, ...props }, ref) {
     return (
@@ -74,7 +66,7 @@ export const Td = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCel
       <td
         ref={ref}
         className={cn(
-          // Row height follows the density chosen in Settings; see tokens.css.
+          // Row height follows the density chosen in Settings (tokens.css).
           'whitespace-nowrap border-b border-border-subtle px-3.5 py-[var(--density-row-y)] align-middle',
           className,
         )}
@@ -90,11 +82,8 @@ export interface RowLinkProps extends HTMLAttributes<HTMLTableRowElement> {
 }
 
 /**
- * A whole-row link.
- *
- * The row is not an anchor (HTML forbids it inside a table), so it navigates on
- * click while still containing real links — the primary cell keeps its own
- * anchor, which is what keyboard users tab to and what "open in new tab" uses.
+ * A whole-row link. The row cannot be an anchor inside a table, so it navigates on click while
+ * the primary cell keeps a real anchor for keyboard users and "open in new tab".
  */
 export const RowLink = forwardRef<HTMLTableRowElement, RowLinkProps>(function RowLink(
   { to, className, onClick, ...props },

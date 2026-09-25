@@ -1,14 +1,7 @@
 import { forwardRef, type HTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
-/**
- * Page scaffolding.
- *
- * A page is a stack of non-scrolling frame parts (header, tabs, toolbar) plus
- * exactly one PageScroll that takes the remaining height. Keeping the scroll in
- * a named component is what stops pages from each inventing their own overflow
- * behaviour and losing the sticky table headers.
- */
+// A page is non-scrolling frame parts plus exactly one PageScroll, which keeps sticky headers working.
 
 /** The scrolling region of a page. One per page; it fills the leftover height. */
 export const PageScroll = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(

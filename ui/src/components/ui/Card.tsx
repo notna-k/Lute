@@ -1,11 +1,7 @@
 import { forwardRef, type HTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
-/**
- * A bordered box. Flat by design: one hairline separates it from the page and
- * one separates its header from its body, with no radius, shadow or tint doing
- * the same job twice.
- */
+/** A flat bordered box: hairlines only, no radius, shadow or tint. */
 export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function Card(
   { className, ...props },
   ref,

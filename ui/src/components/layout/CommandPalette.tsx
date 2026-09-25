@@ -31,19 +31,13 @@ const ICONS = {
   worker: <Server className='h-3.5 w-3.5 text-fg-subtle' />,
 };
 
-/**
- * The keyboard route to anything: a page, a job, a job's run form, a worker.
- *
- * It is the only navigation that reaches individual records, which is why the
- * rail can stay as short as it is.
- */
+/** The keyboard route to anything: a page, a job, a job's run form, a worker. */
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Only fetched while the palette is open.
   const { data: jobs } = useQuery({
     queryKey: ['jobs'],
     queryFn: listJobs,
@@ -108,7 +102,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     if (!open) setQuery('');
   }, [open]);
 
-  // Keep the highlighted row in view while arrowing through a long list.
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);

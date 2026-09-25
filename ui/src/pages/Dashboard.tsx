@@ -1,11 +1,4 @@
-/**
- * The overview: what is running, what is broken, what the fleet looks like.
- *
- * Built from the same three queries the other pages use, so it costs nothing
- * extra and can never disagree with them. Ordered by urgency — in-flight builds
- * first, then failures, then the fleet — because that is the order an operator
- * reads a panel in.
- */
+// The overview, ordered by urgency: in-flight builds, failures, then the fleet.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Plus, Server } from 'lucide-react';
@@ -63,7 +56,7 @@ function Stat({
   );
 }
 
-/** Stable empty list, so the fleet memo does not re-run on every render. */
+/** Stable empty list, so the fleet memo keeps its dependencies. */
 const NO_WORKERS: Worker[] = [];
 
 export default function Dashboard() {

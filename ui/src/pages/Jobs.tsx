@@ -1,11 +1,4 @@
-/**
- * The job list — the panel's home for "what can I run, and is it healthy".
- *
- * Rows are grouped by the folder their definition lives in, because that is how
- * the Git repo is organised and how operators already talk about jobs ("the
- * release ones"). Each row answers three questions without a click: what did it
- * last do, has it been failing (the history strip), and how long does it take.
- */
+// The job list, grouped by the folder each definition lives in within the Git repo.
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, FileCode2, FolderOpen, GitBranch, Layers, Plus, RefreshCw } from 'lucide-react';
@@ -42,7 +35,7 @@ function syncSummary(r: SyncResult): string {
   return parts.length ? `Synced — ${parts.join(', ')}.` : 'Synced — already up to date.';
 }
 
-/** Stable empty list, so the memos below do not re-run on every render. */
+/** Stable empty list, so the memos below keep their dependencies. */
 const NO_JOBS: JobDefinition[] = [];
 
 export default function Jobs() {
@@ -75,9 +68,6 @@ export default function Jobs() {
     [all],
   );
 
-  // The facet menus offer what the fleet of definitions actually holds, with
-  // the row count beside each value — a folder with one job is worth knowing
-  // about before picking it, not after.
   const folderOptions = useMemo(() => facetOptions(all.map(folderOf)), [all]);
   const queueOptions = useMemo(() => facetOptions(all.map((j) => j.queue)), [all]);
 

@@ -1,10 +1,4 @@
-/**
- * One worker: what it is labelled with, and what it has been doing.
- *
- * Two tabs rather than one long scroll — labels are edited rarely and read
- * often, metrics are the opposite, and stacking them meant scrolling past the
- * editor every time to reach a chart.
- */
+// One worker: its labels and its metrics, on separate tabs.
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Power } from 'lucide-react';

@@ -32,8 +32,7 @@ export function JobTable({ groups }: { groups: JobGroup[] }) {
         return (
           <TBody key={group.folder}>
             <Tr>
-              {/* The folder header doubles as the collapse control: one
-                  row per folder rather than a separate tree pane. */}
+              {/* The folder header doubles as the collapse control. */}
               <Td colSpan={7} className='border-b-border bg-bg-subtle py-1.5'>
                 <button
                   type='button'

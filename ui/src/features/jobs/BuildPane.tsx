@@ -1,9 +1,4 @@
-/**
- * One build: its facts, the values it ran with, and its log.
- *
- * The facts sit in a short strip above the log rather than a card beside it —
- * the log is the reason the page exists, so everything else is a caption.
- */
+// One build: a short facts strip, the values it ran with, and its log.
 import { Download, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -25,8 +20,7 @@ export interface BuildPaneProps {
 
 export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
   const live = build?.status === 'running' || build?.status === 'queued';
-  // Logs are keyed by the queue job id, not the run id: /jobs/:id/logs looks the
-  // build up in the queue, where a run id does not exist.
+  // Logs are keyed by the queue job id: /jobs/:id/logs looks the build up in the queue.
   const logs = useJobLogs(build?.jobId, { live });
 
   if (!build) {

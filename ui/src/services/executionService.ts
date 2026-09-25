@@ -45,8 +45,7 @@ export interface ExecutionFilterOptions {
 export const executionService = {
   list: async (params?: ListExecutionsParams): Promise<ListExecutionsResponse> => {
     const qs = new URLSearchParams();
-    // Repeated keys rather than a comma-joined list, so a queue name with a
-    // comma in it survives the round trip.
+    // Repeated keys, so a queue name containing a comma survives.
     params?.queues?.forEach((q) => q && qs.append('queue', q));
     params?.types?.forEach((t) => t && qs.append('type', t));
     if (params?.status) qs.set('status', params.status);

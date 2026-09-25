@@ -1,11 +1,4 @@
-/**
- * How a definition relates to Git, and the ways out of drift.
- *
- * Git is the source of truth, but the panel may edit a definition or create
- * one. Anything that differs from Git gets a yellow dot; its config can be
- * viewed and copied — one job or all of them — to commit it, which makes the
- * panel's version canonical on the next sync.
- */
+// How a definition relates to Git, and the ways out of drift: view, copy or revert its YAML.
 import { useState } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -52,10 +45,7 @@ export function GitStateBadge({ state }: { state: GitState }) {
   );
 }
 
-/**
- * Shows YAML ready to commit — one definition's (`slug`) or, without one, every
- * definition's as a multi-document stream.
- */
+/** YAML ready to commit: one definition (`slug`) or every definition as one stream. */
 export function ConfigDialog({
   open,
   onClose,
@@ -66,9 +56,7 @@ export function ConfigDialog({
   slug?: string;
 }) {
   const [copied, copy] = useCopy();
-  // The zip is a second rendering of the same definitions — one file per job,
-  // at its path in Git — so it is built by the server, not from the stream
-  // shown here.
+  // The zip (one file per job at its Git path) is built by the server, not from the stream shown.
   const zip = useMutation({
     mutationFn: exportJobsZip,
     onSuccess: (blob) => downloadFile(blob, 'jobdefs.zip'),

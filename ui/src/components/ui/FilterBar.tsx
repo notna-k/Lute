@@ -1,7 +1,8 @@
-// The shared filter bar for list pages: search, scope, facets and sort, plus a chip row once anything is filtered.
+// The shared filter bar for list pages; a chip row appears once anything is filtered.
 import { useEffect, useRef, type ReactNode } from 'react';
 import { ListFilter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { isTypingTarget } from '@/lib/dom';
 import { FacetMenu, type FacetConfig } from './FacetMenu';
 import { Input, NativeSelect } from './Input';
 import { Kbd } from './Kbd';
@@ -190,13 +191,7 @@ function FilterSearch({ search }: { search: SearchConfig }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'f' || event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      ) {
-        return;
-      }
+      if (isTypingTarget(event.target)) return;
       event.preventDefault();
       ref.current?.focus();
       ref.current?.select();

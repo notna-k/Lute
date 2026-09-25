@@ -1,15 +1,5 @@
-/**
- * Job definition → YAML.
- *
- * PRODUCT.md §6: "a Job's YAML is a pure projection of its fields. Nothing in a
- * definition may be expressible only outside the file." The schema editor
- * therefore has exactly one artifact — this text, which you commit to the
- * job-definitions repo. If a control in the editor cannot round-trip to a line
- * here, it does not belong.
- *
- * The emitted keys are the on-disk shape parsed by `yamlJob` in
- * api/internal/jobdefs/sync.go — note `env:` on disk vs `envVar` on the wire.
- */
+// Job definition → YAML, in the on-disk shape `yamlJob` parses (api/internal/jobdefs/sync.go).
+// Note `env:` on disk vs `envVar` on the wire.
 import { typeDef } from './registry';
 import type { JobDefinition, ParameterField, ParameterOption } from '@/types/jobs';
 
@@ -50,8 +40,7 @@ function paramLines(field: ParameterField): string[] {
     }
     out.push(`    ${key}: ${scalar(value)}`);
   }
-  // `env` sits with identity rather than in COMMON because its on-disk key
-  // differs from the wire key.
+  // Not in COMMON: its on-disk key differs from the wire key.
   if (field.envVar) out.splice(1, 0, `    env: ${field.envVar}`);
   // `default` last: it reads better after the constraints that bound it.
   if (field.default !== undefined && field.default !== '') {
@@ -105,8 +94,6 @@ export function downloadFile(blob: Blob, filename: string): void {
   a.click();
   URL.revokeObjectURL(url);
 }
-
-// --- authoring helpers -----------------------------------------------------
 
 let seq = 0;
 /** Client-side identity for a draft parameter — survives renames. */

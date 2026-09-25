@@ -1,15 +1,6 @@
-/**
- * The schema being authored, plus the values for the next build.
- *
- * Both live in one hook on purpose: it is what lets the editor show a live
- * preview of the form while you shape it.
- *
- * Style note: the mutators read `fields` from the closure rather than using a
- * functional updater. They touch two pieces of state at once (schema and
- * values), and a `setState` updater must stay pure — StrictMode invokes it
- * twice, which would run a rename's value migration against already-migrated
- * state and drop the value.
- */
+// The schema being authored plus the values for the next build, together so the editor can preview live.
+// Mutators read `fields` from the closure: they update schema and values at once, and a setState
+// updater runs twice under StrictMode, which would migrate a renamed value twice.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { initialValue, initialValues, typeDef, validateAll } from './registry';
 import { envFromName, newDraftId } from './yaml';
@@ -36,16 +27,13 @@ export function useSchemaDraft(source: ParameterField[]) {
   const [values, setValues] = useState<Record<string, ParameterValue>>(() => initialValues(source));
   const [submitted, setSubmitted] = useState(false);
 
-  // Reseed when the definition itself changes (a refetch after a Git sync).
-  // Keyed on content, not array identity: an equal-but-new array from a
-  // background refetch must not wipe what the user has typed.
+  // Reseed on content, not identity, so a background refetch does not wipe what was typed.
   const sourceKey = useMemo(() => JSON.stringify(source), [source]);
   useEffect(() => {
     setFields(withIds(source));
     setValues(initialValues(source));
     setSubmitted(false);
-    // `source` is covered by sourceKey; depending on it directly would defeat
-    // the content check above.
+    // sourceKey stands in for source.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceKey]);
 
@@ -83,8 +71,7 @@ export function useSchemaDraft(source: ParameterField[]) {
 
       setValues((vs) => {
         const next = { ...vs };
-        // A rename carries the value across so the form does not blank out
-        // mid-edit; a type change invalidates the value's shape, so it resets.
+        // A rename carries the value across; a type change resets it.
         const carried = next[before.name];
         if (renamed) delete next[before.name];
         next[after.name] = retyped ? initialValue(after) : (carried ?? initialValue(after));
@@ -165,8 +152,7 @@ export function useSchemaDraft(source: ParameterField[]) {
   }, []);
 
   const localErrors = useMemo(() => validateAll(fields, values), [fields, values]);
-  // Errors stay quiet until the first submit — a form that shouts before you
-  // have touched it reads as broken.
+  // Errors stay quiet until the first submit.
   const valid = Object.keys(localErrors).length === 0;
 
   /** True once the draft schema differs from what Git gave us. */

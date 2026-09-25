@@ -6,13 +6,7 @@ export interface ThemeToggleProps {
   className?: string;
 }
 
-/**
- * A straight light/dark flip.
- *
- * The three-way choice (light, dark, follow the system) lives in Settings; in
- * the rail a single click is what an operator wants when the room's light
- * changes, not a menu.
- */
+/** A straight light/dark flip; the follow-system option lives in Settings. */
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { resolved, toggle } = useTheme();
   const dark = resolved === 'dark';

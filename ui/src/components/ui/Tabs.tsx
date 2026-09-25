@@ -73,10 +73,7 @@ export interface LinkTabsProps {
   className?: string;
 }
 
-/**
- * The same tabs as links. A job's Builds / Run / Definition views are separate
- * URLs so they can be shared and reloaded, which local tab state cannot do.
- */
+/** The same tabs as links, for views that must be shareable URLs. */
 export function LinkTabs({ items, className }: LinkTabsProps) {
   return (
     <nav className={cn('flex gap-6', className)}>

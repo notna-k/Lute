@@ -33,14 +33,7 @@ export interface SidebarProps {
   className?: string;
 }
 
-/**
- * The one piece of permanent navigation.
- *
- * It collapses to a 56px icon rail because the pages it leads to are wide —
- * a build log next to its step list needs the horizontal space more than the
- * nav needs its labels. Collapsed, every target keeps a tooltip and the counts
- * survive as a marker dot, so nothing is only available when expanded.
- */
+/** The permanent navigation; collapses to a 56px icon rail that keeps tooltips and count dots. */
 export function Sidebar({
   expanded,
   onToggle,
@@ -81,8 +74,7 @@ export function Sidebar({
             'max-md:hidden',
             expanded
               ? 'ml-auto'
-              : // Collapsed, the toggle would crowd the logo, so it surfaces on
-                // hover as a floating affordance instead.
+              : // Collapsed, the toggle would crowd the logo, so it floats in on hover.
                 'absolute left-3 top-[54px] z-[3] h-6 w-6 border border-border bg-surface opacity-0 transition-opacity focus-visible:opacity-100 group-hover/sidebar:opacity-100',
           )}
         >

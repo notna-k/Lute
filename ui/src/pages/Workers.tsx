@@ -1,12 +1,4 @@
-/**
- * The worker fleet.
- *
- * Two questions get asked here, and the bar splits them: *which machine* —
- * search, over name, description and address — and *which machines* — the
- * facets, over the labels and agent versions the fleet actually reports. Labels
- * are how jobs are routed, so "which machines would `gpu=true` land on" is
- * answered by picking a value rather than by recalling its spelling.
- */
+// The worker fleet. Facets offer the labels and versions workers actually report, since labels route jobs.
 import { useMemo, useState } from 'react';
 import { Plus, Server, Signal, Tag, Tags } from 'lucide-react';
 import { useDeleteWorker, useReEnableWorker, useUserWorkers } from '@/hooks/useWorkers';
@@ -54,7 +46,7 @@ const COMPARE: Record<SortKey, (a: Worker, b: Worker) => number> = {
   load: (a, b) => (metric(b, 'cpu_load') ?? -1) - (metric(a, 'cpu_load') ?? -1),
 };
 
-/** Stable empty list, so the filter memo does not re-run on every render. */
+/** Stable empty list, so the filter memo keeps its dependencies. */
 const NO_WORKERS: Worker[] = [];
 
 export default function Workers() {

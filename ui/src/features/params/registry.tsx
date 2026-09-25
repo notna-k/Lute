@@ -1,13 +1,5 @@
-/**
- * The input-type registry.
- *
- * Adding a type means adding one entry here (plus its control and, if it needs
- * one, its config editor) — and the matching case in
- * `api/internal/jobdefs/validate.go` plus its name in `KnownTypes`, since the
- * server is the one that finally accepts or rejects a payload. Nothing else in
- * the UI enumerates types: the form renderer, the schema editor, the
- * validator, the YAML writer and the env preview all go through this table.
- */
+// The input-type registry. A new type also needs its case in api/internal/jobdefs/validate.go
+// and its name in `KnownTypes`.
 import {
   Calendar,
   CalendarClock,
@@ -190,11 +182,7 @@ export function initialValues(fields: ParameterField[]): Record<string, Paramete
   return Object.fromEntries(fields.map((f) => [f.name, initialValue(f)]));
 }
 
-/**
- * Rebuilds form values from a previous build's stored env map. Fields the
- * build did not carry fall back to their default, so a schema that has since
- * gained a parameter still yields a complete form.
- */
+/** Rebuilds form values from a build's stored env; missing fields fall back to their default. */
 export function valuesFromEnv(
   fields: ParameterField[],
   env: Record<string, string> | undefined,
@@ -213,11 +201,7 @@ function isEmpty(value: ParameterValue | undefined): boolean {
   return value === '' || value === undefined || value === null;
 }
 
-/**
- * Mirrors `Validate` in api/internal/jobdefs/validate.go: same schema, same
- * rules, so a payload the panel accepts is a payload the API accepts. The
- * server remains the authority — this only saves a round trip.
- */
+/** Mirrors `Validate` in api/internal/jobdefs/validate.go; the server stays the authority. */
 export function validateAll(
   fields: ParameterField[],
   values: Record<string, ParameterValue>,
@@ -228,8 +212,7 @@ export function validateAll(
     if (field.type === 'secret') continue;
 
     const value = values[field.name];
-    // The server falls back to the declared default before deciding a field is
-    // missing, so an empty input with a default is not an error here either.
+    // The server applies the default before calling a field missing.
     if (isEmpty(value) && !isEmpty(field.default as ParameterValue)) continue;
     if (isEmpty(value)) {
       if (field.required) errors[field.name] = 'required';

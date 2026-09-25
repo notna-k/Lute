@@ -1,10 +1,4 @@
-/**
- * One execution — the engine-level view of a run.
- *
- * Same shape as a build page and for the same reason: the frame stays put and
- * the log gets the remaining height. The facts live in a strip above it, because
- * the question on this page is almost always "what does the log say".
- */
+// One execution: the engine-level view of a run, laid out like a build page.
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';

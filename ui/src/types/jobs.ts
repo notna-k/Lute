@@ -1,10 +1,4 @@
-/**
- * Job definitions and their parameter schema.
- *
- * Mirrors the model in PRODUCT.md: a Job is a reusable definition, Git-sourced
- * whose `parameters` schema both renders the trigger UI and validates payloads
- * server-side. Types here are the UI-facing shape the backend will serve.
- */
+// Job definitions and their parameter schema, as the Core API serves them.
 
 export type ParameterType =
   | 'string'
@@ -49,11 +43,8 @@ interface JobSource {
 }
 
 /**
- * How a definition relates to Git (api/internal/db/models/job_definition.go):
- *  - synced:   matches its YAML file
- *  - modified: edited in the panel; stands until the file changes in Git
- *  - manual:   created in the panel, never in Git
- *  - removed:  its file was deleted from Git; kept because pruning is off
+ * Relation to Git (api/internal/db/models/job_definition.go): `modified` stands until the file
+ * changes, `manual` was created in the panel, `removed` is kept because pruning is off.
  */
 export type GitState = 'synced' | 'modified' | 'manual' | 'removed';
 
@@ -90,10 +81,7 @@ export interface Build {
   environment?: string;
   startedAt: number;
   durationMs?: number;
-  /**
-   * Resolved values this build ran with, keyed by env var (never secrets).
-   * Lets the panel prefill a new build from a previous one.
-   */
+  /** Resolved values keyed by env var (never secrets), used to prefill a new build. */
   params?: Record<string, string>;
   /** True when this build ran a panel-edited schema, not the committed one. */
   adHoc?: boolean;

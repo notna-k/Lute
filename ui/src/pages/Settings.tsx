@@ -1,10 +1,4 @@
-/**
- * Operator settings.
- *
- * One layout throughout: a labelled row on the left, its control on the right.
- * Every setting reads the same way, and a new one is a row rather than a new card
- * with its own idea of how a form looks.
- */
+// Operator settings, one labelled row per setting.
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
@@ -27,7 +21,6 @@ import {
 } from '@/services/apiKeyService';
 import { timestamp, toEpochMs } from '@/lib/format';
 
-/** A labelled setting row: what it does on the left, the control on the right. */
 function SettingRow({
   label,
   hint,
@@ -296,8 +289,7 @@ export default function Settings() {
                           variant='danger'
                           size='sm'
                           disabled={revokeMut.isPending}
-                          // Revoking cannot be undone, and whatever is holding
-                          // the key stops working the moment it lands.
+                          // Revoking is immediate and cannot be undone.
                           onClick={() => {
                             if (
                               window.confirm(
