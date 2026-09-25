@@ -239,16 +239,20 @@ func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (stri
 	}
 
 	exec, err := h.jobExecRepo.GetByJobID(ctx, job.ID)
-	if err != nil {
-		if errors.Is(err, repos.ErrNotFound) {
-			return "", errors.New("no execution record for this job; logs are only available after a run or while running on a worker")
-		}
+	if err != nil && !errors.Is(err, repos.ErrNotFound) {
 		return "", err
 	}
-	if exec.WorkerID == "" {
-		return "", errors.New("execution record has no worker id")
+	if err == nil && exec.WorkerID != "" {
+		return exec.WorkerID, nil
 	}
-	return exec.WorkerID, nil
+
+	// No execution record yet — the job finished moments ago and the record is still
+	// being written, so falling back to the host it was dispatched to closes a window
+	// where a build reads as finished but its log answers 404.
+	if job.WorkerID != "" {
+		return job.WorkerID, nil
+	}
+	return "", errors.New("no execution record for this job; logs are only available after a run or while running on a worker")
 }
 
 type QueueHandler struct {

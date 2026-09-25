@@ -89,8 +89,12 @@ const recentWindow = 16
 type buildDTO struct {
 	// ID is the short, human-facing build reference (#a1b2c3d4).
 	ID string `json:"id"`
-	// RunID is the full run identifier — use this to address the build in APIs.
-	RunID       string `json:"runId"`
+	// RunID is the full run identifier — use this to address the build in the runs API.
+	RunID string `json:"runId"`
+	// JobID addresses this build in the queue and log APIs (/jobs/:id/...). It is a
+	// different identifier from RunID, and the two are not interchangeable: sending
+	// a run id to a jobs endpoint is a 404.
+	JobID       string `json:"jobId"`
 	JobSlug     string `json:"jobSlug"`
 	Status      string `json:"status"`
 	Environment string `json:"environment,omitempty"`
@@ -527,6 +531,7 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 	b := buildDTO{
 		ID:          shortID(run.ID),
 		RunID:       run.ID.Hex(),
+		JobID:       run.JobID,
 		JobSlug:     run.JobSlug,
 		Status:      "queued",
 		Environment: run.Environment,
@@ -547,6 +552,11 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 		}
 		if job.StartedAt > 0 {
 			b.StartedAt = job.StartedAt * 1000
+		}
+		// The queue knows how long a finished attempt took, which is what lets a build
+		// report its duration in the window before its execution record is written.
+		if job.ElapsedMs > 0 {
+			b.DurationMs = job.ElapsedMs
 		}
 	}
 	if exec != nil {

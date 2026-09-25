@@ -81,8 +81,10 @@ export type BuildStatus = 'running' | 'passed' | 'failed' | 'queued' | 'aborted'
 
 export interface Build {
   id: string;
-  /** Full run identifier — use this to address the build in APIs. */
+  /** Full run identifier — use this to address the build in the runs API. */
   runId?: string;
+  /** Queue job identifier — use this for the queue and log endpoints (/jobs/:id/...). */
+  jobId?: string;
   jobSlug: string;
   status: BuildStatus;
   environment?: string;
