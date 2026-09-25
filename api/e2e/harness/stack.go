@@ -164,7 +164,6 @@ func (s *Stack) start() {
 		WorkerRepo:         deps.WorkerRepo,
 		UserRepo:           deps.UserRepo,
 		CommandRepo:        deps.CommandRepo,
-		UptimeSnapshotRepo: deps.UptimeSnapshotRepo,
 		WorkerSnapshotRepo: deps.WorkerSnapshotRepo,
 		JobExecutionRepo:   deps.JobExecutionRepo,
 		APIKeyRepo:         deps.APIKeyRepo,

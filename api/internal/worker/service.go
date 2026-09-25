@@ -79,7 +79,3 @@ func (s *WorkerService) Delete(ctx context.Context, wid id.ID, userID id.ID) err
 func (s *WorkerService) UpdateStatus(ctx context.Context, wid id.ID, status string) error {
 	return s.workerRepo.UpdateStatus(ctx, wid, status)
 }
-
-func (s *WorkerService) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {
-	return s.workerRepo.FindByAgentID(ctx, agentID)
-}

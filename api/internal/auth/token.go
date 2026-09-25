@@ -50,7 +50,6 @@ func NewTokenService(secret string, accessTTL, refreshTTL time.Duration, issuer 
 	}, nil
 }
 
-func (s *TokenService) AccessTTL() time.Duration  { return s.accessTTL }
 func (s *TokenService) RefreshTTL() time.Duration { return s.refreshTTL }
 
 // SignAccess issues a short-lived access JWT for the given user.

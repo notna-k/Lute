@@ -18,7 +18,6 @@ func ApplySecondaryIndexes(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_created ON api_keys(user_id, created_at DESC)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_worker_snapshots_worker_at ON worker_snapshots(worker_id, at)`,
-		`CREATE INDEX IF NOT EXISTS idx_uptime_snapshots_user_at ON uptime_snapshots(user_id, at)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_executions_finished ON job_executions(finished_at)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry ON webhook_deliveries(status, next_retry_at)`,

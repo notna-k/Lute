@@ -315,11 +315,6 @@ func (c *Client) PatchLabels(id string, labels map[string]string) (Worker, error
 		map[string]any{"labels": labels})
 }
 
-// GetLabels returns a worker's labels.
-func (c *Client) GetLabels(id string) (map[string]string, error) {
-	return callField[map[string]string](c, http.MethodGet, "/api/v1/workers/"+id+"/labels", "labels", nil)
-}
-
 // DeleteWorker removes a worker, asking a live agent to stop.
 func (c *Client) DeleteWorker(id string) error {
 	_, _, err := c.request(http.MethodDelete, "/api/v1/workers/"+id, nil)
@@ -369,12 +364,6 @@ func (c *Client) ExportJobDef(slug string) (string, error) {
 	return string(raw), err
 }
 
-// ExportJobDefs returns every definition as YAML.
-func (c *Client) ExportJobDefs() (string, error) {
-	_, raw, err := c.request(http.MethodGet, "/api/v1/job-definitions/export", nil)
-	return string(raw), err
-}
-
 // ExportJobDefsZip returns the export archive.
 func (c *Client) ExportJobDefsZip() ([]byte, error) {
 	_, raw, err := c.request(http.MethodGet, "/api/v1/job-definitions/export.zip", nil)
@@ -414,12 +403,6 @@ func (c *Client) GetJob(id string) (Job, error) {
 // CancelJob drops a job that has not been dispatched.
 func (c *Client) CancelJob(id string) error {
 	_, _, err := c.request(http.MethodDelete, "/api/v1/jobs/"+id, nil)
-	return err
-}
-
-// RetryJob re-enqueues a job from the start.
-func (c *Client) RetryJob(id string) error {
-	_, _, err := c.request(http.MethodPost, "/api/v1/jobs/"+id+"/retry", nil)
 	return err
 }
 
@@ -487,11 +470,6 @@ func (c *Client) RetryDLQ(queue string) (int, error) {
 
 // ── settings and keys ─────────────────────────────────────────────────────────
 
-// GetSettings returns the operator switches.
-func (c *Client) GetSettings() (Settings, error) {
-	return call[Settings](c, http.MethodGet, "/api/v1/settings", nil)
-}
-
 // UpdateSettings writes the provided switches and returns the resulting state.
 func (c *Client) UpdateSettings(update SettingsUpdate) (Settings, error) {
 	return call[Settings](c, http.MethodPut, "/api/v1/settings", update)
@@ -500,11 +478,6 @@ func (c *Client) UpdateSettings(update SettingsUpdate) (Settings, error) {
 // CreateAPIKey mints a key; the token is returned once.
 func (c *Client) CreateAPIKey(name string) (APIKey, error) {
 	return call[APIKey](c, http.MethodPost, "/api/v1/api-keys", map[string]string{"name": name})
-}
-
-// ListAPIKeys returns the caller's keys without their tokens.
-func (c *Client) ListAPIKeys() ([]APIKey, error) {
-	return callField[[]APIKey](c, http.MethodGet, "/api/v1/api-keys", "api_keys", nil)
 }
 
 // RevokeAPIKey disables a key.
@@ -528,18 +501,6 @@ func (c *Client) GetRun(id string) (Run, error) {
 // ListRuns returns the caller's runs.
 func (c *Client) ListRuns() ([]Run, error) {
 	return callField[[]Run](c, http.MethodGet, "/api/public/v1/runs", "runs", nil)
-}
-
-// CancelRun drops a run that has not started.
-func (c *Client) CancelRun(id string) error {
-	_, _, err := c.request(http.MethodDelete, "/api/public/v1/runs/"+id, nil)
-	return err
-}
-
-// RetryRun re-enqueues a finished run.
-func (c *Client) RetryRun(id string) error {
-	_, _, err := c.request(http.MethodPost, "/api/public/v1/runs/"+id+"/retry", nil)
-	return err
 }
 
 // RunLogs reads a chunk of a run's log.

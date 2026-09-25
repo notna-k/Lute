@@ -60,18 +60,3 @@ func (r *RefreshTokenRepository) RevokeFamily(ctx context.Context, familyID id.I
 		Where("family_id = ? AND revoked_at IS NULL", familyID.Hex()).
 		Updates(map[string]interface{}{"revoked_at": now, "updated_at": now}).Error)
 }
-
-// RevokeAllForUser revokes every active family for a user (e.g. on password change).
-func (r *RefreshTokenRepository) RevokeAllForUser(ctx context.Context, userID id.ID) error {
-	now := time.Now().UTC().UnixMilli()
-	return mapErr(r.q(ctx).Model(&models.RefreshToken{}).
-		Where("user_id = ? AND revoked_at IS NULL", userID.Hex()).
-		Updates(map[string]interface{}{"revoked_at": now, "updated_at": now}).Error)
-}
-
-// DeleteExpired prunes rows whose expires_at has passed by more than the grace window.
-// Safe to run periodically.
-func (r *RefreshTokenRepository) DeleteExpired(ctx context.Context, graceBefore time.Time) error {
-	cutoff := graceBefore.UTC().UnixMilli()
-	return mapErr(r.q(ctx).Where("expires_at < ?", cutoff).Delete(&models.RefreshToken{}).Error)
-}

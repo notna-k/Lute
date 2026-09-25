@@ -134,14 +134,3 @@ func (es *EventStream) WaitForEvent(timeout time.Duration, jobID, eventType stri
 func (es *EventStream) Send(payload string) error {
 	return es.conn.WriteMessage(gorillaWS.TextMessage, []byte(payload))
 }
-
-// Count returns how many events of a type have arrived, across all jobs.
-func (es *EventStream) Count(eventType string) int {
-	n := 0
-	for _, ev := range es.Events() {
-		if ev.Type == eventType {
-			n++
-		}
-	}
-	return n
-}

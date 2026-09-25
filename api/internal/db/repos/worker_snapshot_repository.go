@@ -4,48 +4,12 @@ import (
 	"context"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/types"
-	"gorm.io/gorm"
 )
-
-type UptimeSnapshotRepository struct {
-	g *gorm.DB
-}
-
-func NewUptimeSnapshotRepository(db *gorm.DB) *UptimeSnapshotRepository {
-	return &UptimeSnapshotRepository{g: db}
-}
-
-func (r *UptimeSnapshotRepository) q(ctx context.Context) *gorm.DB {
-	return r.g.WithContext(ctx)
-}
-
-func (r *UptimeSnapshotRepository) Insert(ctx context.Context, userID id.ID, at time.Time, alive, dead, total int) error {
-	row := &models.UptimeSnapshot{
-		UserID: userID,
-		At:     types.NewMilliTime(at),
-		Alive:  alive,
-		Dead:   dead,
-		Total:  total,
-	}
-	return r.q(ctx).Create(row).Error
-}
-
-func (r *UptimeSnapshotRepository) GetByUserID(ctx context.Context, userID id.ID, since time.Time) ([]*models.UptimeSnapshot, error) {
-	var out []*models.UptimeSnapshot
-	err := r.q(ctx).
-		Where("user_id = ? AND at >= ?", userID.Hex(), since.UnixMilli()).
-		Order("at ASC").
-		Find(&out).Error
-	return out, err
-}
-
-// PruneOlderThan deletes uptime snapshots with timestamp before cutoff (retention).
-func (r *UptimeSnapshotRepository) PruneOlderThan(ctx context.Context, cutoff time.Time) error {
-	return r.q(ctx).Where("at < ?", cutoff.UnixMilli()).Delete(&models.UptimeSnapshot{}).Error
-}
 
 type WorkerSnapshotRepository struct {
 	g *gorm.DB
@@ -88,7 +52,6 @@ func (r *WorkerSnapshotRepository) GetByWorkerIDs(ctx context.Context, workerIDs
 	return out, err
 }
 
-// PruneOlderThan deletes worker snapshots with timestamp before cutoff (retention).
 func (r *WorkerSnapshotRepository) PruneOlderThan(ctx context.Context, cutoff time.Time) error {
 	return r.q(ctx).Where("at < ?", cutoff.UnixMilli()).Delete(&models.WorkerSnapshot{}).Error
 }

@@ -13,7 +13,6 @@ func RegisteredModels() []any {
 		&models.RefreshToken{},
 		&models.Worker{},
 		&models.Command{},
-		&models.UptimeSnapshot{},
 		&models.WorkerSnapshot{},
 		&models.JobExecution{},
 		&models.APIKey{},

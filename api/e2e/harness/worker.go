@@ -94,11 +94,6 @@ func WithConcurrency(n int) AgentOption {
 	return func(o *agentOpts) { o.concurrency = n }
 }
 
-// WithJobLogsDir puts the agent's job logs somewhere the test already knows about.
-func WithJobLogsDir(dir string) AgentOption {
-	return func(o *agentOpts) { o.logsDir = dir }
-}
-
 // StartAgent runs `lute-worker run` against this stack and stops it on cleanup.
 func (s *Stack) StartAgent(workerID string, options ...AgentOption) *Agent {
 	s.t.Helper()
@@ -165,12 +160,6 @@ func (a *Agent) Kill() {
 	a.WaitExit(10 * time.Second)
 }
 
-// Stop asks the agent to shut down the way a service manager would.
-func (a *Agent) Stop() {
-	a.t.Helper()
-	a.signal(syscall.SIGTERM)
-}
-
 // WaitExit fails the test if the agent has not exited within timeout.
 func (a *Agent) WaitExit(timeout time.Duration) {
 	a.t.Helper()
@@ -201,11 +190,6 @@ func (a *Agent) ExitError() error {
 		return nil
 	}
 	return a.err
-}
-
-// JobLogPath is where the agent writes a build's log file.
-func (a *Agent) JobLogPath(jobID string) string {
-	return filepath.Join(a.LogsDir, "job-"+jobID+".log")
 }
 
 func (a *Agent) signal(sig syscall.Signal) {

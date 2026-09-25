@@ -47,7 +47,6 @@ type Deps struct {
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository
-	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
 	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
 	JobExecutionRepo   *repos.JobExecutionRepository
 	APIKeyRepo         *repos.APIKeyRepository
@@ -78,7 +77,6 @@ func New(d Deps) *Server {
 		WorkerRepo:         d.WorkerRepo,
 		UserRepo:           d.UserRepo,
 		CommandRepo:        d.CommandRepo,
-		UptimeSnapshotRepo: d.UptimeSnapshotRepo,
 		WorkerSnapshotRepo: d.WorkerSnapshotRepo,
 		JobExecutionRepo:   d.JobExecutionRepo,
 		APIKeyRepo:         d.APIKeyRepo,

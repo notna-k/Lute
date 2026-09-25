@@ -158,20 +158,3 @@ func WaitExecution(c *Client, jobID string, timeout time.Duration) Execution {
 			return Execution{}, false
 		})
 }
-
-// WaitLogLine blocks until a build's log contains a line matching want.
-func WaitLogLine(c *Client, jobID string, timeout time.Duration, contains func(string) bool) []string {
-	return Eventually(c.t, timeout, "a matching line in the log of "+jobID,
-		func() ([]string, bool) {
-			page, err := c.JobLogs(jobID, LogOptions{Limit: 200})
-			if err != nil {
-				return nil, false
-			}
-			for _, line := range page.Lines {
-				if contains(line) {
-					return page.Lines, true
-				}
-			}
-			return page.Lines, false
-		})
-}

@@ -86,16 +86,6 @@ func (w *RawWorker) ReportResult(jobID string, success bool, errMsg string, elap
 	})
 }
 
-// Pong answers a heartbeat, so core counts this worker as alive.
-func (w *RawWorker) Pong() error {
-	return w.send(&pb.WorkerMessage{
-		WorkerId: w.WorkerID,
-		Payload: &pb.WorkerMessage_HeartbeatPong{
-			HeartbeatPong: &pb.HeartbeatPong{Status: "running", Timestamp: time.Now().Unix()},
-		},
-	})
-}
-
 // Close drops the stream, which is what core sees when a host disappears.
 func (w *RawWorker) Close() {
 	if w.conn != nil {
@@ -129,20 +119,6 @@ func (w *RawWorker) Drains() []*pb.DrainSignal {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]*pb.DrainSignal(nil), w.drains...)
-}
-
-// LogRequests returns the log reads core has asked this worker to perform.
-func (w *RawWorker) LogRequests() []*pb.JobLogRequest {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return append([]*pb.JobLogRequest(nil), w.logRequests...)
-}
-
-// Pings counts the heartbeats core has sent.
-func (w *RawWorker) Pings() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.pings
 }
 
 // RecvError is the error that ended the stream, or nil while it is open.

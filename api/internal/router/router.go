@@ -29,7 +29,6 @@ type SetupRouterDeps struct {
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository
-	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
 	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
 	JobExecutionRepo   *repos.JobExecutionRepository
 	APIKeyRepo         *repos.APIKeyRepository

@@ -25,7 +25,6 @@ type Dependencies struct {
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository
-	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
 	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
 	JobExecutionRepo   *repos.JobExecutionRepository
 	APIKeyRepo         *repos.APIKeyRepository
@@ -91,7 +90,6 @@ func InitializeWith(cfg *config.Config) (*Dependencies, error) {
 		WorkerRepo:         reposInit.WorkerRepo,
 		UserRepo:           reposInit.UserRepo,
 		CommandRepo:        reposInit.CommandRepo,
-		UptimeSnapshotRepo: reposInit.UptimeSnapshotRepo,
 		WorkerSnapshotRepo: reposInit.WorkerSnapshotRepo,
 		JobExecutionRepo:   reposInit.JobExecutionRepo,
 		APIKeyRepo:         reposInit.APIKeyRepo,
@@ -163,7 +161,6 @@ type Repositories struct {
 	WorkerRepo         *repos.WorkerRepository
 	UserRepo           *repos.UserRepository
 	CommandRepo        *repos.CommandRepository
-	UptimeSnapshotRepo *repos.UptimeSnapshotRepository
 	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
 	JobExecutionRepo   *repos.JobExecutionRepository
 	APIKeyRepo         *repos.APIKeyRepository
@@ -178,7 +175,6 @@ func initializeRepositories(db *connection.Database) *Repositories {
 		WorkerRepo:         repos.NewWorkerRepository(db.DB),
 		UserRepo:           repos.NewUserRepository(db.DB),
 		CommandRepo:        repos.NewCommandRepository(db.DB),
-		UptimeSnapshotRepo: repos.NewUptimeSnapshotRepository(db.DB),
 		WorkerSnapshotRepo: repos.NewWorkerSnapshotRepository(db.DB),
 		JobExecutionRepo:   repos.NewJobExecutionRepository(db.DB),
 		APIKeyRepo:         repos.NewAPIKeyRepository(db.DB),
