@@ -6,6 +6,18 @@ import (
 	"testing"
 )
 
+func TestPath(t *testing.T) {
+	got, err := Path("/logs", "abc-123")
+	if err != nil || got != "/logs/job-abc-123.log" {
+		t.Errorf("Path = %q, %v", got, err)
+	}
+	for _, id := range []string{"", "a/b", "x/../../etc/passwd"} {
+		if _, err := Path("/logs", id); err == nil {
+			t.Errorf("Path(%q) accepted an id that is not a plain file name", id)
+		}
+	}
+}
+
 func TestReadTail_basic(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "job-x.log")

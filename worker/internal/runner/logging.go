@@ -2,64 +2,43 @@ package runner
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
+
+	"github.com/lute/worker/internal/joblog"
 )
 
-// Source values for JSON log lines (job log file).
+// Values of the "source" attribute on job log lines.
 const (
-	LogSourceSystem    = "system"
-	LogSourceContainer = "container"
-	LogLevel           = slog.LevelDebug
+	sourceSystem    = "system"
+	sourceContainer = "container"
 )
 
-// logSystem writes the same record to the process default logger (e.g. stderr) and to jobLogger (job file).
+// logSystem writes a record to both the agent's own log and the job log.
 func logSystem(jobLogger *slog.Logger, level slog.Level, msg string, args ...any) {
-	a := append([]any{slog.String("source", LogSourceSystem)}, args...)
+	a := append([]any{slog.String("source", sourceSystem)}, args...)
 	slog.Log(context.Background(), level, msg, a...)
 	jobLogger.Log(context.Background(), level, msg, a...)
 }
 
-// ValidateJobLogDir returns an error if dir is not an existing directory.
-func ValidateJobLogDir(dir string) error {
-	if dir == "" {
-		return nil
-	}
-	st, err := os.Stat(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("job log directory does not exist: %s", dir)
-		}
-		return fmt.Errorf("job log directory: %w", err)
-	}
-	if !st.IsDir() {
-		return fmt.Errorf("job log path is not a directory: %s", dir)
-	}
-	return nil
-}
-
-// openJobLog returns a JSON slog.Logger that always writes to a file when logDir is set
-// (job-{jobID}.log). When logDir is empty, logs are discarded; close is a no-op.
-// Defer close after open so the file is synced and closed.
-func openJobLog(logDir, jobID string) (jobLogger *slog.Logger, close func(), err error) {
-	opts := &slog.HandlerOptions{Level: LogLevel}
+// openJobLog returns a JSON logger writing to the job's log file in logDir, or discarding when logDir is empty.
+func openJobLog(logDir, jobID string) (jobLogger *slog.Logger, closeLog func(), err error) {
+	opts := &slog.HandlerOptions{Level: slog.LevelDebug}
 	if logDir == "" {
 		return slog.New(slog.NewJSONHandler(io.Discard, opts)), func() {}, nil
 	}
-	if err := ValidateJobLogDir(logDir); err != nil {
-		return nil, nil, err
-	}
-	f, err := os.Create(filepath.Join(logDir, "job-"+jobID+".log"))
+	path, err := joblog.Path(logDir, jobID)
 	if err != nil {
 		return nil, nil, err
 	}
-	jobLogger = slog.New(slog.NewJSONHandler(f, opts))
-	close = func() {
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	closeLog = func() {
 		_ = f.Sync()
 		_ = f.Close()
 	}
-	return jobLogger, close, nil
+	return slog.New(slog.NewJSONHandler(f, opts)), closeLog, nil
 }

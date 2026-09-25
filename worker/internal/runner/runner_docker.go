@@ -126,7 +126,7 @@ func (w *lineLogWriter) Write(p []byte) (int, error) {
 		}
 		line := string(w.buf[:i])
 		w.buf = w.buf[i+1:]
-		w.jobLogger.Info(line, slog.String("source", LogSourceContainer))
+		w.jobLogger.Info(line, slog.String("source", sourceContainer))
 	}
 	return len(p), nil
 }
@@ -135,7 +135,7 @@ func (w *lineLogWriter) flush() {
 	if len(w.buf) == 0 {
 		return
 	}
-	w.jobLogger.Info(string(w.buf), slog.String("source", LogSourceContainer))
+	w.jobLogger.Info(string(w.buf), slog.String("source", sourceContainer))
 	w.buf = nil
 }
 

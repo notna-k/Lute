@@ -2,71 +2,34 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
-	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
-
-	"github.com/lute/worker/internal/handler"
-	"github.com/lute/worker/internal/heartbeat"
-	"github.com/lute/worker/internal/joblog"
+	"github.com/lute/worker/internal/agent"
 	"github.com/lute/worker/internal/setup"
-
-	pb "github.com/lute/proto"
 )
 
+// Set at build time via -ldflags.
 var (
 	Version   = "dev"
 	BuildTime = "unknown"
 )
 
-const (
-	defaultAPIURL      = "http://localhost:8080"
-	defaultGRPCAddr    = "localhost:50051"
-	defaultQueues      = "default"
-	defaultConcurrency = 10
-	defaultJobLogsDir  = "lute-job-logs"
-)
-
-type runFlags struct {
-	serverAddr  string
-	workerID    string
-	queues      string
-	concurrency int
-	jobLogsDir  string
-}
-
-type setupFlags struct {
-	apiURL    string
-	claimCode string
-}
-
 func main() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	if len(os.Args) < 2 {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
 
-	cmd := os.Args[1]
-	args := os.Args[2:]
-
+	cmd, args := os.Args[1], os.Args[2:]
 	switch cmd {
 	case "run":
 		cmdRun(args)
@@ -115,405 +78,96 @@ Use "lute-worker <command> -h" for flags specific to a command.
 `, Version)
 }
 
-// ---------- run ----------
-
 func cmdRun(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	f := &runFlags{}
-	fs.StringVar(&f.serverAddr, "server", defaultGRPCAddr, "gRPC server address (host:port)")
-	fs.StringVar(&f.workerID, "worker-id", "", "Worker ID (required; obtain via `lute-worker setup`)")
-	fs.StringVar(&f.queues, "queues", defaultQueues, "Comma-separated list of queues to process")
-	fs.IntVar(&f.concurrency, "concurrency", defaultConcurrency, "Maximum concurrent jobs")
-	fs.StringVar(&f.jobLogsDir, "job-logs-dir", defaultJobLogsDir, "Directory for per-job log files")
+	server := fs.String("server", "localhost:50051", "gRPC server address (host:port)")
+	workerID := fs.String("worker-id", "", "Worker ID (required; obtain via `lute-worker setup`)")
+	queues := fs.String("queues", "default", "Comma-separated list of queues to process")
+	concurrency := fs.Int("concurrency", 10, "Maximum concurrent jobs")
+	jobLogsDir := fs.String("job-logs-dir", "lute-job-logs", "Directory for per-job log files")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintln(fs.Output(), "Usage: lute-worker run [flags]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
 
-	if f.workerID == "" {
-		fmt.Fprintln(os.Stderr, "error: --worker-id is required. Run `lute-worker setup --claim-code <CODE>` first.")
-		os.Exit(2)
+	if *workerID == "" {
+		fatal(2, "--worker-id is required. Run `lute-worker setup --claim-code <CODE>` first.")
+	}
+	if *concurrency < 1 || *concurrency > 1<<16 {
+		fatal(2, "--concurrency must be between 1 and 65536")
+	}
+	if *jobLogsDir != "" {
+		if err := os.MkdirAll(*jobLogsDir, 0o755); err != nil {
+			fatal(1, fmt.Sprintf("cannot create job logs directory: %v", err))
+		}
 	}
 
-	runWorker(f)
-}
+	cfg := agent.Config{
+		ServerAddr:  *server,
+		WorkerID:    *workerID,
+		Queues:      splitList(*queues),
+		Concurrency: int32(*concurrency),
+		JobLogsDir:  *jobLogsDir,
+	}
+	slog.Info("Lute Worker starting", "version", Version, "build", BuildTime)
+	slog.Info("worker config", "worker_id", cfg.WorkerID, "server", cfg.ServerAddr, "queues", cfg.Queues,
+		"concurrency", cfg.Concurrency, "job_logs_dir", cfg.JobLogsDir)
 
-// ---------- setup ----------
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	agent.Run(ctx, cfg)
+	slog.Info("Worker stopped")
+}
 
 func cmdSetup(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
-	f := &setupFlags{}
-	fs.StringVar(&f.apiURL, "api", defaultAPIURL, "HTTP API origin (scheme+host; registration POSTs to /api/public/v1/workers/bootstrap/register)")
-	fs.StringVar(&f.claimCode, "claim-code", "", "Claim code from the Add Worker dialog in the Lute UI (required)")
+	apiURL := fs.String("api", "http://localhost:8080", "HTTP API origin (scheme+host)")
+	claimCode := fs.String("claim-code", "", "Claim code from the Add Worker dialog in the Lute UI (required)")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintln(fs.Output(), "Usage: lute-worker setup --claim-code <CODE> [--api URL]")
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
 
-	if f.claimCode == "" {
-		fmt.Fprintln(os.Stderr, "error: --claim-code is required.")
-		fmt.Fprintln(os.Stderr, "Open the Add Worker dialog in the Lute UI (while logged in) and copy the full command.")
-		os.Exit(2)
+	if *claimCode == "" {
+		fatal(2, "--claim-code is required.\nOpen the Add Worker dialog in the Lute UI (while logged in) and copy the full command.")
 	}
-
-	if err := setup.Run(setup.Options{APIURL: f.apiURL, ClaimCode: f.claimCode, Version: Version, BuildTime: BuildTime}); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	err := setup.Run(setup.Options{APIURL: *apiURL, ClaimCode: *claimCode, Version: Version, BuildTime: BuildTime})
+	if err != nil {
+		fatal(1, err.Error())
 	}
 }
 
-// ---------- logs ----------
-
 func cmdLogs(args []string) {
 	fs := flag.NewFlagSet("logs", flag.ExitOnError)
-	follow := false
-	n := 100
+	var follow bool
 	fs.BoolVar(&follow, "follow", false, "Follow the daemon log as it grows (like tail -f)")
 	fs.BoolVar(&follow, "f", false, "Alias for -follow")
-	fs.IntVar(&n, "n", 100, "Number of lines to show from the end of the file")
+	lines := fs.Int("n", 100, "Number of lines to show from the end of the file")
 	fs.Usage = func() {
 		_, _ = fmt.Fprintln(fs.Output(), "Usage: lute-worker logs [-n N] [-f]")
-		_, _ = fmt.Fprintf(fs.Output(), "Reads %s — the same file `lute-worker setup` attaches the background worker's stdout/stderr to.\n", setup.DaemonLogPath())
+		_, _ = fmt.Fprintf(fs.Output(), "Reads %s, where `lute-worker setup` sends the background agent's output.\n", setup.DaemonLogPath())
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
 
-	path := setup.DaemonLogPath()
-	if err := showLog(path, n, follow); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	if err := showLog(setup.DaemonLogPath(), *lines, follow); err != nil {
+		fatal(1, err.Error())
 	}
 }
 
-func showLog(path string, lines int, follow bool) error {
-	if lines < 0 {
-		lines = 0
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
 	}
-	if lines > 0 {
-		res := joblog.ReadTail(path, lines, 0)
-		if res.Err != "" {
-			return errors.New(res.Err)
-		}
-		for _, line := range res.Lines {
-			fmt.Println(line)
-		}
-		if !follow {
-			return nil
-		}
-		return followFrom(path, res.FileSize)
-	}
-	return followFrom(path, 0)
+	return out
 }
 
-func followFrom(path string, startOffset int64) error {
-	for {
-		f, err := os.Open(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			return err
-		}
-		if startOffset > 0 {
-			if _, err := f.Seek(startOffset, io.SeekStart); err != nil {
-				_ = f.Close()
-				return err
-			}
-		}
-		if err := tailLoop(f); err != nil {
-			_ = f.Close()
-			return err
-		}
-		_ = f.Close()
-		startOffset = 0
-	}
-}
-
-func tailLoop(f *os.File) error {
-	buf := make([]byte, 4096)
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigs)
-	for {
-		select {
-		case <-sigs:
-			return nil
-		default:
-		}
-		n, err := f.Read(buf)
-		if n > 0 {
-			_, _ = os.Stdout.Write(buf[:n])
-		}
-		if err == io.EOF {
-			time.Sleep(300 * time.Millisecond)
-			continue
-		}
-		if err != nil {
-			return err
-		}
-	}
-}
-
-// ---------- worker main loop (shared) ----------
-
-func runWorker(f *runFlags) {
-	slog.Info("Lute Worker starting", "version", Version, "build", BuildTime)
-
-	queueList := strings.Split(f.queues, ",")
-	for i := range queueList {
-		queueList[i] = strings.TrimSpace(queueList[i])
-	}
-
-	handler.JobLogsDir = f.jobLogsDir
-
-	if f.jobLogsDir != "" {
-		if err := os.MkdirAll(f.jobLogsDir, 0755); err != nil {
-			slog.Error("Cannot create job logs directory", "dir", f.jobLogsDir, "err", err)
-			os.Exit(1)
-		}
-	}
-
-	slog.Info("worker config",
-		"worker_id", f.workerID,
-		"server", f.serverAddr,
-		"queues", queueList,
-		"concurrency", f.concurrency,
-		"job_logs_dir", f.jobLogsDir,
-	)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-quit
-		slog.Info("Shutting down worker...")
-		cancel()
-	}()
-
-	connectLoop(ctx, f.serverAddr, f.workerID, queueList, int32(f.concurrency), f.jobLogsDir)
-	slog.Info("Worker stopped")
-}
-
-// errShutdown is returned by runStream when the server has asked the worker to
-// exit its process (via DrainSignal.shutdown). connectLoop treats it as a
-// terminal, non-retryable condition.
-var errShutdown = errors.New("server requested worker shutdown")
-
-func connectLoop(ctx context.Context, serverAddr, workerID string, queues []string, concurrency int32, jobLogsDir string) {
-	backoff := time.Second
-
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		err := runStream(ctx, serverAddr, workerID, queues, concurrency, jobLogsDir)
-		if ctx.Err() != nil {
-			return
-		}
-		if errors.Is(err, errShutdown) {
-			slog.Info("Worker shutdown acknowledged, exiting")
-			return
-		}
-		if st, ok := status.FromError(err); ok {
-			switch st.Code() {
-			case codes.NotFound:
-				slog.Info("Server reports this worker no longer exists; exiting", "msg", st.Message())
-				return
-			case codes.FailedPrecondition:
-				slog.Info("Server rejected connection with a non-retryable condition; exiting", "msg", st.Message())
-				return
-			}
-		}
-
-		slog.Warn("Stream disconnected, reconnecting", "err", err, "backoff", backoff)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(backoff):
-		}
-
-		backoff *= 2
-		if backoff > 30*time.Second {
-			backoff = 30 * time.Second
-		}
-	}
-}
-
-func runStream(ctx context.Context, serverAddr, workerID string, queues []string, concurrency int32, jobLogsDir string) error {
-	conn, err := grpc.NewClient(serverAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		return fmt.Errorf("dial: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	client := pb.NewWorkerServiceClient(conn)
-	stream, err := client.Connect(ctx)
-	if err != nil {
-		return fmt.Errorf("open stream: %w", err)
-	}
-
-	if err := stream.Send(&pb.WorkerMessage{WorkerId: workerID}); err != nil {
-		return fmt.Errorf("send initial: %w", err)
-	}
-
-	if err := stream.Send(&pb.WorkerMessage{
-		WorkerId: workerID,
-		Payload: &pb.WorkerMessage_Register{
-			Register: &pb.WorkerRegistration{
-				Queues:      queues,
-				Concurrency: concurrency,
-			},
-		},
-	}); err != nil {
-		return fmt.Errorf("send registration: %w", err)
-	}
-
-	slog.Info("Connected", "server", serverAddr)
-
-	var sendMu sync.Mutex
-	var jobsWG sync.WaitGroup
-	draining := false
-	shutdownRequested := false
-
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if shutdownRequested {
-				jobsWG.Wait()
-				return errShutdown
-			}
-			return fmt.Errorf("recv: %w", err)
-		}
-
-		if ping := msg.GetHeartbeatPing(); ping != nil {
-			slog.Debug("Heartbeat ping received")
-			pongMsg := heartbeat.PongMessage(workerID)
-			sendMu.Lock()
-			err := stream.Send(pongMsg)
-			sendMu.Unlock()
-			if err != nil {
-				return fmt.Errorf("send pong: %w", err)
-			}
-		}
-
-		if logReq := msg.GetJobLogRequest(); logReq != nil {
-			req := logReq
-			go func() {
-				resp := buildJobLogResponse(jobLogsDir, req)
-				sendMu.Lock()
-				sendErr := stream.Send(&pb.WorkerMessage{
-					WorkerId: workerID,
-					Payload:  &pb.WorkerMessage_JobLogResponse{JobLogResponse: resp},
-				})
-				sendMu.Unlock()
-				if sendErr != nil {
-					slog.Error("Failed to send job log response", "request_id", req.RequestId, "err", sendErr)
-				}
-			}()
-		}
-
-		if assign := msg.GetAssign(); assign != nil {
-			if draining {
-				sendMu.Lock()
-				_ = stream.Send(&pb.WorkerMessage{
-					WorkerId: workerID,
-					Payload: &pb.WorkerMessage_Result{
-						Result: &pb.JobResult{
-							JobId:   assign.JobId,
-							Success: false,
-							Error:   "worker is draining",
-						},
-					},
-				})
-				sendMu.Unlock()
-				continue
-			}
-
-			jobsWG.Add(1)
-			go func(a *pb.JobAssignment) {
-				defer jobsWG.Done()
-				start := time.Now()
-				jobErr := handler.Execute(ctx, a.JobId, a.Type, a.Payload, a.TimeoutSec)
-				elapsed := time.Since(start).Milliseconds()
-
-				result := &pb.JobResult{
-					JobId:     a.JobId,
-					Success:   jobErr == nil,
-					ElapsedMs: elapsed,
-				}
-				if jobLogsDir != "" {
-					result.LogFile = "job-" + a.JobId + ".log"
-				}
-				if jobErr != nil {
-					result.Error = jobErr.Error()
-					slog.Warn("Job failed", "job_id", a.JobId, "err", jobErr)
-				} else {
-					slog.Info("Job completed", "job_id", a.JobId, "elapsed_ms", elapsed)
-				}
-
-				sendMu.Lock()
-				sendErr := stream.Send(&pb.WorkerMessage{
-					WorkerId: workerID,
-					Payload:  &pb.WorkerMessage_Result{Result: result},
-				})
-				sendMu.Unlock()
-				if sendErr != nil {
-					slog.Error("Failed to send job result", "job_id", a.JobId, "err", sendErr)
-				}
-			}(assign)
-		}
-
-		if drain := msg.GetDrain(); drain != nil {
-			draining = true
-			if drain.GetShutdown() {
-				if !shutdownRequested {
-					shutdownRequested = true
-					slog.Info("Shutdown signal received, finishing in-flight jobs then exiting")
-					go func() {
-						jobsWG.Wait()
-						_ = stream.CloseSend()
-					}()
-				}
-			} else {
-				slog.Info("Drain signal received, finishing in-flight jobs")
-			}
-		}
-	}
-}
-
-func buildJobLogResponse(jobLogsDir string, req *pb.JobLogRequest) *pb.JobLogResponse {
-	resp := &pb.JobLogResponse{
-		RequestId: req.RequestId,
-	}
-	if jobLogsDir == "" {
-		resp.Error = "job logs directory not configured on worker"
-		return resp
-	}
-	if req.JobId == "" {
-		resp.Error = "job_id is required"
-		return resp
-	}
-	path := filepath.Join(jobLogsDir, "job-"+req.JobId+".log")
-	limit := int(req.Limit)
-	var r joblog.Result
-	switch req.GetDirection() {
-	case pb.LogReadDirection_LOG_READ_HEAD:
-		r = joblog.ReadHead(path, limit, req.AnchorOffset)
-	default:
-		r = joblog.ReadTail(path, limit, req.AnchorOffset)
-	}
-	resp.Lines = r.Lines
-	resp.NextAnchor = r.NextAnchor
-	resp.FileSize = r.FileSize
-	resp.HasMore = r.HasMore
-	resp.Error = r.Err
-	return resp
+func fatal(code int, msg string) {
+	_, _ = fmt.Fprintln(os.Stderr, "error:", msg)
+	os.Exit(code)
 }

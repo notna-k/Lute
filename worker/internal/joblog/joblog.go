@@ -1,8 +1,10 @@
 package joblog
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 const (
@@ -13,6 +15,20 @@ const (
 	// readChunkSize is the buffer size for backward file reads.
 	readChunkSize = 256 * 1024
 )
+
+// FileName is the name of a job's log file inside the job logs directory.
+func FileName(jobID string) string {
+	return "job-" + jobID + ".log"
+}
+
+// Path is the job's log file in dir; it rejects ids that would place the file elsewhere.
+func Path(dir, jobID string) (string, error) {
+	name := FileName(jobID)
+	if jobID == "" || filepath.Base(name) != name {
+		return "", fmt.Errorf("invalid job id %q", jobID)
+	}
+	return filepath.Join(dir, name), nil
+}
 
 // Result is the outcome of reading a chunk of a job log file.
 type Result struct {

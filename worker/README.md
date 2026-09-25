@@ -1,16 +1,24 @@
 # Lute worker
 
-Go module `github.com/lute/worker`.
+Go module `github.com/lute/worker`: the `lute-worker` agent that runs jobs for the Lute core.
 
 ## Layout
 
-- **`cmd/worker/`** — `main` package (CLI entrypoint: `lute-worker`).
-- **`internal/`** — implementation packages not importable by other modules (`handler`, `heartbeat`, `metrics`, `runner`, `setup`, `utils`).
+- **`cmd/worker/`** — CLI entrypoint (`run`, `setup`, `logs`, `version`).
+- **`internal/agent`** — gRPC connect/reconnect loop, job dispatch, heartbeats, job-log reads.
+- **`internal/runner`** — runs a `container` job in Docker.
+- **`internal/joblog`** — per-job log files and paged reads.
+- **`internal/metrics`** — host metrics sent with heartbeats.
+- **`internal/setup`** — `lute-worker setup`: registers the host and starts the agent in the background.
 
-Build from the module root:
+## Usage
 
 ```bash
-go build -o lute-worker ./cmd/worker
+lute-worker setup --api http://localhost:8080 --claim-code <CODE>   # register and start in the background
+lute-worker run --server localhost:50051 --worker-id <ID>           # run a registered agent in the foreground
+lute-worker logs -f                                                 # follow the background agent's log
 ```
 
-Or `make worker-build` from the repository root.
+## Build
+
+`make worker-build` from the repository root, or `go build -o lute-worker ./cmd/worker` here.
