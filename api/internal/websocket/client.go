@@ -41,7 +41,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID string) *Client {
 // readPump pumps messages from the websocket connection to the hub
 func (c *Client) ReadPump(cfg *config.WebSocketConfig) {
 	defer func() {
-		c.hub.unregister <- c
+		c.hub.Unregister(c)
 		_ = c.conn.Close()
 	}()
 

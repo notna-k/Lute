@@ -1,133 +1,71 @@
+// Package server runs core: the HTTP API, the gRPC endpoint agents connect to, and
+// the background loops (queue sweep, heartbeats, snapshots, webhooks).
 package server
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 
-	"github.com/lute/api/internal/auth"
-	"github.com/lute/api/internal/config"
-	"github.com/lute/api/internal/db/connection"
-	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/grpc"
-	"github.com/lute/api/internal/jobdefs"
 	"github.com/lute/api/internal/queue"
 	"github.com/lute/api/internal/router"
+	"github.com/lute/api/internal/setup"
 	"github.com/lute/api/internal/webhooks"
 	"github.com/lute/api/internal/websocket"
 	"github.com/lute/api/internal/worker"
 )
 
 type Server struct {
-	HTTP              *http.Server
-	httpListener      net.Listener
-	GRPC              *grpc.Server
-	Hub               *websocket.Hub
-	HeartbeatChecker  *worker.HeartbeatChecker
-	WorkerSnapshotJob *worker.WorkerSnapshotJob
-	QueueScheduler    *queue.Scheduler
-	WebhookDispatcher *webhooks.Dispatcher
-	checkerCtx        context.Context
-	checkerStop       context.CancelFunc
-	snapshotJobCtx    context.Context
-	snapshotJobCancel context.CancelFunc
-	schedulerCtx      context.Context
-	schedulerCancel   context.CancelFunc
-	webhookCtx        context.Context
-	webhookCancel     context.CancelFunc
+	http         *http.Server
+	httpListener net.Listener
+	grpc         *grpc.Server
+	loops        []func(context.Context)
+
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
-// Deps aggregates the dependencies needed to construct a Server.
-type Deps struct {
-	Config             *config.Config
-	Database           *connection.Database
-	WorkerRepo         *repos.WorkerRepository
-	UserRepo           *repos.UserRepository
-	CommandRepo        *repos.CommandRepository
-	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
-	JobExecutionRepo   *repos.JobExecutionRepository
-	APIKeyRepo         *repos.APIKeyRepository
-	RunRepo            *repos.RunRepository
-	WebhookRepo        *repos.WebhookDeliveryRepository
-	JobDefRepo         *repos.JobDefinitionRepository
-	JobDefSyncer       *jobdefs.Syncer
-	SettingRepo        *repos.SettingRepository
-	QueueEngine        *queue.Engine
-	QueueScheduler     *queue.Scheduler
-	StatsAgg           *queue.Stats
-	TokenService       *auth.TokenService
-	AuthService        *auth.Service
-}
-
-func New(d Deps) *Server {
+func New(d *setup.Deps) *Server {
+	cfg := d.Config
 	hub := websocket.NewHub()
-	go hub.Run()
 
-	grpcServer := grpc.NewServer(d.Config, d.WorkerRepo, d.JobExecutionRepo, d.QueueEngine, d.StatsAgg, hub)
+	grpcServer := grpc.NewServer(cfg, d.Workers, d.JobExecutions, d.Queue, d.Stats, hub)
+	grpcServer.WebhookEmitter = webhooks.NewEmitter(d.Runs, d.Webhooks)
 
-	emitter := webhooks.NewEmitter(d.RunRepo, d.WebhookRepo)
-	grpcServer.WebhookEmitter = emitter
+	heartbeat := worker.NewHeartbeatChecker(d.Workers, grpcServer.ConnMgr,
+		cfg.Heartbeat.CheckInterval, cfg.Heartbeat.PingTimeout, cfg.Heartbeat.MaxRetries)
+	grpcServer.OnConnectionRegistered = heartbeat.TriggerCheck
 
-	r := router.SetupRouter(router.SetupRouterDeps{
-		Config:             d.Config,
-		DB:                 d.Database,
-		WorkerRepo:         d.WorkerRepo,
-		UserRepo:           d.UserRepo,
-		CommandRepo:        d.CommandRepo,
-		WorkerSnapshotRepo: d.WorkerSnapshotRepo,
-		JobExecutionRepo:   d.JobExecutionRepo,
-		APIKeyRepo:         d.APIKeyRepo,
-		RunRepo:            d.RunRepo,
-		JobDefRepo:         d.JobDefRepo,
-		JobDefSyncer:       d.JobDefSyncer,
-		SettingRepo:        d.SettingRepo,
-		Hub:                hub,
-		QueueEngine:        d.QueueEngine,
-		StatsAgg:           d.StatsAgg,
-		GRPCServer:         grpcServer,
-		TokenService:       d.TokenService,
-		AuthService:        d.AuthService,
-	})
-
-	httpServer := &http.Server{
-		Addr:         d.Config.Server.Host + ":" + d.Config.Server.Port,
-		Handler:      r,
-		ReadTimeout:  d.Config.Server.ReadTimeout,
-		WriteTimeout: d.Config.Server.WriteTimeout,
-		IdleTimeout:  d.Config.Server.IdleTimeout,
-	}
-
-	heartbeatChecker := worker.NewHeartbeatChecker(
-		d.WorkerRepo,
-		grpcServer.ConnMgr,
-		d.Config.Heartbeat.CheckInterval,
-		d.Config.Heartbeat.PingTimeout,
-		d.Config.Heartbeat.MaxRetries,
-	)
-	grpcServer.OnConnectionRegistered = func() { heartbeatChecker.TriggerCheck() }
-
-	if d.QueueScheduler != nil {
-		d.QueueScheduler.SetOnJobsPromoted(func(ctx context.Context, queueNames []string) {
+	scheduler := queue.NewScheduler(d.Queue, cfg.Queue.PollInterval,
+		func(ctx context.Context, queueNames []string) {
 			for _, q := range queueNames {
 				grpcServer.DispatchQueue(ctx, q)
 			}
-		})
-		d.QueueScheduler.SetOnLeasesExpired(grpcServer.HandleExpiredLeases)
-	}
-
-	workerSnapshotJob := worker.NewWorkerSnapshotJob(d.WorkerRepo, d.WorkerSnapshotRepo, d.Config.Metrics.SnapshotInterval)
+		},
+		grpcServer.HandleExpiredLeases,
+	)
 
 	return &Server{
-		HTTP:              httpServer,
-		GRPC:              grpcServer,
-		Hub:               hub,
-		HeartbeatChecker:  heartbeatChecker,
-		WorkerSnapshotJob: workerSnapshotJob,
-		QueueScheduler:    d.QueueScheduler,
-		WebhookDispatcher: webhooks.NewDispatcher(d.WebhookRepo, d.Config.Webhooks.PollInterval),
+		http: &http.Server{
+			Addr:         cfg.Server.Host + ":" + cfg.Server.Port,
+			Handler:      router.New(d, hub, grpcServer),
+			ReadTimeout:  cfg.Server.ReadTimeout,
+			WriteTimeout: cfg.Server.WriteTimeout,
+			IdleTimeout:  cfg.Server.IdleTimeout,
+		},
+		grpc: grpcServer,
+		loops: []func(context.Context){
+			hub.Run,
+			heartbeat.Run,
+			scheduler.Run,
+			worker.NewWorkerSnapshotJob(d.Workers, d.WorkerSnapshots, cfg.Metrics.SnapshotInterval).Run,
+			webhooks.NewDispatcher(d.Webhooks, cfg.Webhooks.PollInterval).Run,
+		},
 	}
 }
 
@@ -141,79 +79,47 @@ func (s *Server) HTTPAddr() string {
 
 // GRPCAddr is the address the gRPC server is listening on, or "" before Start.
 func (s *Server) GRPCAddr() string {
-	return s.GRPC.Addr()
+	return s.grpc.Addr()
 }
 
-// Start binds both listeners, then serves and starts the background jobs. A port
-// conflict is returned to the caller: binding in the foreground is what makes that
-// possible, and what keeps a failure from killing the process from a goroutine.
+// Start binds both listeners in the foreground, so a port conflict is returned to
+// the caller, then serves and starts the background loops.
 func (s *Server) Start() error {
-	lis, err := net.Listen("tcp", s.HTTP.Addr)
+	lis, err := net.Listen("tcp", s.http.Addr)
 	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", s.HTTP.Addr, err)
+		return fmt.Errorf("listen on %s: %w", s.http.Addr, err)
+	}
+	if err := s.grpc.Listen(); err != nil {
+		_ = lis.Close()
+		return err
 	}
 	s.httpListener = lis
 
-	if err := s.GRPC.Listen(); err != nil {
-		_ = lis.Close()
-		s.httpListener = nil
-		return err
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	for _, loop := range s.loops {
+		s.wg.Go(func() { loop(ctx) })
 	}
-
-	s.checkerCtx, s.checkerStop = context.WithCancel(context.Background())
-	go s.HeartbeatChecker.Start(s.checkerCtx)
-
-	s.snapshotJobCtx, s.snapshotJobCancel = context.WithCancel(context.Background())
-	go s.WorkerSnapshotJob.Run(s.snapshotJobCtx)
-
-	if s.QueueScheduler != nil {
-		s.schedulerCtx, s.schedulerCancel = context.WithCancel(context.Background())
-		go s.QueueScheduler.Run(s.schedulerCtx)
-	}
-
-	if s.WebhookDispatcher != nil {
-		s.webhookCtx, s.webhookCancel = context.WithCancel(context.Background())
-		go s.WebhookDispatcher.Run(s.webhookCtx)
-	}
-
 	go func() {
-		if err := s.GRPC.Serve(); err != nil {
-			log.Printf("gRPC server stopped: %v", err)
+		if err := s.grpc.Serve(); err != nil {
+			slog.Error("gRPC server stopped", "err", err)
 		}
 	}()
-
 	go func() {
-		log.Printf("HTTP server listening on %s", s.HTTPAddr())
-		if err := s.HTTP.Serve(s.httpListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("HTTP server stopped: %v", err)
+		slog.Info("HTTP server listening", "addr", s.HTTPAddr())
+		if err := s.http.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("HTTP server stopped", "err", err)
 		}
 	}()
-
 	return nil
 }
 
+// Shutdown stops the loops and both servers, and waits for the loops to return.
 func (s *Server) Shutdown(ctx context.Context) error {
-	log.Println("Shutting down server...")
-
-	if s.checkerStop != nil {
-		s.checkerStop()
-	}
-	if s.snapshotJobCancel != nil {
-		s.snapshotJobCancel()
-	}
-	if s.schedulerCancel != nil {
-		s.schedulerCancel()
-	}
-	if s.webhookCancel != nil {
-		s.webhookCancel()
-	}
-
-	s.GRPC.StopContext(ctx)
-
-	if err := s.HTTP.Shutdown(ctx); err != nil {
-		return err
-	}
-
-	log.Println("Server exited")
-	return nil
+	slog.Info("shutting down")
+	s.cancel()
+	s.grpc.Stop(ctx)
+	err := s.http.Shutdown(ctx)
+	s.wg.Wait()
+	return err
 }

@@ -2,47 +2,44 @@ package queue
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 )
 
-// Scheduler sweeps the queue tables each tick: promote due delayed jobs, reap expired leases.
+// Scheduler sweeps the queue each tick: it promotes due delayed jobs and reaps expired leases.
 type Scheduler struct {
-	engine          *Engine
-	interval        time.Duration
-	onJobsPromoted  func(ctx context.Context, queueNames []string)
+	engine   *Engine
+	interval time.Duration
+	// onJobsPromoted dispatches the queues that just received ready jobs.
+	onJobsPromoted func(ctx context.Context, queueNames []string)
+	// onLeasesExpired fails builds whose worker stopped reporting.
 	onLeasesExpired func(ctx context.Context, leases []ExpiredLease)
 }
 
-func NewScheduler(engine *Engine, interval time.Duration) *Scheduler {
-	if interval == 0 {
+func NewScheduler(
+	engine *Engine,
+	interval time.Duration,
+	onJobsPromoted func(ctx context.Context, queueNames []string),
+	onLeasesExpired func(ctx context.Context, leases []ExpiredLease),
+) *Scheduler {
+	if interval <= 0 {
 		interval = time.Second
 	}
-	return &Scheduler{engine: engine, interval: interval}
-}
-
-// SetOnJobsPromoted registers a callback invoked after delayed jobs are moved
-// back to their queues (e.g. to assign them to workers). Optional.
-func (s *Scheduler) SetOnJobsPromoted(fn func(ctx context.Context, queueNames []string)) {
-	s.onJobsPromoted = fn
-}
-
-// SetOnLeasesExpired registers the callback that fails claimed jobs; optional.
-func (s *Scheduler) SetOnLeasesExpired(fn func(ctx context.Context, leases []ExpiredLease)) {
-	s.onLeasesExpired = fn
+	return &Scheduler{
+		engine:          engine,
+		interval:        interval,
+		onJobsPromoted:  onJobsPromoted,
+		onLeasesExpired: onLeasesExpired,
+	}
 }
 
 // Run blocks until ctx is cancelled.
 func (s *Scheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
-
-	log.Printf("Queue scheduler started (poll interval %s)", s.interval)
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Queue scheduler stopped")
 			return
 		case <-ticker.C:
 			s.promoteDelayed(ctx)
@@ -54,30 +51,31 @@ func (s *Scheduler) Run(ctx context.Context) {
 func (s *Scheduler) promoteDelayed(ctx context.Context) {
 	promoted, queues, err := s.engine.PromoteDelayed(ctx)
 	if err != nil {
-		log.Printf("Scheduler: promote delayed: %v", err)
+		if ctx.Err() == nil {
+			slog.Error("promote delayed jobs", "err", err)
+		}
 		return
 	}
 	if promoted == 0 {
 		return
 	}
-	log.Printf("Scheduler: promoted %d delayed jobs", promoted)
-	if s.onJobsPromoted != nil && len(queues) > 0 {
+	slog.Info("promoted delayed jobs", "count", promoted)
+	if len(queues) > 0 {
 		s.onJobsPromoted(ctx, queues)
 	}
 }
 
-// reapExpiredLeases hands builds whose worker never reported back to the callback to be failed.
 func (s *Scheduler) reapExpiredLeases(ctx context.Context) {
 	leases, err := s.engine.ClaimExpiredLeases(ctx)
 	if err != nil {
-		log.Printf("Scheduler: claim expired leases: %v", err)
+		if ctx.Err() == nil {
+			slog.Error("claim expired leases", "err", err)
+		}
 		return
 	}
 	if len(leases) == 0 {
 		return
 	}
-	log.Printf("Scheduler: reaping %d job(s) whose worker stopped reporting", len(leases))
-	if s.onLeasesExpired != nil {
-		s.onLeasesExpired(ctx, leases)
-	}
+	slog.Warn("reaping jobs whose worker stopped reporting", "count", len(leases))
+	s.onLeasesExpired(ctx, leases)
 }

@@ -48,7 +48,7 @@ func (h *HeartbeatChecker) TriggerCheck() {
 	}
 }
 
-func (h *HeartbeatChecker) Start(ctx context.Context) {
+func (h *HeartbeatChecker) Run(ctx context.Context) {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
 

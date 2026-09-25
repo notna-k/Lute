@@ -108,30 +108,17 @@ func (s *Server) Serve() error {
 	return nil
 }
 
-// Start binds and serves, blocking until the server stops.
-func (s *Server) Start() error {
-	if err := s.Listen(); err != nil {
-		return err
-	}
-	return s.Serve()
-}
-
 // gracefulStopTimeout bounds how long a shutdown waits for in-flight RPCs.
 const gracefulStopTimeout = 5 * time.Second
 
-// Stop shuts the server down, waiting a bounded time for in-flight RPCs.
-func (s *Server) Stop() {
-	s.StopContext(context.Background())
-}
-
-// StopContext shuts the server down, giving in-flight RPCs until the context's
+// Stop shuts the server down, giving in-flight RPCs until the context's
 // deadline (or gracefulStopTimeout, whichever is sooner) to finish.
 //
 // A worker's Connect stream lives for as long as the worker does, so a plain
 // GracefulStop never returns: it waits for streams that only end when the other side
 // hangs up. Waiting a little and then closing them is what lets core exit on a signal
 // instead of hanging until something kills it.
-func (s *Server) StopContext(ctx context.Context) {
+func (s *Server) Stop(ctx context.Context) {
 	if s.grpcServer == nil {
 		return
 	}

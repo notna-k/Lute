@@ -34,7 +34,7 @@ type Stack struct {
 	ArtifactDir string
 	Config      *config.Config
 
-	deps   *setup.Dependencies
+	deps   *setup.Deps
 	server *server.Server
 
 	agents []*Agent
@@ -152,32 +152,13 @@ func (s *Stack) baseConfig() *config.Config {
 func (s *Stack) start() {
 	s.t.Helper()
 
-	deps, err := setup.InitializeWith(s.Config)
+	deps, err := setup.New(context.Background(), s.Config)
 	if err != nil {
 		s.t.Fatalf("initialize core: %v", err)
 	}
 	s.deps = deps
 
-	srv := server.New(server.Deps{
-		Config:             deps.Config,
-		Database:           deps.Database,
-		WorkerRepo:         deps.WorkerRepo,
-		UserRepo:           deps.UserRepo,
-		CommandRepo:        deps.CommandRepo,
-		WorkerSnapshotRepo: deps.WorkerSnapshotRepo,
-		JobExecutionRepo:   deps.JobExecutionRepo,
-		APIKeyRepo:         deps.APIKeyRepo,
-		RunRepo:            deps.RunRepo,
-		WebhookRepo:        deps.WebhookRepo,
-		JobDefRepo:         deps.JobDefRepo,
-		JobDefSyncer:       deps.JobDefSyncer,
-		SettingRepo:        deps.SettingRepo,
-		QueueEngine:        deps.QueueEngine,
-		QueueScheduler:     deps.QueueScheduler,
-		StatsAgg:           deps.StatsAggregator,
-		TokenService:       deps.TokenService,
-		AuthService:        deps.AuthService,
-	})
+	srv := server.New(deps)
 	if err := srv.Start(); err != nil {
 		deps.Close()
 		s.t.Fatalf("start core: %v", err)

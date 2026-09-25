@@ -1,9 +1,10 @@
+// Package setup opens the database and builds the repositories and services core runs on.
 package setup
 
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/lute/api/internal/auth"
@@ -15,126 +16,98 @@ import (
 	"github.com/lute/api/internal/queue"
 )
 
-// Dependencies holds all initialized dependencies
-type Dependencies struct {
-	Config             *config.Config
-	Database           *connection.Database
-	QueueEngine        *queue.Engine
-	QueueScheduler     *queue.Scheduler
-	StatsAggregator    *queue.Stats
-	WorkerRepo         *repos.WorkerRepository
-	UserRepo           *repos.UserRepository
-	CommandRepo        *repos.CommandRepository
-	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
-	JobExecutionRepo   *repos.JobExecutionRepository
-	APIKeyRepo         *repos.APIKeyRepository
-	RunRepo            *repos.RunRepository
-	WebhookRepo        *repos.WebhookDeliveryRepository
-	RefreshTokenRepo   *repos.RefreshTokenRepository
-	JobDefRepo         *repos.JobDefinitionRepository
-	JobDefSyncer       *jobdefs.Syncer
-	SettingRepo        *repos.SettingRepository
-	TokenService       *auth.TokenService
-	AuthService        *auth.Service
+// Deps is everything the servers and handlers are built from.
+type Deps struct {
+	Config   *config.Config
+	Database *connection.Database
+
+	Queue *queue.Engine
+	Stats *queue.Stats
+
+	Workers         *repos.WorkerRepository
+	WorkerSnapshots *repos.WorkerSnapshotRepository
+	Commands        *repos.CommandRepository
+	Users           *repos.UserRepository
+	APIKeys         *repos.APIKeyRepository
+	JobExecutions   *repos.JobExecutionRepository
+	Runs            *repos.RunRepository
+	Webhooks        *repos.WebhookDeliveryRepository
+	JobDefs         *repos.JobDefinitionRepository
+	Settings        *repos.SettingRepository
+
+	JobDefSyncer *jobdefs.Syncer
+	Tokens       *auth.TokenService
+	Auth         *auth.Service
 }
 
-// Initialize loads configuration from the environment and initializes all dependencies.
-func Initialize() (*Dependencies, error) {
-	cfg, err := loadConfig()
+// New opens the database, seeds the admin user and syncs job definitions from Git.
+// The binary and the e2e harness both boot through it.
+func New(ctx context.Context, cfg *config.Config) (*Deps, error) {
+	db, err := connection.Open(ctx, cfg.Database.DSN)
 	if err != nil {
 		return nil, err
 	}
-	return InitializeWith(cfg)
+	d, err := build(ctx, cfg, db)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return d, nil
 }
 
-// InitializeWith initializes all dependencies against an already-built config, so a
-// caller that does not get its settings from the environment (a test harness, an
-// embedder) boots along exactly the same path as the binary.
-func InitializeWith(cfg *config.Config) (*Dependencies, error) {
-	db, err := initializeDatabase(cfg)
+func build(ctx context.Context, cfg *config.Config, db *connection.Database) (*Deps, error) {
+	g := db.DB
+	tokens, err := auth.NewTokenService(cfg.Auth.JWTSecret, cfg.Auth.AccessTTL, cfg.Auth.RefreshTTL, cfg.Auth.Issuer)
 	if err != nil {
 		return nil, err
 	}
-	queueEngine := queue.NewEngine(db.DB, queue.Timings{
-		LeaseGrace:   cfg.Queue.LeaseGrace,
-		ReclaimAfter: cfg.Queue.ReclaimAfter,
-	})
-	queueScheduler := queue.NewScheduler(queueEngine, cfg.Queue.PollInterval)
-	statsAgg := queue.NewStats(db.DB)
+	d := &Deps{
+		Config:   cfg,
+		Database: db,
+		Queue: queue.NewEngine(g, queue.Timings{
+			LeaseGrace:   cfg.Queue.LeaseGrace,
+			ReclaimAfter: cfg.Queue.ReclaimAfter,
+		}),
+		Stats:           queue.NewStats(g),
+		Workers:         repos.NewWorkerRepository(g),
+		WorkerSnapshots: repos.NewWorkerSnapshotRepository(g),
+		Commands:        repos.NewCommandRepository(g),
+		Users:           repos.NewUserRepository(g),
+		APIKeys:         repos.NewAPIKeyRepository(g),
+		JobExecutions:   repos.NewJobExecutionRepository(g),
+		Runs:            repos.NewRunRepository(g),
+		Webhooks:        repos.NewWebhookDeliveryRepository(g),
+		JobDefs:         repos.NewJobDefinitionRepository(g),
+		Settings:        repos.NewSettingRepository(g),
+		Tokens:          tokens,
+	}
+	d.Auth = auth.NewService(d.Users, repos.NewRefreshTokenRepository(g), tokens)
+	d.JobDefSyncer = jobdefs.NewSyncer(d.JobDefs, d.Settings, cfg.JobDefs.Dir)
 
-	reposInit := initializeRepositories(db)
-
-	tokenSvc, err := auth.NewTokenService(cfg.Auth.JWTSecret, cfg.Auth.AccessTTL, cfg.Auth.RefreshTTL, cfg.Auth.Issuer)
-	if err != nil {
+	if err := seedAdminUser(ctx, cfg, d.Users); err != nil {
 		return nil, err
 	}
-	authSvc := auth.NewService(reposInit.UserRepo, reposInit.RefreshTokenRepo, tokenSvc)
-
-	if err := seedAdminUser(context.Background(), cfg, reposInit.UserRepo); err != nil {
+	if _, err := d.JobDefSyncer.Sync(ctx); err != nil {
 		return nil, err
 	}
-
-	jobDefRepo := repos.NewJobDefinitionRepository(db.DB)
-	jobDefSyncer := jobdefs.NewSyncer(jobDefRepo, reposInit.SettingRepo, cfg.JobDefs.Dir)
-	if _, err := jobDefSyncer.Sync(context.Background()); err != nil {
-		return nil, err
-	}
-
-	return &Dependencies{
-		Config:             cfg,
-		Database:           db,
-		QueueEngine:        queueEngine,
-		QueueScheduler:     queueScheduler,
-		StatsAggregator:    statsAgg,
-		WorkerRepo:         reposInit.WorkerRepo,
-		UserRepo:           reposInit.UserRepo,
-		CommandRepo:        reposInit.CommandRepo,
-		WorkerSnapshotRepo: reposInit.WorkerSnapshotRepo,
-		JobExecutionRepo:   reposInit.JobExecutionRepo,
-		APIKeyRepo:         reposInit.APIKeyRepo,
-		RunRepo:            reposInit.RunRepo,
-		WebhookRepo:        reposInit.WebhookRepo,
-		RefreshTokenRepo:   reposInit.RefreshTokenRepo,
-		JobDefRepo:         jobDefRepo,
-		JobDefSyncer:       jobDefSyncer,
-		SettingRepo:        reposInit.SettingRepo,
-		TokenService:       tokenSvc,
-		AuthService:        authSvc,
-	}, nil
+	return d, nil
 }
 
-// Close gracefully closes all dependencies
-func (d *Dependencies) Close() {
-	if d.Database != nil {
-		if err := d.Database.Close(); err != nil {
-			log.Printf("Error closing database: %v", err)
-		}
+func (d *Deps) Close() {
+	if err := d.Database.Close(); err != nil {
+		slog.Error("close database", "err", err)
 	}
 }
 
-func loadConfig() (*config.Config, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	return cfg, nil
-}
-
-func initializeDatabase(cfg *config.Config) (*connection.Database, error) {
-	return connection.Open(context.Background(), cfg.Database.DSN)
-}
-
-// seedAdminUser creates the bootstrap admin if ADMIN_EMAIL / ADMIN_PASSWORD are set
-// and no user with that email exists yet. Password is bcrypt-hashed before insert.
+// seedAdminUser creates the bootstrap admin from ADMIN_EMAIL / ADMIN_PASSWORD unless it exists.
 func seedAdminUser(ctx context.Context, cfg *config.Config, users *repos.UserRepository) error {
 	email := strings.ToLower(strings.TrimSpace(cfg.Auth.AdminEmail))
 	password := cfg.Auth.AdminPassword
 	if email == "" || password == "" {
-		log.Println("auth: ADMIN_EMAIL / ADMIN_PASSWORD not set — no admin user seeded")
+		slog.Warn("ADMIN_EMAIL / ADMIN_PASSWORD not set, no admin user seeded")
 		return nil
 	}
 	if _, err := users.GetByEmail(ctx, email); err == nil {
-		log.Printf("auth: admin user %s already exists, skipping seed", email)
 		return nil
 	} else if !errors.Is(err, repos.ErrNotFound) {
 		return err
@@ -143,43 +116,9 @@ func seedAdminUser(ctx context.Context, cfg *config.Config, users *repos.UserRep
 	if err != nil {
 		return err
 	}
-	u := &models.User{
-		Email:        email,
-		DisplayName:  "Admin",
-		PasswordHash: hash,
-	}
-	if err := users.Create(ctx, u); err != nil {
+	if err := users.Create(ctx, &models.User{Email: email, DisplayName: "Admin", PasswordHash: hash}); err != nil {
 		return err
 	}
-	log.Printf("auth: seeded admin user %s", email)
+	slog.Info("seeded admin user", "email", email)
 	return nil
-}
-
-// Repositories holds all repository instances
-type Repositories struct {
-	WorkerRepo         *repos.WorkerRepository
-	UserRepo           *repos.UserRepository
-	CommandRepo        *repos.CommandRepository
-	WorkerSnapshotRepo *repos.WorkerSnapshotRepository
-	JobExecutionRepo   *repos.JobExecutionRepository
-	APIKeyRepo         *repos.APIKeyRepository
-	RunRepo            *repos.RunRepository
-	WebhookRepo        *repos.WebhookDeliveryRepository
-	RefreshTokenRepo   *repos.RefreshTokenRepository
-	SettingRepo        *repos.SettingRepository
-}
-
-func initializeRepositories(db *connection.Database) *Repositories {
-	return &Repositories{
-		WorkerRepo:         repos.NewWorkerRepository(db.DB),
-		UserRepo:           repos.NewUserRepository(db.DB),
-		CommandRepo:        repos.NewCommandRepository(db.DB),
-		WorkerSnapshotRepo: repos.NewWorkerSnapshotRepository(db.DB),
-		JobExecutionRepo:   repos.NewJobExecutionRepository(db.DB),
-		APIKeyRepo:         repos.NewAPIKeyRepository(db.DB),
-		RunRepo:            repos.NewRunRepository(db.DB),
-		WebhookRepo:        repos.NewWebhookDeliveryRepository(db.DB),
-		RefreshTokenRepo:   repos.NewRefreshTokenRepository(db.DB),
-		SettingRepo:        repos.NewSettingRepository(db.DB),
-	}
 }

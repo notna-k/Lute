@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,7 +49,9 @@ func newTestServer(t *testing.T) (wsURL, token string, hub *Hub) {
 	}
 
 	hub = NewHub()
-	go hub.Run()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go hub.Run(ctx)
 
 	h := NewWebSocketHandler(hub, testConfig(), tokens)
 	r := gin.New()

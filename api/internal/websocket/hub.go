@@ -1,47 +1,45 @@
 package websocket
 
 import (
-	"log"
+	"context"
+	"log/slog"
 	"sync"
 )
 
-// Hub maintains the set of active clients and broadcasts messages to clients
+// Hub fans broadcast messages out to every connected client.
 type Hub struct {
-	// Registered clients
-	clients map[*Client]bool
-
-	// Inbound messages from the clients
-	broadcast chan []byte
-
-	// Register requests from the clients
-	register chan *Client
-
-	// Unregister requests from clients
+	mu         sync.RWMutex
+	clients    map[*Client]bool
+	broadcast  chan []byte
+	register   chan *Client
 	unregister chan *Client
-
-	// Mutex for thread-safe operations
-	mu sync.RWMutex
+	done       chan struct{}
 }
 
-// NewHub creates a new Hub instance
 func NewHub() *Hub {
 	return &Hub{
 		broadcast:  make(chan []byte, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
+		done:       make(chan struct{}),
 	}
 }
 
-// Run starts the hub's main loop
-func (h *Hub) Run() {
+// Run serves the hub until ctx is cancelled; afterwards sends to the hub are dropped.
+func (h *Hub) Run(ctx context.Context) {
+	defer close(h.done)
 	for {
 		select {
+		case <-ctx.Done():
+			return
+
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			n := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("Client registered. Total clients: %d", len(h.clients))
+			slog.Debug("websocket client registered", "clients", n)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -49,35 +47,47 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 			}
+			n := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("Client unregistered. Total clients: %d", len(h.clients))
+			slog.Debug("websocket client unregistered", "clients", n)
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
+					// A client too slow to drain its buffer is dropped rather than stalling everyone.
 					close(client.send)
 					delete(h.clients, client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 		}
 	}
 }
 
-// Broadcast sends a message to all connected clients
 func (h *Hub) Broadcast(message []byte) {
-	h.broadcast <- message
+	select {
+	case h.broadcast <- message:
+	case <-h.done:
+	}
 }
 
-// Register registers a new client with the hub
 func (h *Hub) Register(client *Client) {
-	h.register <- client
+	select {
+	case h.register <- client:
+	case <-h.done:
+	}
 }
 
-// GetClientCount returns the number of connected clients
+func (h *Hub) Unregister(client *Client) {
+	select {
+	case h.unregister <- client:
+	case <-h.done:
+	}
+}
+
 func (h *Hub) GetClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
