@@ -1,6 +1,9 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // ParameterOption is a selectable choice for select/multiselect parameters.
 type ParameterOption struct {
@@ -24,6 +27,43 @@ type ParameterField struct {
 	Default     any               `json:"default,omitempty"`
 	Options     []ParameterOption `json:"options,omitempty"`
 	SecretRef   string            `json:"secretRef,omitempty"`
+}
+
+// EnvName is the environment variable this parameter's value reaches the container
+// as. A definition that omits envVar gets a name derived from the parameter's own
+// name: an unnamed variable is rejected by the container runtime, which failed every
+// build of the job over one missing line of YAML.
+func (f ParameterField) EnvName() string {
+	if f.EnvVar != "" {
+		return f.EnvVar
+	}
+	return deriveEnvName(f.Name)
+}
+
+// deriveEnvName upper-cases a parameter name into a usable variable name, mapping
+// anything that is not alphanumeric to an underscore. It returns "" when the name
+// yields nothing usable, so callers can skip the parameter instead of emitting junk.
+func deriveEnvName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return ""
+	}
+	if out[0] >= '0' && out[0] <= '9' {
+		// A variable name cannot start with a digit.
+		return "P_" + out
+	}
+	return out
 }
 
 // JobSpec is everything a definition's YAML file says about the job — the part
