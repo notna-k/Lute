@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Play, Search, Server } from 'lucide-react';
@@ -135,100 +135,83 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   let lastGroup = '';
 
   return (
-    <Transition.Root show={open} as={Fragment}>
-      <Dialog as='div' className='relative z-50' onClose={onClose}>
-        <Transition.Child
-          as={Fragment}
-          enter='ease-out duration-150'
-          enterFrom='opacity-0'
-          enterTo='opacity-100'
-          leave='ease-in duration-100'
-          leaveFrom='opacity-100'
-          leaveTo='opacity-0'
+    <Dialog open={open} onClose={onClose} className='relative z-50'>
+      <DialogBackdrop
+        transition
+        className='fixed inset-0 bg-black/45 transition duration-150 ease-out data-[closed]:opacity-0 data-[leave]:duration-100 data-[leave]:ease-in'
+      />
+      <div className='fixed inset-0 overflow-y-auto px-4 pb-4 pt-[12vh]'>
+        <DialogPanel
+          transition
+          className='mx-auto w-full max-w-[620px] border border-border bg-surface shadow-overlay transition duration-150 ease-out data-[closed]:translate-y-1 data-[closed]:opacity-0 data-[leave]:duration-100 data-[leave]:ease-in'
         >
-          <div className='fixed inset-0 bg-black/45' aria-hidden />
-        </Transition.Child>
+          <DialogTitle className='sr-only'>Command palette</DialogTitle>
+          <div className='flex h-[46px] items-center gap-2.5 border-b border-border px-3.5 text-fg-subtle'>
+            <Search className='h-4 w-4 shrink-0' />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder='Jobs, workers, actions…'
+              autoComplete='off'
+              className='w-full bg-transparent text-sm text-fg outline-none'
+            />
+            <Kbd>Esc</Kbd>
+          </div>
 
-        <div className='fixed inset-0 overflow-y-auto px-4 pb-4 pt-[12vh]'>
-          <Transition.Child
-            as={Fragment}
-            enter='ease-out duration-150'
-            enterFrom='opacity-0 translate-y-1'
-            enterTo='opacity-100 translate-y-0'
-            leave='ease-in duration-100'
-            leaveFrom='opacity-100'
-            leaveTo='opacity-0'
-          >
-            <Dialog.Panel className='mx-auto w-full max-w-[620px] border border-border bg-surface shadow-overlay'>
-              <Dialog.Title className='sr-only'>Command palette</Dialog.Title>
-              <div className='flex h-[46px] items-center gap-2.5 border-b border-border px-3.5 text-fg-subtle'>
-                <Search className='h-4 w-4 shrink-0' />
-                <input
-                  autoFocus
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  placeholder='Jobs, workers, actions…'
-                  autoComplete='off'
-                  className='w-full bg-transparent text-sm text-fg outline-none'
-                />
-                <Kbd>Esc</Kbd>
-              </div>
+          <div ref={listRef} className='scrollbar-thin max-h-[380px] overflow-y-auto py-1'>
+            {results.length === 0 ? (
+              <p className='px-3.5 py-7 text-center text-[13px] text-fg-subtle'>
+                Nothing matches “{query}”.
+              </p>
+            ) : (
+              results.map((command, i) => {
+                const heading = command.group !== lastGroup ? command.group : null;
+                lastGroup = command.group;
+                return (
+                  <Fragment key={command.id}>
+                    {heading && <div className='caption px-3.5 pb-1 pt-2'>{heading}</div>}
+                    <button
+                      type='button'
+                      role='option'
+                      aria-selected={i === cursor}
+                      onMouseEnter={() => setCursor(i)}
+                      onClick={() => run(command)}
+                      className={cn(
+                        'flex h-8 w-full items-center gap-2.5 px-3.5 text-left text-[13px]',
+                        i === cursor ? 'bg-surface-active text-fg' : 'text-fg-muted',
+                      )}
+                    >
+                      {ICONS[command.icon]}
+                      <span className={cn('truncate', command.mono && 'font-mono text-xs')}>
+                        {command.label}
+                      </span>
+                      {command.hint && (
+                        <span className='ml-auto shrink-0 font-mono text-[11.5px] text-fg-subtle'>
+                          {command.hint}
+                        </span>
+                      )}
+                    </button>
+                  </Fragment>
+                );
+              })
+            )}
+          </div>
 
-              <div ref={listRef} className='scrollbar-thin max-h-[380px] overflow-y-auto py-1'>
-                {results.length === 0 ? (
-                  <p className='px-3.5 py-7 text-center text-[13px] text-fg-subtle'>
-                    Nothing matches “{query}”.
-                  </p>
-                ) : (
-                  results.map((command, i) => {
-                    const heading = command.group !== lastGroup ? command.group : null;
-                    lastGroup = command.group;
-                    return (
-                      <Fragment key={command.id}>
-                        {heading && <div className='caption px-3.5 pb-1 pt-2'>{heading}</div>}
-                        <button
-                          type='button'
-                          role='option'
-                          aria-selected={i === cursor}
-                          onMouseEnter={() => setCursor(i)}
-                          onClick={() => run(command)}
-                          className={cn(
-                            'flex h-8 w-full items-center gap-2.5 px-3.5 text-left text-[13px]',
-                            i === cursor ? 'bg-surface-active text-fg' : 'text-fg-muted',
-                          )}
-                        >
-                          {ICONS[command.icon]}
-                          <span className={cn('truncate', command.mono && 'font-mono text-xs')}>
-                            {command.label}
-                          </span>
-                          {command.hint && (
-                            <span className='ml-auto shrink-0 font-mono text-[11.5px] text-fg-subtle'>
-                              {command.hint}
-                            </span>
-                          )}
-                        </button>
-                      </Fragment>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className='flex gap-3.5 border-t border-border px-3.5 py-2 text-[11.5px] text-fg-subtle'>
-                <span className='flex items-center gap-1'>
-                  <Kbd>↑</Kbd> <Kbd>↓</Kbd> move
-                </span>
-                <span className='flex items-center gap-1'>
-                  <Kbd>↵</Kbd> open
-                </span>
-                <span className='flex items-center gap-1'>
-                  <Kbd>Esc</Kbd> close
-                </span>
-              </div>
-            </Dialog.Panel>
-          </Transition.Child>
-        </div>
-      </Dialog>
-    </Transition.Root>
+          <div className='flex gap-3.5 border-t border-border px-3.5 py-2 text-[11.5px] text-fg-subtle'>
+            <span className='flex items-center gap-1'>
+              <Kbd>↑</Kbd> <Kbd>↓</Kbd> move
+            </span>
+            <span className='flex items-center gap-1'>
+              <Kbd>↵</Kbd> open
+            </span>
+            <span className='flex items-center gap-1'>
+              <Kbd>Esc</Kbd> close
+            </span>
+          </div>
+        </DialogPanel>
+      </div>
+    </Dialog>
   );
 }

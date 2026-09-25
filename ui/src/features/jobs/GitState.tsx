@@ -6,8 +6,8 @@
  * viewed and copied — one job or all of them — to commit it, which makes the
  * panel's version canonical on the next sync.
  */
-import { Fragment, useState } from 'react';
-import { Menu, Transition } from '@headlessui/react';
+import { useState } from 'react';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
@@ -190,41 +190,29 @@ export function JobActionsMenu({ job, className }: { job: JobDefinition; classNa
   return (
     <>
       <Menu as='div' className={cn('relative', className)}>
-        <Menu.Button as={IconButton} size='sm' label={`More actions for ${job.name}`}>
+        <MenuButton as={IconButton} size='sm' label={`More actions for ${job.name}`}>
           <MoreVertical className='h-4 w-4' />
-        </Menu.Button>
-        <Transition
-          as={Fragment}
-          enter='transition ease-out duration-100'
-          enterFrom='opacity-0 translate-y-1'
-          enterTo='opacity-100 translate-y-0'
-          leave='transition ease-in duration-75'
-          leaveFrom='opacity-100'
-          leaveTo='opacity-0'
+        </MenuButton>
+        <MenuItems
+          transition
+          className='absolute right-0 z-30 mt-1 w-48 origin-top-right border border-border bg-surface py-1 text-left shadow-popover focus:outline-none transition duration-100 ease-out data-[closed]:translate-y-1 data-[closed]:opacity-0 data-[leave]:duration-75 data-[leave]:ease-in'
         >
-          <Menu.Items className='absolute right-0 z-30 mt-1 w-48 origin-top-right border border-border bg-surface py-1 text-left shadow-popover focus:outline-none'>
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Menu.Item key={item.label}>
-                  {({ active }) => (
-                    <button
-                      type='button'
-                      onClick={item.onClick}
-                      className={cn(
-                        'flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-fg',
-                        active && 'bg-surface-hover',
-                      )}
-                    >
-                      <Icon className='h-4 w-4 text-fg-muted' />
-                      {item.label}
-                    </button>
-                  )}
-                </Menu.Item>
-              );
-            })}
-          </Menu.Items>
-        </Transition>
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <MenuItem key={item.label}>
+                <button
+                  type='button'
+                  onClick={item.onClick}
+                  className='flex w-full items-center gap-2 px-3 py-1.5 text-[13px] text-fg data-[focus]:bg-surface-hover'
+                >
+                  <Icon className='h-4 w-4 text-fg-muted' />
+                  {item.label}
+                </button>
+              </MenuItem>
+            );
+          })}
+        </MenuItems>
       </Menu>
       <ConfigDialog open={viewing} onClose={() => setViewing(false)} slug={job.slug} />
     </>
