@@ -26,8 +26,10 @@ import (
 const (
 	defaultMaxAttempts = 6
 	requestTimeout     = 10 * time.Second
-	pollInterval       = 5 * time.Second
-	batchSize          = 20
+	// DefaultPollInterval is how often the dispatcher looks for due deliveries
+	// when the caller does not ask for a different cadence.
+	DefaultPollInterval = 5 * time.Second
+	batchSize           = 20
 )
 
 // Emitter buffers run-level events into the deliveries collection.
@@ -96,20 +98,26 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 
 // Dispatcher polls for due deliveries and sends them in parallel workers.
 type Dispatcher struct {
-	deliveries *repos.WebhookDeliveryRepository
-	httpClient *http.Client
+	deliveries   *repos.WebhookDeliveryRepository
+	httpClient   *http.Client
+	pollInterval time.Duration
 }
 
-func NewDispatcher(deliveries *repos.WebhookDeliveryRepository) *Dispatcher {
+// NewDispatcher returns a dispatcher polling every pollInterval; zero means DefaultPollInterval.
+func NewDispatcher(deliveries *repos.WebhookDeliveryRepository, pollInterval time.Duration) *Dispatcher {
+	if pollInterval <= 0 {
+		pollInterval = DefaultPollInterval
+	}
 	return &Dispatcher{
-		deliveries: deliveries,
-		httpClient: &http.Client{Timeout: requestTimeout},
+		deliveries:   deliveries,
+		httpClient:   &http.Client{Timeout: requestTimeout},
+		pollInterval: pollInterval,
 	}
 }
 
 // Run polls until ctx is cancelled. Call in a goroutine from server bootstrap.
 func (d *Dispatcher) Run(ctx context.Context) {
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(d.pollInterval)
 	defer ticker.Stop()
 	for {
 		select {

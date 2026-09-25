@@ -44,6 +44,7 @@ type Server struct {
 	hub                    *websocket.Hub
 	ConnMgr                *ConnectionManager
 	grpcServer             *grpc.Server
+	listener               net.Listener
 	OnConnectionRegistered func()
 	WebhookEmitter         WebhookEmitter
 }
@@ -67,7 +68,13 @@ func NewServer(
 	}
 }
 
-func (s *Server) Start() error {
+// Listen binds the configured address and registers the service, without serving yet.
+// Splitting this from Serve lets a caller fail fast on a port conflict — and lets it
+// ask for port 0 and then read the assigned port off Addr.
+func (s *Server) Listen() error {
+	if s.listener != nil {
+		return nil
+	}
 	addr := fmt.Sprintf("%s:%s", s.config.GRPC.Host, s.config.GRPC.Port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -77,18 +84,77 @@ func (s *Server) Start() error {
 	s.grpcServer = grpc.NewServer()
 	pb.RegisterWorkerServiceServer(s.grpcServer, s)
 	reflection.Register(s.grpcServer)
+	s.listener = lis
+	return nil
+}
 
-	log.Printf("gRPC server listening on %s", addr)
+// Addr is the address the server is listening on, or "" before Listen.
+func (s *Server) Addr() string {
+	if s.listener == nil {
+		return ""
+	}
+	return s.listener.Addr().String()
+}
 
-	if err := s.grpcServer.Serve(lis); err != nil {
+// Serve blocks serving the listener Listen bound. It returns nil after Stop.
+func (s *Server) Serve() error {
+	if s.listener == nil {
+		return fmt.Errorf("serve: Listen was not called")
+	}
+	log.Printf("gRPC server listening on %s", s.Addr())
+	if err := s.grpcServer.Serve(s.listener); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)
 	}
 	return nil
 }
 
+// Start binds and serves, blocking until the server stops.
+func (s *Server) Start() error {
+	if err := s.Listen(); err != nil {
+		return err
+	}
+	return s.Serve()
+}
+
+// gracefulStopTimeout bounds how long a shutdown waits for in-flight RPCs.
+const gracefulStopTimeout = 5 * time.Second
+
+// Stop shuts the server down, waiting a bounded time for in-flight RPCs.
 func (s *Server) Stop() {
-	if s.grpcServer != nil {
+	s.StopContext(context.Background())
+}
+
+// StopContext shuts the server down, giving in-flight RPCs until the context's
+// deadline (or gracefulStopTimeout, whichever is sooner) to finish.
+//
+// A worker's Connect stream lives for as long as the worker does, so a plain
+// GracefulStop never returns: it waits for streams that only end when the other side
+// hangs up. Waiting a little and then closing them is what lets core exit on a signal
+// instead of hanging until something kills it.
+func (s *Server) StopContext(ctx context.Context) {
+	if s.grpcServer == nil {
+		return
+	}
+
+	timeout := gracefulStopTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining > 0 && remaining < timeout {
+			timeout = remaining
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
 		s.grpcServer.GracefulStop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		log.Printf("gRPC server: %s elapsed with worker streams still open, closing them", timeout)
+		s.grpcServer.Stop()
+		<-done
 	}
 }
 

@@ -28,7 +28,9 @@ export interface BuildPaneProps {
 
 export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
   const live = build?.status === 'running' || build?.status === 'queued';
-  const logs = useJobLogs(build?.runId ?? build?.id, { live });
+  // Logs are keyed by the queue job id, not the run id: /jobs/:id/logs looks the
+  // build up in the queue, where a run id does not exist.
+  const logs = useJobLogs(build?.jobId, { live });
 
   if (!build) {
     return (
@@ -76,11 +78,11 @@ export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
                 <RotateCcw className='h-3 w-3' /> Run again
               </Button>
             )}
-            {build.runId && (
+            {build.jobId && (
               <Button
                 variant='ghost'
                 size='xs'
-                onClick={() => window.open(`/api/v1/jobs/${build.runId}/logs?limit=5000`, '_blank')}
+                onClick={() => window.open(`/api/v1/jobs/${build.jobId}/logs?limit=5000`, '_blank')}
               >
                 <Download className='h-3 w-3' /> Raw log
               </Button>

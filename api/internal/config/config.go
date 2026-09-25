@@ -17,6 +17,28 @@ type Config struct {
 	WorkerBinary WorkerBinaryConfig
 	Metrics      MetricsConfig
 	JobDefs      JobDefsConfig
+	Queue        QueueConfig
+	Webhooks     WebhooksConfig
+}
+
+// QueueConfig tunes the sweep that promotes delayed jobs and reaps builds whose
+// worker stopped reporting. The defaults suit a real deployment; a test harness
+// shortens them so a lost build is observed in seconds rather than a minute.
+type QueueConfig struct {
+	// PollInterval is how often the scheduler sweeps for due and lost work.
+	PollInterval time.Duration
+	// LeaseGrace pads a job's timeout so reaping cannot race a result the
+	// worker is still reporting.
+	LeaseGrace time.Duration
+	// ReclaimAfter is how long a sweeper holds a claimed lease before another
+	// sweeper may retake it.
+	ReclaimAfter time.Duration
+}
+
+// WebhooksConfig tunes outbound run-event delivery.
+type WebhooksConfig struct {
+	// PollInterval is how often the dispatcher looks for due deliveries.
+	PollInterval time.Duration
 }
 
 // JobDefsConfig points Core at the directory of Git-managed job-definition
@@ -158,6 +180,14 @@ func Load() (*Config, error) {
 		},
 		JobDefs: JobDefsConfig{
 			Dir: getEnv("JOB_DEFS_DIR", ""),
+		},
+		Queue: QueueConfig{
+			PollInterval: getDurationEnv("QUEUE_POLL_INTERVAL", time.Second),
+			LeaseGrace:   getDurationEnv("QUEUE_LEASE_GRACE", 60*time.Second),
+			ReclaimAfter: getDurationEnv("QUEUE_RECLAIM_AFTER", 60*time.Second),
+		},
+		Webhooks: WebhooksConfig{
+			PollInterval: getDurationEnv("WEBHOOK_POLL_INTERVAL", 5*time.Second),
 		},
 	}
 

@@ -72,7 +72,13 @@ func Validate(fields []models.ParameterField, values map[string]any) (*Resolved,
 			verr.Fields[f.Name] = err.Error()
 			continue
 		}
-		res.Env[f.EnvVar] = str
+		envName := f.EnvName()
+		if envName == "" {
+			// Nothing usable to pass it as, and an empty name is not a variable any
+			// runtime accepts. Skipping beats failing every build of this definition.
+			continue
+		}
+		res.Env[envName] = str
 		if f.Name == "environment" {
 			res.Environment = str
 		}

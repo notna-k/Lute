@@ -44,6 +44,20 @@ func runContainer(ctx context.Context, cli *client.Client, dir string, spec *Spe
 	return exitCode, nil
 }
 
+// shellPicker runs the command script under bash when the image has it and falls back
+// to sh when it does not.
+//
+// Demanding bash rules out every alpine-based image — including the node:*-alpine and
+// alpine runtimes the documentation and example definitions use, which ship only
+// busybox sh. Those jobs failed at container start, before running a single line.
+const shellPicker = `if command -v bash >/dev/null 2>&1; then exec bash "$1"; else exec sh "$1"; fi`
+
+// shellCommand is the container's command line for running the user's script.
+// The extra "lute" is $0 for the -c program; the script path is $1.
+func shellCommand(scriptPath string) []string {
+	return []string{"sh", "-c", shellPicker, "lute", scriptPath}
+}
+
 func pullImage(ctx context.Context, cli *client.Client, imageName string, jobLogger *slog.Logger) error {
 	logSystem(jobLogger, slog.LevelInfo, "pulling image", slog.String("image", imageName))
 
@@ -62,7 +76,7 @@ func createAndStartContainer(ctx context.Context, cli *client.Client, dir string
 	bind := dir + ":" + workspaceMount
 	cfg := &container.Config{
 		Image: spec.Runtime,
-		Cmd:   []string{"bash", filepath.Join(workspaceMount, commandScriptName)},
+		Cmd:   shellCommand(filepath.Join(workspaceMount, commandScriptName)),
 		Env:   envFromParams(spec.RequestParams),
 	}
 	hostConfig := &container.HostConfig{Binds: []string{bind}}

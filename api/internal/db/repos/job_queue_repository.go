@@ -22,27 +22,49 @@ func nowUnix() int64  { return time.Now().UTC().Unix() }
 // defaultTimeoutSec is the per-job wall-clock budget when an enqueue does not ask for one.
 const defaultTimeoutSec = 300
 
-// leaseGrace pads the timeout so reaping does not race a result the worker is still reporting.
-const leaseGrace = 60 * time.Second
+// DefaultLeaseGrace pads the timeout so reaping does not race a result the worker is still reporting.
+const DefaultLeaseGrace = 60 * time.Second
 
-// reclaimAfter is how long a sweeper holds a claimed lease before another may retake it.
-const reclaimAfter = 60 * time.Second
+// DefaultReclaimAfter is how long a sweeper holds a claimed lease before another may retake it.
+const DefaultReclaimAfter = 60 * time.Second
 
-// leaseDeadlineMS is when a job dispatched now stops counting as alive.
-func leaseDeadlineMS(timeoutSec int) int64 {
-	if timeoutSec <= 0 {
-		timeoutSec = defaultTimeoutSec
+// QueueTimings governs how long a dispatched job counts as alive and how long a
+// sweeper owns one it has claimed. Zero values fall back to the defaults.
+type QueueTimings struct {
+	LeaseGrace   time.Duration
+	ReclaimAfter time.Duration
+}
+
+func (t QueueTimings) leaseGrace() time.Duration {
+	if t.LeaseGrace <= 0 {
+		return DefaultLeaseGrace
 	}
-	return time.Now().Add(time.Duration(timeoutSec)*time.Second + leaseGrace).UnixMilli()
+	return t.LeaseGrace
+}
+
+func (t QueueTimings) reclaimAfter() time.Duration {
+	if t.ReclaimAfter <= 0 {
+		return DefaultReclaimAfter
+	}
+	return t.ReclaimAfter
 }
 
 // JobQueueRepository persists FIFO queue_slots and DLQ rows (GORM only).
 type JobQueueRepository struct {
-	g *gorm.DB
+	g       *gorm.DB
+	timings QueueTimings
 }
 
-func NewJobQueueRepository(db *gorm.DB) *JobQueueRepository {
-	return &JobQueueRepository{g: db}
+func NewJobQueueRepository(db *gorm.DB, timings QueueTimings) *JobQueueRepository {
+	return &JobQueueRepository{g: db, timings: timings}
+}
+
+// leaseDeadlineMS is when a job dispatched now stops counting as alive.
+func (r *JobQueueRepository) leaseDeadlineMS(timeoutSec int) int64 {
+	if timeoutSec <= 0 {
+		timeoutSec = defaultTimeoutSec
+	}
+	return time.Now().Add(time.Duration(timeoutSec)*time.Second + r.timings.leaseGrace()).UnixMilli()
 }
 
 func (r *JobQueueRepository) q(ctx context.Context) *gorm.DB {
@@ -150,7 +172,7 @@ func (r *JobQueueRepository) Dequeue(ctx context.Context, queueName string) (*qu
 			Updates(map[string]interface{}{
 				"lane":                enums.QueueLaneNone,
 				"payload":             string(data),
-				"lease_expires_at_ms": leaseDeadlineMS(job.TimeoutSec),
+				"lease_expires_at_ms": r.leaseDeadlineMS(job.TimeoutSec),
 				"updated_at_ms":       nowMilli(),
 			})
 		if res.Error != nil {
@@ -182,6 +204,7 @@ func (r *JobQueueRepository) Complete(ctx context.Context, jobID string, elapsed
 	}
 	job.Status = string(enums.QueueJobDone)
 	job.DoneAt = nowUnix()
+	job.ElapsedMs = elapsedMs
 
 	data, err := json.Marshal(job)
 	if err != nil {
@@ -486,7 +509,7 @@ type ExpiredLease struct {
 // the lease forward, so sweepers cannot collide and one dying mid-reap does not strand the job.
 func (r *JobQueueRepository) ClaimExpiredLeases(ctx context.Context) ([]ExpiredLease, error) {
 	ms := nowMilli()
-	nextMS := ms + reclaimAfter.Milliseconds()
+	nextMS := ms + r.timings.reclaimAfter().Milliseconds()
 
 	var claimed []ExpiredLease
 	err := r.q(ctx).Transaction(func(tx *gorm.DB) error {
