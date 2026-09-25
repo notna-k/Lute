@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/enums"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
@@ -75,7 +77,6 @@ type WorkerHandler struct {
 	cfg           *config.Config
 	workerRepo    *repos.WorkerRepository
 	commandRepo   *repos.CommandRepository
-	workerService *WorkerService
 	connectionMgr *luteGrpc.ConnectionManager
 	grpcServer    *luteGrpc.Server
 }
@@ -95,15 +96,12 @@ func NewWorkerHandler(
 		cfg:           cfg,
 		workerRepo:    workerRepo,
 		commandRepo:   commandRepo,
-		workerService: NewWorkerService(workerRepo),
 		connectionMgr: connectionMgr,
 		grpcServer:    grpcServer,
 	}
 	handler.refreshBinaryCache()
 	return handler
 }
-
-// ── Claim codes ───────────────────────────────────────────────────────────────
 
 func (h *WorkerHandler) CreateClaimCode(c *gin.Context) {
 	rawUserID, exists := c.Get("user_id")
@@ -159,8 +157,6 @@ func (h *WorkerHandler) consumeClaimCode(code string) (string, bool) {
 	delete(h.claimCodes, code)
 	return entry.UserID, true
 }
-
-// ── Worker registration ───────────────────────────────────────────────────────
 
 func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	var req WorkerSetupRequest
@@ -293,8 +289,6 @@ func (h *WorkerHandler) resolveGRPCAddress(c *gin.Context) string {
 	}
 	return fmt.Sprintf("%s:%s", host, h.cfg.GRPC.Port)
 }
-
-// ── Worker binary serving ─────────────────────────────────────────────────────
 
 func (h *WorkerHandler) ListBinaries(c *gin.Context) {
 	h.binaryMu.RLock()
@@ -470,97 +464,70 @@ echo "    (copy the full command from the Add Worker dialog in the Lute UI)"
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))
 }
 
-// ── Worker management ─────────────────────────────────────────────────────────
-
 func (h *WorkerHandler) SendCommand(c *gin.Context) {
-	workerID, err := id.FromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
+	worker, ok := h.ownedWorker(c)
+	if !ok {
 		return
 	}
-
 	var req SendCommandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	ctx := c.Request.Context()
-
-	worker, err := h.workerRepo.GetByID(ctx, workerID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
-		return
-	}
-	if worker.Status == "" || worker.Status == "pending" {
+	if worker.Status == "" || worker.Status == enums.WorkerPending {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "worker has no active agent connection"})
 		return
 	}
 
 	cmd := &models.Command{
-		WorkerID: workerID,
+		WorkerID: worker.ID,
 		Command:  req.Command,
 		Args:     req.Args,
 		Env:      req.Env,
-		Status:   "pending",
+		Status:   enums.CommandPending,
 	}
-	if err := h.commandRepo.Create(ctx, cmd); err != nil {
-		log.Printf("Failed to create command: %v", err)
+	if err := h.commandRepo.Create(c.Request.Context(), cmd); err != nil {
+		slog.Error("create command", "worker_id", worker.ID.Hex(), "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to queue command"})
 		return
 	}
-
 	c.JSON(http.StatusCreated, gin.H{
 		"command_id": cmd.ID.Hex(),
-		"status":     "pending",
+		"status":     enums.CommandPending,
 		"message":    "Command queued for worker",
 	})
 }
 
 func (h *WorkerHandler) ListCommands(c *gin.Context) {
-	workerID, err := id.FromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
+	worker, ok := h.ownedWorker(c)
+	if !ok {
 		return
 	}
-
-	ctx := c.Request.Context()
-	commands, err := h.commandRepo.GetByWorkerID(ctx, workerID, 50)
+	commands, err := h.commandRepo.GetByWorkerID(c.Request.Context(), worker.ID, 50)
 	if err != nil {
-		log.Printf("Failed to list commands: %v", err)
+		slog.Error("list commands", "worker_id", worker.ID.Hex(), "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list commands"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"commands": commands, "count": len(commands)})
 }
 
 func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
-	workerID, err := id.FromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
+	worker, ok := h.ownedWorker(c)
+	if !ok {
 		return
 	}
-
-	ctx := c.Request.Context()
-	worker, err := h.workerRepo.GetByID(ctx, workerID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
-		return
-	}
-
 	result := gin.H{
 		"worker_id": worker.ID.Hex(),
 		"name":      worker.Name,
 		"status":    worker.Status,
 	}
-	if worker.Status != "pending" && !worker.LastSeen.IsZero() {
+	if worker.Status != enums.WorkerPending && !worker.LastSeen.IsZero() {
 		result["agent_ip"] = worker.AgentIP
 		result["agent_version"] = worker.AgentVersion
 		result["last_seen"] = worker.LastSeen
 		result["metrics"] = worker.Metrics
 	}
-
 	c.JSON(http.StatusOK, result)
 }
 
@@ -570,18 +537,22 @@ func (h *WorkerHandler) GetCommandResult(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid command_id"})
 		return
 	}
-
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 	cmd, err := h.commandRepo.GetByID(ctx, cmdID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
 		return
 	}
-
+	if w, err := h.workerRepo.GetByID(ctx, cmd.WorkerID); err != nil || w.UserID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
+		return
+	}
 	c.JSON(http.StatusOK, cmd)
 }
-
-// ── File utilities ────────────────────────────────────────────────────────────
 
 func parseWorkerFilename(filename string) (osName, arch string) {
 	filename = strings.TrimSuffix(filename, ".exe")

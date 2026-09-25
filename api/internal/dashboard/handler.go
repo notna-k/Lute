@@ -10,22 +10,21 @@ import (
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
-	wsvc "github.com/lute/api/internal/worker"
 )
 
 // DashboardHandler handles dashboard stats and uptime API.
 type DashboardHandler struct {
-	cfg           *config.Config
-	workerService *wsvc.WorkerService
-	snapshotRepo  *repos.WorkerSnapshotRepository
+	cfg          *config.Config
+	workerRepo   *repos.WorkerRepository
+	snapshotRepo *repos.WorkerSnapshotRepository
 }
 
 // NewDashboardHandler creates a new DashboardHandler.
-func NewDashboardHandler(cfg *config.Config, workerService *wsvc.WorkerService, snapshotRepo *repos.WorkerSnapshotRepository) *DashboardHandler {
+func NewDashboardHandler(cfg *config.Config, workerRepo *repos.WorkerRepository, snapshotRepo *repos.WorkerSnapshotRepository) *DashboardHandler {
 	return &DashboardHandler{
-		cfg:           cfg,
-		workerService: workerService,
-		snapshotRepo:  snapshotRepo,
+		cfg:          cfg,
+		workerRepo:   workerRepo,
+		snapshotRepo: snapshotRepo,
 	}
 }
 
@@ -53,7 +52,7 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	workersList, err := h.workerService.GetByUserID(ctx, userIDObj)
+	workersList, err := h.workerRepo.GetByUserID(ctx, userIDObj)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -253,7 +252,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid worker ID"})
 			return
 		}
-		w, err := h.workerService.GetByID(ctx, workerOID)
+		w, err := h.workerRepo.GetByID(ctx, workerOID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
 			return
@@ -279,7 +278,7 @@ func (h *DashboardHandler) GetUptime(c *gin.Context) {
 		return
 	}
 
-	workersList, err := h.workerService.GetByUserID(ctx, userIDObj)
+	workersList, err := h.workerRepo.GetByUserID(ctx, userIDObj)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

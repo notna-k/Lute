@@ -64,9 +64,8 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	// which JWTAuthMiddleware would reject.
 	api.GET("/ws", wsHandler.HandleWebSocket)
 
-	workerService := worker.NewWorkerService(d.WorkerRepo)
 	workerHandler := worker.NewWorkerHandler(d.Config.WorkerBinary.Dir, d.Config, d.WorkerRepo, d.CommandRepo, d.GRPCServer.ConnMgr, d.GRPCServer)
-	dashboardHandler := dashboard.NewDashboardHandler(d.Config, workerService, d.WorkerSnapshotRepo)
+	dashboardHandler := dashboard.NewDashboardHandler(d.Config, d.WorkerRepo, d.WorkerSnapshotRepo)
 	apiKeysHandler := publicapi.NewAPIKeysHandler(d.APIKeyRepo)
 
 	jobHandler := jobs.NewJobHandler(d.QueueEngine, d.StatsAgg, d.GRPCServer, d.JobExecutionRepo)
@@ -82,7 +81,7 @@ func SetupRouter(d SetupRouterDeps) *gin.Engine {
 	v1 := api.Group("/v1")
 	{
 		auth.SetupRoutes(v1, authHandler, authedMW)
-		worker.SetupRoutes(v1, workerHandler, authedMW)
+		worker.MountJWT(v1, workerHandler, authedMW)
 		dashboard.SetupRoutes(v1, dashboardHandler, authedMW)
 
 		authed := v1.Group("")
