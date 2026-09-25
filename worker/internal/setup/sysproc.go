@@ -7,9 +7,7 @@ import (
 	"syscall"
 )
 
-// setDetachedProcessAttr sets process attributes to detach from terminal on Unix systems
-func setDetachedProcessAttr(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true, // detach from terminal (Unix/Linux/macOS)
-	}
+// detach puts the agent in its own session so it outlives the terminal that ran setup.
+func detach(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }

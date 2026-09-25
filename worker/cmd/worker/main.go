@@ -158,7 +158,10 @@ func cmdSetup(args []string) {
 		os.Exit(2)
 	}
 
-	setup.Run(f.apiURL, Version, BuildTime, f.claimCode)
+	if err := setup.Run(setup.Options{APIURL: f.apiURL, ClaimCode: f.claimCode, Version: Version, BuildTime: BuildTime}); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 }
 
 // ---------- logs ----------
