@@ -9,8 +9,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestDispatchWaitsForACapableHost covers the decisions core makes about who gets a
-// build: which queue, which labels, and how much a host can take at once.
+// TestDispatchWaitsForACapableHost covers who gets a build: queue, labels and capacity.
 func TestDispatchWaitsForACapableHost(t *testing.T) {
 	t.Run("Success - work queued with no host waits, then runs when one arrives", func(t *testing.T) {
 		stack := newStack(t)
@@ -28,8 +27,7 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			return err == nil && job.Status != "pending"
 		})
 
-		// Connecting a host is the event that releases the work: no second trigger,
-		// no waiting for the next sweep.
+		// Connecting a host releases the work at once: no second trigger, no waiting for a sweep.
 		stack.ConnectedAgent(admin, "late-host", harness.WithQueues("build"))
 		harness.WaitBuildStatus(admin, echoSlug, build.RunID, 2*time.Minute, "passed")
 	})
@@ -50,8 +48,7 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			t.Fatalf("trigger build: %v", err)
 		}
 
-		// The build queue's work runs; the deploy queue's waits for a host that
-		// serves it. Handing it over anyway would run deploys on the wrong fleet.
+		// The deploy build must wait for a host serving that queue, not run on the wrong fleet.
 		harness.WaitBuildStatus(admin, echoSlug, onBuild.RunID, 2*time.Minute, "passed")
 		job, err := admin.GetJob(deployJob)
 		if err != nil {
@@ -78,8 +75,7 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			return err == nil && job.Status != "pending"
 		})
 
-		// Labelling the host is an operator action that must take effect at once:
-		// waiting for a reconnect would make the panel's label editor a lie.
+		// A label edit must take effect without the agent reconnecting.
 		if _, err := admin.PatchLabels(agent.WorkerID, map[string]string{"region": "eu"}); err != nil {
 			t.Fatalf("patch labels: %v", err)
 		}
@@ -131,8 +127,6 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			jobs = append(jobs, jobIDOf(t, admin, slowSlug, build.RunID))
 		}
 
-		// Capacity the operator granted has to actually be used, or the fleet is
-		// idle while the queue grows.
 		harness.WaitFor(t, time.Minute, "both builds to be running at once", func() bool {
 			running := 0
 			for _, id := range jobs {
@@ -153,8 +147,7 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 		stack := newStack(t)
 		admin := stack.AdminClient()
 
-		// Queue everything before any host exists, so the order is core's choice
-		// rather than an accident of arrival time.
+		// Queue everything before any host exists, so the order is core's choice.
 		low, err := admin.Enqueue(harness.EnqueueRequest{Queue: "build", Type: "noop", Priority: 1})
 		if err != nil {
 			t.Fatalf("enqueue low: %v", err)
@@ -177,8 +170,7 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 		if first.JobId != high.JobID {
 			t.Errorf("first assignment = %s, want the high-priority job %s", first.JobId, high.JobID)
 		}
-		// The host has capacity for one, so the cheaper job must still be waiting:
-		// priority that only holds when the queue is idle is no priority at all.
+		// The host has capacity for one, so the low-priority job must still be waiting.
 		lowJob, err := admin.GetJob(low.JobID)
 		if err != nil {
 			t.Fatalf("get the low-priority job: %v", err)
@@ -200,8 +192,6 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			t.Fatalf("enqueue delayed: %v", err)
 		}
 
-		// Running it early defeats every use of a delay: backoff, batching, a
-		// scheduled window.
 		harness.Never(t, 1500*time.Millisecond, "a delayed job to run before its time", func() bool {
 			job, err := admin.GetJob(enqueued.JobID)
 			return err == nil && job.Status != "pending"
@@ -280,8 +270,7 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			}
 		}
 
-		// Both hosts busy is the point of having two. Stacking both builds on one
-		// while the other idles is a scheduler that does not scale.
+		// Both builds must spread across both hosts, not stack on one.
 		harness.WaitFor(t, time.Minute, "both hosts to be busy", func() bool {
 			workers, err := admin.ConnectedWorkers()
 			if err != nil {

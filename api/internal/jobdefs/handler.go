@@ -19,7 +19,6 @@ import (
 	"github.com/lute/api/internal/queue"
 )
 
-// Handler serves job definitions and triggers builds from them.
 type Handler struct {
 	defs       *repos.JobDefinitionRepository
 	syncer     *Syncer
@@ -27,7 +26,7 @@ type Handler struct {
 	executions *repos.JobExecutionRepository
 	settings   *repos.SettingRepository
 	engine     *queue.Engine
-	stats      *queue.StatsAggregator
+	stats      *queue.Stats
 	grpcSrv    *grpc.Server
 }
 
@@ -38,7 +37,7 @@ func NewHandler(
 	executions *repos.JobExecutionRepository,
 	settings *repos.SettingRepository,
 	engine *queue.Engine,
-	stats *queue.StatsAggregator,
+	stats *queue.Stats,
 	grpcSrv *grpc.Server,
 ) *Handler {
 	return &Handler{
@@ -53,7 +52,7 @@ func NewHandler(
 	}
 }
 
-// --- DTOs (JSON keys match ui/src/types/jobs.ts) ---
+// JSON keys below match ui/src/types/jobs.ts.
 
 type sourceDTO struct {
 	Repo   string `json:"repo"`
@@ -62,55 +61,44 @@ type sourceDTO struct {
 }
 
 type jobDTO struct {
-	Slug          string                  `json:"slug"`
-	Name          string                  `json:"name"`
-	Description   string                  `json:"description"`
-	Queue         string                  `json:"queue"`
-	LabelSelector map[string]string       `json:"labelSelector"`
-	Runtime       string                  `json:"runtime"`
-	Command       string                  `json:"command"`
-	Source        sourceDTO               `json:"source"`
-	Parameters    []models.ParameterField `json:"parameters"`
-	// GitState is one of models.GitSynced / GitModified / GitManual / GitRemoved.
-	GitState         string  `json:"gitState"`
-	SuccessRate      float64 `json:"successRate"`
-	MedianDurationMs int64   `json:"medianDurationMs"`
-	// LastBuild is the newest build of this job, so a job list can show what the
-	// job is doing right now without a request per row.
+	Slug             string                  `json:"slug"`
+	Name             string                  `json:"name"`
+	Description      string                  `json:"description"`
+	Queue            string                  `json:"queue"`
+	LabelSelector    map[string]string       `json:"labelSelector"`
+	Runtime          string                  `json:"runtime"`
+	Command          string                  `json:"command"`
+	Source           sourceDTO               `json:"source"`
+	Parameters       []models.ParameterField `json:"parameters"`
+	GitState         string                  `json:"gitState"`
+	SuccessRate      float64                 `json:"successRate"`
+	MedianDurationMs int64                   `json:"medianDurationMs"`
+	// LastBuild saves the job list a request per row.
 	LastBuild *buildDTO `json:"lastBuild,omitempty"`
-	// Recent is the trailing run of build statuses, oldest first, for the
-	// history strip in the job list.
+	// Recent is the trailing build statuses, oldest first.
 	Recent []string `json:"recent,omitempty"`
 }
 
-// recentWindow caps how many trailing statuses a job list carries per job.
 const recentWindow = 16
 
 type buildDTO struct {
-	// ID is the short, human-facing build reference (#a1b2c3d4).
-	ID string `json:"id"`
-	// RunID is the full run identifier — use this to address the build in the runs API.
+	// ID is the short, human-facing reference (#a1b2c3d4).
+	ID    string `json:"id"`
 	RunID string `json:"runId"`
-	// JobID addresses this build in the queue and log APIs (/jobs/:id/...). It is a
-	// different identifier from RunID, and the two are not interchangeable: sending
-	// a run id to a jobs endpoint is a 404.
+	// JobID addresses the build in the queue and log APIs; it is not interchangeable with RunID.
 	JobID       string `json:"jobId"`
 	JobSlug     string `json:"jobSlug"`
 	Status      string `json:"status"`
 	Environment string `json:"environment,omitempty"`
 	StartedAt   int64  `json:"startedAt"`
 	DurationMs  int64  `json:"durationMs,omitempty"`
-	// Params are the resolved values this build ran with, keyed by env var.
-	// The panel offers them as a starting point for the next build. Secret
-	// parameters never reach Run.Params, so nothing sensitive is echoed here.
+	// Params are keyed by env var. Secret parameters never reach Run.Params, so none are echoed.
 	Params map[string]string `json:"params,omitempty"`
-	// AdHoc marks a build that ran a panel-edited schema rather than the
-	// definition committed to Git.
+	// AdHoc marks a build that ran a panel-edited schema instead of the one in Git.
 	AdHoc bool `json:"adHoc,omitempty"`
 }
 
-// containerSpec is the JSON envelope for a "container" job (matches the proto
-// ContainerJobSpec field names the worker decodes).
+// containerSpec's field names match the proto ContainerJobSpec the worker decodes.
 type containerSpec struct {
 	SourceRepository string            `json:"source_repository,omitempty"`
 	Runtime          string            `json:"runtime"`
@@ -147,8 +135,7 @@ func (h *Handler) toJobDTO(def *models.JobDefinition, rate float64, median int64
 	}
 }
 
-// withHistory attaches the newest build and the trailing status strip. runs must
-// be newest-first, as the repositories return them.
+// withHistory attaches the newest build and the status strip. runs must be newest first.
 func (h *Handler) withHistory(ctx context.Context, dto jobDTO, runs []models.Run, execs map[string]*models.JobExecution) jobDTO {
 	if len(runs) == 0 {
 		return dto
@@ -159,12 +146,9 @@ func (h *Handler) withHistory(ctx context.Context, dto jobDTO, runs []models.Run
 	return dto
 }
 
-// recentStatuses renders a job's trailing builds as a strip of statuses, oldest
-// first so it reads left to right.
-//
-// Only the newest build's status is resolved against the queue — that one is
-// passed in. For the rest an execution record is the only thing that separates a
-// pass from a failure, and a missing one means the build never finished.
+// recentStatuses returns trailing build statuses, oldest first. Only the newest is
+// resolved against the queue (lastStatus); for the rest, no execution record means
+// the build never finished.
 func recentStatuses(runs []models.Run, execs map[string]*models.JobExecution, lastStatus string) []string {
 	window := runs
 	if len(window) > recentWindow {
@@ -186,7 +170,6 @@ func recentStatuses(runs []models.Run, execs map[string]*models.JobExecution, la
 	return out
 }
 
-// List returns all definitions with per-user build stats.
 func (h *Handler) List(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -222,7 +205,6 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"jobs": out})
 }
 
-// Get returns one definition.
 func (h *Handler) Get(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -248,7 +230,6 @@ func (h *Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, h.withHistory(ctx, h.toJobDTO(def, rate, median), runs, execs))
 }
 
-// Builds returns the recent builds (runs) for a job.
 func (h *Handler) Builds(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -275,17 +256,11 @@ func (h *Handler) Builds(c *gin.Context) {
 
 type triggerRequest struct {
 	Values map[string]any `json:"values"`
-	// Parameters is the schema the panel actually rendered. When present and
-	// different from the Git-synced definition, this is an ad-hoc build: the
-	// submitted schema is what gets validated, not the stored one. Omit it to
-	// run the definition as committed.
-	//
-	// Without this, values for panel-added parameters were silently dropped —
-	// Validate only ever walked the stored fields.
+	// Parameters is the schema the panel rendered. If it differs from Git this is an
+	// ad-hoc build validated against it; omit it to run the definition as committed.
 	Parameters []models.ParameterField `json:"parameters"`
 }
 
-// Trigger validates the payload against the schema and enqueues a build.
 func (h *Handler) Trigger(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -304,8 +279,6 @@ func (h *Handler) Trigger(c *gin.Context) {
 		return
 	}
 
-	// Decide which schema governs this build. An omitted `parameters` means
-	// "run it as committed"; anything else is compared against Git.
 	schema := def.Parameters
 	adhoc := false
 	if req.Parameters != nil && schemaDiffers(def.Parameters, req.Parameters) {
@@ -331,8 +304,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 	if verr != nil {
 		var ve *ValidationError
 		if errors.As(verr, &ve) {
-			// `error` stays a plain string like every other handler in the API
-			// (the UI renders it directly); `fields` carries the per-input detail.
+			// `error` stays a plain string like everywhere else; `fields` has per-input detail.
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"error":  ve.Error(),
 				"code":   "invalid_parameters",
@@ -393,7 +365,7 @@ func (h *Handler) Trigger(c *gin.Context) {
 	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
 }
 
-// createRequest is a template authored in the panel and saved as a definition.
+// createRequest is a template authored in the panel.
 type createRequest struct {
 	Name        string                  `json:"name"`
 	Description string                  `json:"description"`
@@ -405,9 +377,7 @@ type createRequest struct {
 	Parameters  []models.ParameterField `json:"parameters"`
 }
 
-// validate checks the fields a template cannot be saved without, and returns a
-// message suitable for the panel. Shared by Create and Update so the two cannot
-// drift apart.
+// validate returns a message for the panel, or "" if the template can be saved.
 func (r createRequest) validate() string {
 	if strings.TrimSpace(r.Name) == "" {
 		return "name is required"
@@ -429,7 +399,6 @@ func (r createRequest) validate() string {
 	return ""
 }
 
-// spec returns the request as a JobSpec, with defaults applied.
 func (r createRequest) spec() models.JobSpec {
 	queueName := strings.TrimSpace(r.Queue)
 	if queueName == "" {
@@ -447,9 +416,8 @@ func (r createRequest) spec() models.JobSpec {
 	}
 }
 
-// Create saves a panel-authored template as a job definition. It has no Git
-// snapshot, so the panel flags it as not in Git until a file with its slug is
-// committed — or until a sync with pruning on deletes it.
+// Create saves a panel-authored template. With no Git snapshot it shows as "not in
+// Git" until a file with its slug is committed, or a pruning sync deletes it.
 func (h *Handler) Create(c *gin.Context) {
 	if _, ok := requireUserID(c); !ok {
 		return
@@ -490,8 +458,7 @@ func (h *Handler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, h.toJobDTO(def, 0, 0))
 }
 
-// Update rewrites a definition's spec. For one that came from Git this makes
-// it drift: the panel flags it, and the edit stands until its file changes.
+// Update rewrites a definition's spec. A Git definition drifts until its file changes.
 func (h *Handler) Update(c *gin.Context) {
 	if _, ok := requireUserID(c); !ok {
 		return
@@ -513,8 +480,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	// Slug is intentionally left alone: runs reference it, so renaming the
-	// template must not orphan its build history.
+	// The slug stays: runs reference it, and a rename must not orphan build history.
 	def.JobSpec = req.spec()
 
 	if err := h.defs.Update(ctx, def); err != nil {
@@ -524,9 +490,8 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, h.toJobDTO(def, 0, 0))
 }
 
-// buildDTO derives a build's live status from queue + execution state. exec is
-// the already-loaded execution record for this run, or nil if it hasn't
-// finished (see execsFor / ListByJobIDs — never query per build here).
+// buildDTO derives a build's live status from queue and execution state. exec is
+// preloaded (nil if unfinished); never query per build here.
 func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.JobExecution) buildDTO {
 	b := buildDTO{
 		ID:          shortID(run.ID),
@@ -553,8 +518,7 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 		if job.StartedAt > 0 {
 			b.StartedAt = job.StartedAt * 1000
 		}
-		// The queue knows how long a finished attempt took, which is what lets a build
-		// report its duration in the window before its execution record is written.
+		// Covers the window before the execution record is written.
 		if job.ElapsedMs > 0 {
 			b.DurationMs = job.ElapsedMs
 		}
@@ -570,7 +534,6 @@ func (h *Handler) buildDTO(ctx context.Context, run *models.Run, exec *models.Jo
 	return b
 }
 
-// jobIDsOf collects the queue-job IDs of a run set, for a batched execution load.
 func jobIDsOf(runs []models.Run) []string {
 	ids := make([]string, 0, len(runs))
 	for i := range runs {
@@ -579,7 +542,6 @@ func jobIDsOf(runs []models.Run) []string {
 	return ids
 }
 
-// execsFor loads the executions for every run in a slug→runs map in one query.
 func (h *Handler) execsFor(ctx context.Context, runsBySlug map[string][]models.Run) (map[string]*models.JobExecution, error) {
 	var ids []string
 	for _, runs := range runsBySlug {
@@ -588,8 +550,7 @@ func (h *Handler) execsFor(ctx context.Context, runsBySlug map[string][]models.R
 	return h.executions.ListByJobIDs(ctx, ids)
 }
 
-// statsOf computes success rate and median duration over a job's builds using
-// pre-loaded executions.
+// statsOf returns success rate and median duration over a job's builds.
 func statsOf(runs []models.Run, execs map[string]*models.JobExecution) (float64, int64) {
 	var durations []int64
 	finished, passed := 0, 0
@@ -648,8 +609,7 @@ func notFoundOrInternal(c *gin.Context, err error) {
 	writeError(c, http.StatusInternalServerError, err.Error())
 }
 
-// writeError matches the `{"error": "message"}` shape the rest of the API (and
-// the UI's api client) uses — a nested object here surfaces as "[object Object]".
+// writeError keeps the flat {"error": "message"} shape; the UI renders a nested object as "[object Object]".
 func writeError(c *gin.Context, status int, message string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": message})
 }

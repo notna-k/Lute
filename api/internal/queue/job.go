@@ -1,4 +1,4 @@
-package queuejob
+package queue
 
 import (
 	"encoding/json"
@@ -27,7 +27,6 @@ type Job struct {
 	Selector   map[string]string `json:"selector,omitempty"`
 }
 
-// EnqueueOpts are options when enqueuing a job.
 type EnqueueOpts struct {
 	Priority   float64
 	Delay      time.Duration

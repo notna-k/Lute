@@ -13,14 +13,10 @@ import (
 	"time"
 )
 
-// SetupResult is what the agent's `setup` subcommand reported.
 type SetupResult struct {
-	// WorkerID is the id core assigned the host.
-	WorkerID string
-	// DaemonPID is the background agent setup started, if it printed one.
+	WorkerID  string
 	DaemonPID int
-	// Output is everything setup wrote, for assertions and for diagnosing a failure.
-	Output string
+	Output    string
 }
 
 var (
@@ -28,10 +24,8 @@ var (
 	daemonPIDRe  = regexp.MustCompile(`Worker started \(PID (\d+)\)`)
 )
 
-// RunSetupCLI runs `lute-worker setup --claim-code …` the way an operator does: it
-// answers the service-name prompt on stdin, and setup registers the host and starts
-// the agent in the background. The background agent is detached from this process, so
-// it is killed explicitly on cleanup.
+// RunSetupCLI runs `lute-worker setup --claim-code …` as an operator would, answering the
+// service-name prompt. The agent it starts is detached, so cleanup kills it explicitly.
 func (s *Stack) RunSetupCLI(claimCode, serviceName string) SetupResult {
 	s.t.Helper()
 
@@ -39,8 +33,7 @@ func (s *Stack) RunSetupCLI(claimCode, serviceName string) SetupResult {
 		s.t.Fatal(err)
 	}
 
-	// setup's background agent inherits this directory and writes its job logs under
-	// it, so pointing it at a temp dir keeps the repo clean.
+	// The background agent writes job logs under its working directory.
 	workDir := s.t.TempDir()
 
 	cmd := exec.Command(WorkerBinaryPath(), //nolint:gosec // the binary we just built
@@ -75,8 +68,7 @@ func (s *Stack) RunSetupCLI(claimCode, serviceName string) SetupResult {
 	if res.DaemonPID > 0 {
 		pid := res.DaemonPID
 		s.t.Cleanup(func() {
-			// The daemon is in its own session; signal the process directly and give
-			// it a moment, then insist.
+			// The daemon has its own session: signal it directly, then insist.
 			proc, err := os.FindProcess(pid)
 			if err != nil {
 				return

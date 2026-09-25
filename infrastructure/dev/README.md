@@ -75,9 +75,8 @@ re-sync. See `jobdefs/web-release.yaml` for the format.
 Configured in the repo-root `.env` (copy from `.env.example` at the repo root).
 Override the location with `make ENV_FILE=/path/to/env dev-up`. Highlights:
 
-- **Database**: Core runs with `DB_DRIVER=postgres` and a `POSTGRES_DSN` pointing
-  at the `postgres` service (set by compose). SQLite remains available for native
-  runs via `DB_DRIVER=sqlite`.
+- **Database**: Postgres only. Compose points `POSTGRES_DSN` at the `postgres` service.
+- **Logging**: core logs structured text to stderr; `LOG_LEVEL` is `debug`, `info` (default), `warn` or `error`.
 - **Ports**: `ADMIN_PORT` (8080), `API_HTTP_PORT` (8081), `API_GRPC_PORT` (50051).
 - **Auth**: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, plus optional token TTLs.
 

@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes sets up job queue, stats, DLQ, and executions routes.
 func SetupRoutes(
 	r *gin.RouterGroup,
 	jobHandler *JobHandler,

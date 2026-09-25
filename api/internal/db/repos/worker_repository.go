@@ -47,8 +47,7 @@ func (r *WorkerRepository) GetByUserID(ctx context.Context, userID id.ID) ([]*mo
 	return out, nil
 }
 
-// GetByUserIDAndLabels returns workers owned by userID whose labels contain all filter pairs.
-// An empty filter behaves identically to GetByUserID.
+// GetByUserIDAndLabels returns userID's workers whose labels contain every filter pair.
 func (r *WorkerRepository) GetByUserIDAndLabels(ctx context.Context, userID id.ID, filter map[string]string) ([]*models.Worker, error) {
 	workers, err := r.GetByUserID(ctx, userID)
 	if err != nil || len(filter) == 0 {
@@ -63,7 +62,6 @@ func (r *WorkerRepository) GetByUserIDAndLabels(ctx context.Context, userID id.I
 	return out, nil
 }
 
-// workerLabelsMatch returns true if labels contains every key-value pair in filter.
 func workerLabelsMatch(labels, filter map[string]string) bool {
 	for k, v := range filter {
 		if labels[k] != v {
@@ -193,7 +191,6 @@ func (r *WorkerRepository) ListMonitored(ctx context.Context) ([]*models.Worker,
 	return out, err
 }
 
-// CountByUserIDAndStatusResult is one row from AggregateCountsByUserID.
 type CountByUserIDAndStatusResult struct {
 	UserID id.ID
 	Alive  int

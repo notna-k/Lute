@@ -2,9 +2,7 @@ package jobdefs
 
 import "github.com/gin-gonic/gin"
 
-// SetupRoutes mounts job-definition routes under an already-authenticated group.
-// Path is /job-definitions (not /jobs) to avoid colliding with the legacy
-// queue-job routes in the `jobs` package.
+// SetupRoutes mounts /job-definitions, distinct from the queue-job routes under /jobs.
 func SetupRoutes(authed *gin.RouterGroup, h *Handler) {
 	jobs := authed.Group("/job-definitions")
 	{

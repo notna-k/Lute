@@ -13,17 +13,14 @@ import (
 	gorillaWS "github.com/gorilla/websocket"
 )
 
-// panelOrigin is an origin core's allow-list accepts, so an event stream opens the
-// way the panel's does.
+// panelOrigin is on core's allow-list, so an event stream opens as the panel's does.
 const panelOrigin = "http://localhost:8080"
 
-// Event is one message core pushed to the panel.
 type Event struct {
 	Type string          `json:"type"`
 	Job  json.RawMessage `json:"job"`
 }
 
-// JobID pulls the job identifier out of an event's payload.
 func (e Event) JobID() string {
 	var job struct {
 		ID string `json:"id"`
@@ -32,7 +29,6 @@ func (e Event) JobID() string {
 	return job.ID
 }
 
-// EventStream is a panel session listening for build events.
 type EventStream struct {
 	t    *testing.T
 	conn *gorillaWS.Conn
@@ -42,7 +38,6 @@ type EventStream struct {
 	err    error
 }
 
-// OpenEventStream connects to the panel's WebSocket with the client's token.
 func (s *Stack) OpenEventStream(c *Client) *EventStream {
 	s.t.Helper()
 
@@ -66,8 +61,7 @@ func (s *Stack) OpenEventStream(c *Client) *EventStream {
 	return es
 }
 
-// DialEventStream attempts the upgrade and returns the response, for tests that
-// assert an upgrade is refused.
+// DialEventStream returns the raw upgrade response, for tests that expect a refusal.
 func (s *Stack) DialEventStream(header http.Header) (*gorillaWS.Conn, *http.Response, error) {
 	s.t.Helper()
 	url := "ws" + strings.TrimPrefix(s.BaseURL(), "http") + "/api/ws"
@@ -98,14 +92,12 @@ func (es *EventStream) read() {
 	}
 }
 
-// Events returns everything received so far.
 func (es *EventStream) Events() []Event {
 	es.mu.Lock()
 	defer es.mu.Unlock()
 	return append([]Event(nil), es.events...)
 }
 
-// TypesFor returns the event types seen for one job, in arrival order.
 func (es *EventStream) TypesFor(jobID string) []string {
 	var out []string
 	for _, ev := range es.Events() {
@@ -116,7 +108,6 @@ func (es *EventStream) TypesFor(jobID string) []string {
 	return out
 }
 
-// WaitForEvent blocks until an event of the given type arrives for a job.
 func (es *EventStream) WaitForEvent(timeout time.Duration, jobID, eventType string) Event {
 	es.t.Helper()
 	return Eventually(es.t, timeout, "event "+eventType+" for job "+jobID, func() (Event, bool) {
@@ -129,19 +120,7 @@ func (es *EventStream) WaitForEvent(timeout time.Duration, jobID, eventType stri
 	})
 }
 
-// Send writes a raw frame. Reads stay with the collector goroutine, so a test
-// asserting something never arrives checks Events rather than reading itself.
+// Send writes a raw frame. Reads belong to the collector goroutine; check Events instead.
 func (es *EventStream) Send(payload string) error {
 	return es.conn.WriteMessage(gorillaWS.TextMessage, []byte(payload))
-}
-
-// Count returns how many events of a type have arrived, across all jobs.
-func (es *EventStream) Count(eventType string) int {
-	n := 0
-	for _, ev := range es.Events() {
-		if ev.Type == eventType {
-			n++
-		}
-	}
-	return n
 }

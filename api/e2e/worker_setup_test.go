@@ -11,8 +11,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestWorkerOnboarding covers claiming a build host: the panel issues a code, the host
-// registers with it, and core refuses everything that is not exactly that.
+// TestWorkerOnboarding covers claim codes: the one valid path in, and refusing everything else.
 func TestWorkerOnboarding(t *testing.T) {
 	stack := newBareStack(t)
 	admin := stack.AdminClient()
@@ -42,8 +41,7 @@ func TestWorkerOnboarding(t *testing.T) {
 		if reg.WorkerID == "" {
 			t.Fatal("registration returned no worker id")
 		}
-		// The address core hands back is the one the agent will dial. If it is not
-		// reachable, onboarding looks successful and the host never connects.
+		// The agent dials this address; if it is wrong, onboarding "succeeds" and nothing connects.
 		if reg.GRPCAddress == "" {
 			t.Fatal("registration returned no gRPC address")
 		}
@@ -152,8 +150,7 @@ func TestWorkerOnboarding(t *testing.T) {
 			t.Fatalf("first host: %v", err)
 		}
 
-		// A host that was replaced or reimaged has to be able to come back. Deleting
-		// the old record is the operator's way of saying so.
+		// Deleting the old record is how an operator lets a reimaged host come back.
 		if err := admin.DeleteWorker(first.WorkerID); err != nil {
 			t.Fatalf("delete first host: %v", err)
 		}
@@ -171,9 +168,7 @@ func TestWorkerOnboarding(t *testing.T) {
 	})
 }
 
-// TestWorkerSetupCommand runs the agent's own `setup` subcommand, the path an operator
-// actually follows: paste the command from the panel, answer the prompt, and the host
-// registers itself and starts working.
+// TestWorkerSetupCommand runs `lute-worker setup` as an operator does, from the panel's command.
 func TestWorkerSetupCommand(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -206,8 +201,7 @@ func TestWorkerSetupCommand(t *testing.T) {
 		t.Fatalf("the host setup registered (%s) is not listed", setup.WorkerID)
 	}
 
-	// setup does not stop at registering: it starts the agent, so the host is ready
-	// to take work without a second command.
+	// setup also starts the agent, so no second command is needed.
 	stack.WaitConnected(admin, setup.WorkerID)
 }
 

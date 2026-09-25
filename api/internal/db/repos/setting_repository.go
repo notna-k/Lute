@@ -23,8 +23,7 @@ func (r *SettingRepository) q(ctx context.Context) *gorm.DB {
 	return r.g.WithContext(ctx)
 }
 
-// Get returns the stored value, or the registered default when the key has
-// never been written. An unknown key yields "".
+// Get returns the stored value or the default; an unknown key yields "".
 func (r *SettingRepository) Get(ctx context.Context, key string) (string, error) {
 	var s models.Setting
 	err := r.q(ctx).Where("key = ?", key).First(&s).Error
@@ -37,8 +36,7 @@ func (r *SettingRepository) Get(ctx context.Context, key string) (string, error)
 	return s.Value, nil
 }
 
-// GetBool reads a boolean setting, falling back to the default on any
-// unparseable value so a bad row can never wedge the panel.
+// GetBool falls back to the default on an unparseable value, so a bad row cannot wedge the panel.
 func (r *SettingRepository) GetBool(ctx context.Context, key string) (bool, error) {
 	raw, err := r.Get(ctx, key)
 	if err != nil {
@@ -51,7 +49,7 @@ func (r *SettingRepository) GetBool(ctx context.Context, key string) (bool, erro
 	return v, nil
 }
 
-// Set upserts a key. Callers validate the value before writing.
+// Set upserts a key; callers validate the value.
 func (r *SettingRepository) Set(ctx context.Context, key, value string) error {
 	s := &models.Setting{Key: key, Value: value}
 	return mapErr(r.q(ctx).Clauses(clause.OnConflict{
@@ -60,7 +58,6 @@ func (r *SettingRepository) Set(ctx context.Context, key, value string) error {
 	}).Create(s).Error)
 }
 
-// All returns every known setting, with defaults filled in for unwritten keys.
 func (r *SettingRepository) All(ctx context.Context) (map[string]string, error) {
 	var rows []models.Setting
 	if err := r.q(ctx).Find(&rows).Error; err != nil {

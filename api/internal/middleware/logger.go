@@ -1,33 +1,34 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 func Logger() gin.HandlerFunc {
-	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		log.Printf("[%s] %s %s %d %s \"%s\" %s\n",
-			param.TimeStamp.Format(time.RFC1123),
-			param.Method,
-			param.Path,
-			param.StatusCode,
-			param.Latency,
-			param.Request.UserAgent(),
-			param.ErrorMessage,
-		)
-		return ""
-	})
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		attrs := []any{
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"status", c.Writer.Status(),
+			"latency", time.Since(start),
+			"client_ip", c.ClientIP(),
+		}
+		if errs := c.Errors.String(); errs != "" {
+			attrs = append(attrs, "errors", errs)
+		}
+		slog.Info("http request", attrs...)
+	}
 }
 
 func Recovery() gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
-		log.Printf("Panic recovered: %v", recovered)
-		c.JSON(500, gin.H{
-			"error": "Internal server error",
-		})
-		c.Abort()
+	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		slog.Error("panic recovered", "method", c.Request.Method, "path", c.Request.URL.Path, "panic", recovered)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 	})
 }

@@ -55,9 +55,7 @@ func (r *JobExecutionRepository) GetByJobID(ctx context.Context, jobID string) (
 	return &e, nil
 }
 
-// ListByJobIDs loads executions for many queue-job IDs in one query, keyed by
-// job ID. Used by the job-definition handlers so rendering N jobs' build stats
-// costs one query instead of one per build.
+// ListByJobIDs loads executions for many jobs in one query, keyed by job ID.
 func (r *JobExecutionRepository) ListByJobIDs(ctx context.Context, jobIDs []string) (map[string]*models.JobExecution, error) {
 	out := make(map[string]*models.JobExecution, len(jobIDs))
 	if len(jobIDs) == 0 {
@@ -73,8 +71,7 @@ func (r *JobExecutionRepository) ListByJobIDs(ctx context.Context, jobIDs []stri
 	return out, nil
 }
 
-// JobExecutionOrders is the closed set of orders the list endpoint accepts,
-// keyed by the value the panel sends.
+// JobExecutionOrders maps the sort values the panel sends to SQL.
 var JobExecutionOrders = map[string]string{
 	"finished_at_desc": "finished_at DESC",
 	"finished_at_asc":  "finished_at ASC",
@@ -82,23 +79,19 @@ var JobExecutionOrders = map[string]string{
 	"elapsed_asc":      "elapsed_ms ASC",
 }
 
-// DefaultJobExecutionOrder is what an unknown or missing sort falls back to.
 const DefaultJobExecutionOrder = "finished_at DESC"
 
 type JobExecutionListFilter struct {
-	// Queues and Types narrow to any of the given values; empty means all.
+	// Queues and Types match any of their values; empty means all.
 	Queues []string
 	Types  []string
 	Status string // "", "success", or "failed"
-	// Search matches a job id, worker id or error message, case-insensitively.
-	// The panel's Builds list offers one box over the three because an operator
-	// arrives with one string and does not know which column it came from.
+	// Search matches job id, worker id or error, case-insensitively.
 	Search string
 }
 
-// List returns one page of executions. sortOrder is one of the SQL fragments in
-// JobExecutionOrders; anything else is rejected, so the caller may pass a query
-// parameter straight through without opening an injection hole.
+// List returns one page. sortOrder must be a value of JobExecutionOrders; anything else
+// is rejected, which is what makes passing a query parameter through injection-safe.
 func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionListFilter, offset, limit int64, sortOrder string) ([]models.JobExecution, int64, error) {
 	if limit <= 0 {
 		limit = 50
@@ -124,13 +117,11 @@ func (r *JobExecutionRepository) List(ctx context.Context, filter JobExecutionLi
 		q = q.Where("success = ?", false)
 	}
 	if s := strings.TrimSpace(filter.Search); s != "" {
-		// LIKE over lowered columns rather than ILIKE: the same statement has to
-		// run on Postgres and on the SQLite used by the tests.
-		like := "%" + strings.ToLower(s) + "%"
+		like := "%" + s + "%"
 		q = q.Where(
-			r.q(ctx).Where("LOWER(job_id) LIKE ?", like).
-				Or("LOWER(worker_id) LIKE ?", like).
-				Or("LOWER(error) LIKE ?", like),
+			r.q(ctx).Where("job_id ILIKE ?", like).
+				Or("worker_id ILIKE ?", like).
+				Or("error ILIKE ?", like),
 		)
 	}
 

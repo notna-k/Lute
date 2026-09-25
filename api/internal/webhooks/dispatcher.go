@@ -1,8 +1,4 @@
-// Package webhooks dispatches signed HTTP callbacks for run lifecycle events.
-//
-// The emitter persists a WebhookDelivery row when a run transitions state,
-// and the dispatcher polls those rows, sends the request with an HMAC-SHA256
-// signature, and retries with exponential backoff.
+// Package webhooks records run events as deliveries and sends them HMAC-signed, retrying with backoff.
 package webhooks
 
 import (
@@ -14,7 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -24,15 +20,12 @@ import (
 )
 
 const (
-	defaultMaxAttempts = 6
-	requestTimeout     = 10 * time.Second
-	// DefaultPollInterval is how often the dispatcher looks for due deliveries
-	// when the caller does not ask for a different cadence.
+	defaultMaxAttempts  = 6
+	requestTimeout      = 10 * time.Second
 	DefaultPollInterval = 5 * time.Second
 	batchSize           = 20
 )
 
-// Emitter buffers run-level events into the deliveries collection.
 type Emitter struct {
 	runs       *repos.RunRepository
 	deliveries *repos.WebhookDeliveryRepository
@@ -42,9 +35,8 @@ func NewEmitter(runs *repos.RunRepository, deliveries *repos.WebhookDeliveryRepo
 	return &Emitter{runs: runs, deliveries: deliveries}
 }
 
-// Emit records a delivery for the given event if the run has a matching
-// subscription configured. Errors are logged but do not propagate to callers
-// because webhook delivery must not block the critical job path.
+// Emit records a delivery if the run subscribes to event. Errors are only logged:
+// webhooks must never block the job path.
 func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[string]interface{}) {
 	if e == nil || e.runs == nil || e.deliveries == nil {
 		return
@@ -52,7 +44,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 	run, err := e.runs.GetByJobID(ctx, jobID)
 	if err != nil {
 		if !errors.Is(err, repos.ErrNotFound) {
-			log.Printf("webhooks: lookup run for %s: %v", jobID, err)
+			slog.Error("webhooks: look up run", "job_id", jobID, "err", err)
 		}
 		return
 	}
@@ -70,7 +62,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
-		log.Printf("webhooks: marshal event %s/%s: %v", jobID, event, err)
+		slog.Error("webhooks: marshal event", "job_id", jobID, "event", event, "err", err)
 		return
 	}
 
@@ -92,18 +84,16 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 		NextRetryAt:     types.NewMilliTime(time.Now()),
 	}
 	if err := e.deliveries.Create(ctx, d); err != nil {
-		log.Printf("webhooks: persist delivery %s/%s: %v", jobID, event, err)
+		slog.Error("webhooks: persist delivery", "job_id", jobID, "event", event, "err", err)
 	}
 }
 
-// Dispatcher polls for due deliveries and sends them in parallel workers.
 type Dispatcher struct {
 	deliveries   *repos.WebhookDeliveryRepository
 	httpClient   *http.Client
 	pollInterval time.Duration
 }
 
-// NewDispatcher returns a dispatcher polling every pollInterval; zero means DefaultPollInterval.
 func NewDispatcher(deliveries *repos.WebhookDeliveryRepository, pollInterval time.Duration) *Dispatcher {
 	if pollInterval <= 0 {
 		pollInterval = DefaultPollInterval
@@ -115,7 +105,6 @@ func NewDispatcher(deliveries *repos.WebhookDeliveryRepository, pollInterval tim
 	}
 }
 
-// Run polls until ctx is cancelled. Call in a goroutine from server bootstrap.
 func (d *Dispatcher) Run(ctx context.Context) {
 	ticker := time.NewTicker(d.pollInterval)
 	defer ticker.Stop()
@@ -132,7 +121,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 func (d *Dispatcher) tick(ctx context.Context) {
 	claimed, err := d.deliveries.ClaimDue(ctx, batchSize)
 	if err != nil {
-		log.Printf("webhooks: claim due: %v", err)
+		slog.Error("webhooks: claim due deliveries", "err", err)
 		return
 	}
 	for i := range claimed {

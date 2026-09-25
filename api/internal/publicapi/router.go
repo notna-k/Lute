@@ -8,11 +8,9 @@ import (
 	"github.com/lute/api/internal/worker"
 )
 
-// SetupPublicRoutes registers the public API under the given router group.
-// Callers should pass a group mounted at /api/public/v1.
-// Bootstrap worker routes are unauthenticated; runs and worker management require an API key.
+// SetupPublicRoutes mounts /api/public/v1: worker bootstrap is open, everything else needs an API key.
 func SetupPublicRoutes(r *gin.RouterGroup, keyRepo *repos.APIKeyRepository, runs *RunsHandler, wh *worker.WorkerHandler) {
-	worker.MountWorkerBootstrap(r, wh)
+	worker.MountBootstrap(r, wh)
 
 	authed := r.Group("")
 	authed.Use(middleware.APIKeyAuthMiddleware(keyRepo))
@@ -27,11 +25,10 @@ func SetupPublicRoutes(r *gin.RouterGroup, keyRepo *repos.APIKeyRepository, runs
 		runsGroup.GET("/:id/logs", runs.Logs)
 	}
 
-	worker.MountWorkerAPIKeyAPI(authed, wh)
+	worker.MountAPIKey(authed, wh)
 }
 
-// SetupAPIKeyRoutes registers key management endpoints on an already
-// JWT-authenticated group (e.g. /api/v1/api-keys).
+// SetupAPIKeyRoutes mounts key management on a JWT-authenticated group.
 func SetupAPIKeyRoutes(r *gin.RouterGroup, keys *APIKeysHandler) {
 	g := r.Group("/api-keys")
 	{

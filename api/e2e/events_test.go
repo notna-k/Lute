@@ -12,8 +12,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestBuildEventStream covers the live view: what the panel is told, as it happens,
-// without polling for it.
+// TestBuildEventStream covers the events the panel receives live over the WebSocket.
 func TestBuildEventStream(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -30,8 +29,7 @@ func TestBuildEventStream(t *testing.T) {
 
 		events.WaitForEvent(2*time.Minute, jobID, "job_completed")
 
-		// Order matters: a panel that sees "completed" before "started" draws a build
-		// that finished before it began.
+		// Order matters: "completed" before "started" draws a build that ended before it began.
 		got := events.TypesFor(jobID)
 		if diff := cmp.Diff([]string{"job_started", "job_completed"}, got); diff != "" {
 			t.Errorf("event sequence mismatch (-want +got):\n%s", diff)
@@ -65,8 +63,7 @@ func TestBuildEventStream(t *testing.T) {
 		listener := stack.OpenEventStream(admin)
 		sender := stack.OpenEventStream(admin)
 
-		// Relaying this would let any signed-in session forge a green build for
-		// everyone else's panel.
+		// Relaying this would let any session forge a green build on everyone's panel.
 		if err := sender.Send(`{"type":"job_completed","job":{"id":"forged-build"}}`); err != nil {
 			t.Fatalf("send: %v", err)
 		}

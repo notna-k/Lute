@@ -11,8 +11,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestSignInFlow covers getting into the panel and staying in: the seeded admin, the
-// refresh rotation a long session depends on, and the two ways a session ends.
+// TestSignInFlow covers the seeded admin, refresh rotation, and the two ways a session ends.
 func TestSignInFlow(t *testing.T) {
 	stack := newBareStack(t)
 
@@ -96,8 +95,7 @@ func TestSignInFlow(t *testing.T) {
 			t.Fatal("refresh returned the same refresh token; a stolen one would live forever")
 		}
 
-		// Replaying a rotated token is how a stolen cookie shows up. It must fail,
-		// and it must take the whole family with it.
+		// Replaying a rotated token is how a stolen cookie shows up: it must revoke the whole family.
 		c.SetRefreshCookie(first)
 		if _, err := c.Refresh(); harness.StatusOf(err) != http.StatusUnauthorized {
 			t.Fatalf("replaying a rotated refresh token: err = %v, want 401", err)

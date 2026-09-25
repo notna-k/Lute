@@ -7,7 +7,6 @@ import (
 	"github.com/lute/api/internal/db/id"
 )
 
-// Command represents a queued command for an agent to execute.
 type Command struct {
 	BaseModel
 	WorkerID id.ID               `json:"worker_id" gorm:"column:worker_id;size:24;not null;index"`

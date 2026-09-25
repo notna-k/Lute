@@ -20,8 +20,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestPublicRunsAPI covers the surface another system integrates against: an API key,
-// a run, its status and its logs.
+// TestPublicRunsAPI covers the integration surface: API keys, runs, status and logs.
 func TestPublicRunsAPI(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -130,7 +129,6 @@ func TestPublicRunsAPI(t *testing.T) {
 		if err := admin.RevokeAPIKey(doomed.ID); err != nil {
 			t.Fatalf("revoke: %v", err)
 		}
-		// Revoking has to take effect at once — that is the whole point of it.
 		if _, err := revoked.ListRuns(); harness.StatusOf(err) != http.StatusUnauthorized {
 			t.Errorf("using a revoked key: err = %v, want 401", err)
 		}
@@ -142,9 +140,7 @@ func TestPublicRunsAPI(t *testing.T) {
 			t.Fatalf("create run: %v", err)
 		}
 
-		// Lute has no way to create a second account yet, so this covers the half of
-		// ownership that is reachable: a run id the caller does not own reads as absent
-		// rather than as someone else's. Cross-account isolation needs a second user.
+		// There is no second account yet, so this only checks a foreign run id reads as absent.
 		if _, err := api.GetRun("000000000000000000000000"); harness.StatusOf(err) != http.StatusNotFound {
 			t.Errorf("get a run id that belongs to nobody: err = %v, want 404", err)
 		}
@@ -154,8 +150,6 @@ func TestPublicRunsAPI(t *testing.T) {
 	})
 }
 
-// TestRunWebhooks covers the callbacks another system relies on to learn what happened
-// without polling.
 func TestRunWebhooks(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -194,8 +188,7 @@ func TestRunWebhooks(t *testing.T) {
 		}
 
 		delivery := receiver.Get(t, "run.completed")
-		// An unsigned or wrongly signed callback is one a receiver has to reject, so
-		// it is as good as undelivered.
+		// A receiver must reject a badly signed callback, so it is as good as undelivered.
 		if !verifySignature(delivery, run.WebhookSecret) {
 			t.Errorf("the callback's signature does not verify with the returned secret\nheaders: %v", delivery.Header)
 		}
@@ -225,8 +218,7 @@ func TestRunWebhooks(t *testing.T) {
 			return receiver.Has("run.failed")
 		})
 
-		// Retries are core's business. Telling the integrator about each attempt
-		// would page someone for a failure that recovered on its own.
+		// Only the final failure is reported, not each retried attempt.
 		if n := receiver.Count("run.failed"); n != 1 {
 			t.Errorf("run.failed delivered %d times, want once (per attempt notifications are noise)", n)
 		}
@@ -240,7 +232,6 @@ func TestRunWebhooks(t *testing.T) {
 	})
 }
 
-// webhookReceiver is the integrator's endpoint.
 type webhookReceiver struct {
 	srv *httptest.Server
 
@@ -307,7 +298,6 @@ func (r *webhookReceiver) Get(t *testing.T, event string) delivery {
 	return delivery{}
 }
 
-// verifySignature recomputes the HMAC the way a receiver's library would.
 func verifySignature(d delivery, secret string) bool {
 	header := d.Header.Get("X-Lute-Signature")
 	var ts, sig string

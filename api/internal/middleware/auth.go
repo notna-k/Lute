@@ -8,8 +8,7 @@ import (
 	"github.com/lute/api/internal/auth"
 )
 
-// JWTAuthMiddleware verifies an "Authorization: Bearer <access-jwt>" header,
-// validates the signature and expiry, and stores user_id on the gin context.
+// JWTAuthMiddleware authenticates a Bearer access JWT and sets user_id and email.
 func JWTAuthMiddleware(tokens *auth.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := extractBearer(c.GetHeader("Authorization"))

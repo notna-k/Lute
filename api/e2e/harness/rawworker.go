@@ -14,12 +14,9 @@ import (
 	pb "github.com/lute/proto"
 )
 
-// RawWorker speaks the worker protocol directly, without the agent's good manners.
-// It exists for the cases a correct agent cannot produce: a result for a build it was
-// never given, a result arriving after core already gave up on the attempt, a second
-// stream claiming a worker another agent already holds.
-//
-// Everything a well-behaved worker does belongs in a real Agent instead.
+// RawWorker speaks the protocol directly, for what a correct agent never does: results
+// for builds it was not given or that core gave up on, or a second stream for one worker.
+// Anything a well-behaved worker does belongs in a real Agent.
 type RawWorker struct {
 	t        *testing.T
 	WorkerID string
@@ -37,8 +34,7 @@ type RawWorker struct {
 	recvErr     error
 }
 
-// DialRawWorker opens the stream and sends the identifying first message. It does
-// not register: call Register to advertise queues and capacity.
+// DialRawWorker sends the identifying first message but does not Register.
 func (s *Stack) DialRawWorker(workerID string) (*RawWorker, error) {
 	s.t.Helper()
 
@@ -61,7 +57,6 @@ func (s *Stack) DialRawWorker(workerID string) (*RawWorker, error) {
 	return w, nil
 }
 
-// Register advertises the queues and concurrency core should dispatch against.
 func (w *RawWorker) Register(concurrency int32, queues ...string) error {
 	return w.send(&pb.WorkerMessage{
 		WorkerId: w.WorkerID,
@@ -71,7 +66,6 @@ func (w *RawWorker) Register(concurrency int32, queues ...string) error {
 	})
 }
 
-// ReportResult sends a job result, for any job id the caller names.
 func (w *RawWorker) ReportResult(jobID string, success bool, errMsg string, elapsedMs int64) error {
 	return w.send(&pb.WorkerMessage{
 		WorkerId: w.WorkerID,
@@ -86,17 +80,6 @@ func (w *RawWorker) ReportResult(jobID string, success bool, errMsg string, elap
 	})
 }
 
-// Pong answers a heartbeat, so core counts this worker as alive.
-func (w *RawWorker) Pong() error {
-	return w.send(&pb.WorkerMessage{
-		WorkerId: w.WorkerID,
-		Payload: &pb.WorkerMessage_HeartbeatPong{
-			HeartbeatPong: &pb.HeartbeatPong{Status: "running", Timestamp: time.Now().Unix()},
-		},
-	})
-}
-
-// Close drops the stream, which is what core sees when a host disappears.
 func (w *RawWorker) Close() {
 	if w.conn != nil {
 		_ = w.conn.Close()
@@ -104,14 +87,12 @@ func (w *RawWorker) Close() {
 	}
 }
 
-// Assignments returns the builds core has handed this worker.
 func (w *RawWorker) Assignments() []*pb.JobAssignment {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]*pb.JobAssignment(nil), w.assignments...)
 }
 
-// WaitForAssignment blocks until core dispatches a build to this worker.
 func (w *RawWorker) WaitForAssignment(timeout time.Duration) *pb.JobAssignment {
 	w.t.Helper()
 	return Eventually(w.t, timeout, "an assignment for worker "+w.WorkerID,
@@ -124,35 +105,18 @@ func (w *RawWorker) WaitForAssignment(timeout time.Duration) *pb.JobAssignment {
 		})
 }
 
-// Drains returns the stand-down signals core has sent this worker.
 func (w *RawWorker) Drains() []*pb.DrainSignal {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]*pb.DrainSignal(nil), w.drains...)
 }
 
-// LogRequests returns the log reads core has asked this worker to perform.
-func (w *RawWorker) LogRequests() []*pb.JobLogRequest {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return append([]*pb.JobLogRequest(nil), w.logRequests...)
-}
-
-// Pings counts the heartbeats core has sent.
-func (w *RawWorker) Pings() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.pings
-}
-
-// RecvError is the error that ended the stream, or nil while it is open.
 func (w *RawWorker) RecvError() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.recvErr
 }
 
-// WaitForStreamEnd blocks until core closes the stream and returns why.
 func (w *RawWorker) WaitForStreamEnd(timeout time.Duration) error {
 	w.t.Helper()
 	return Eventually(w.t, timeout, "core to end the stream for "+w.WorkerID,

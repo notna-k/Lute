@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -30,19 +30,17 @@ type pingResult struct {
 	Err  error
 }
 
-// JobResultCallback is called when a worker reports a job result.
 type JobResultCallback func(workerID string, result *pb.JobResult)
 
-// WorkerRegistrationCallback is called when a worker sends registration info.
 type WorkerRegistrationCallback func(workerID string, reg *pb.WorkerRegistration)
 
-// WorkerConnection wraps a single bidirectional stream for one connected worker.
+// WorkerConnection is the bidirectional stream of one connected worker.
 type WorkerConnection struct {
 	WorkerID    string
 	Queues      []string
 	Concurrency int32
 	ActiveJobs  int32
-	Labels      map[string]string // loaded from DB at registration; updated via ConnectionManager.UpdateWorkerLabels
+	Labels      map[string]string // loaded at registration, updated by UpdateWorkerLabels
 
 	stream   pb.WorkerService_ConnectServer
 	pingCh   chan pingRequest
@@ -70,7 +68,6 @@ func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer)
 	}
 }
 
-// Ping sends a HeartbeatPing over the stream and waits for the pong.
 func (wc *WorkerConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, error) {
 	resultCh := make(chan pingResult, 1)
 	select {
@@ -86,7 +83,7 @@ func (wc *WorkerConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, erro
 	}
 }
 
-// AssignJob reserves worker capacity and queues the assignment for the Run loop.
+// AssignJob reserves capacity and queues the assignment for the Run loop.
 func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 	wc.mu.Lock()
 	if wc.draining || wc.ActiveJobs >= wc.Concurrency {
@@ -107,13 +104,11 @@ func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 	}
 }
 
-// Drain signals the worker to stop accepting new jobs.
 func (wc *WorkerConnection) Drain() {
 	wc.sendDrain(&pb.DrainSignal{})
 }
 
-// Shutdown signals the worker to stop accepting new jobs and exit its process
-// once in-flight jobs complete.
+// Shutdown tells the worker to exit once its in-flight jobs complete.
 func (wc *WorkerConnection) Shutdown() {
 	wc.sendDrain(&pb.DrainSignal{Shutdown: true})
 }
@@ -128,14 +123,12 @@ func (wc *WorkerConnection) sendDrain(sig *pb.DrainSignal) {
 	}
 }
 
-// IsAvailable returns true if the worker can accept more jobs.
 func (wc *WorkerConnection) IsAvailable() bool {
 	wc.mu.Lock()
 	defer wc.mu.Unlock()
 	return !wc.draining && wc.ActiveJobs < wc.Concurrency
 }
 
-// RequestJobLog sends a JobLogRequest on the stream and waits for JobLogResponse.
 func (wc *WorkerConnection) RequestJobLog(ctx context.Context, req *pb.JobLogRequest) (*pb.JobLogResponse, error) {
 	if req.RequestId == "" {
 		req.RequestId = uuid.New().String()
@@ -197,7 +190,7 @@ func (wc *WorkerConnection) failAllLogWaiters(err error) {
 	}
 }
 
-// Run processes outgoing and incoming messages on the bidirectional stream.
+// Run pumps both directions of the stream until it closes.
 func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration WorkerRegistrationCallback) {
 	recvCh := make(chan *pb.WorkerMessage, 1)
 	recvErrCh := make(chan error, 1)
@@ -226,7 +219,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				pendingPing.resultCh <- pingResult{Err: err}
 			}
 			wc.failAllLogWaiters(err)
-			log.Printf("Connection %s recv error: %v", wc.WorkerID, err)
+			slog.Warn("worker stream recv", "worker_id", wc.WorkerID, "err", err)
 			return
 
 		case msg := <-recvCh:
@@ -281,7 +274,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				wc.mu.Lock()
 				wc.ActiveJobs--
 				wc.mu.Unlock()
-				log.Printf("Connection %s send job error: %v", wc.WorkerID, err)
+				slog.Warn("send job to worker", "worker_id", wc.WorkerID, "err", err)
 				return
 			}
 
@@ -303,14 +296,13 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 			})
 			if err != nil {
 				wc.finishLogWaiter(logReq.RequestId, jobLogResult{Err: err})
-				log.Printf("Connection %s send job log request error: %v", wc.WorkerID, err)
+				slog.Warn("send job log request to worker", "worker_id", wc.WorkerID, "err", err)
 				return
 			}
 		}
 	}
 }
 
-// ConnectionManager tracks active bidirectional streams keyed by worker ID.
 type ConnectionManager struct {
 	mu    sync.RWMutex
 	conns map[string]*WorkerConnection
@@ -322,7 +314,6 @@ func NewConnectionManager() *ConnectionManager {
 	}
 }
 
-// Register adds (or replaces) a connection for the given worker.
 func (cm *ConnectionManager) Register(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
 	wc := newWorkerConnection(workerID, stream)
 	cm.mu.Lock()
@@ -331,21 +322,18 @@ func (cm *ConnectionManager) Register(workerID string, stream pb.WorkerService_C
 	return wc
 }
 
-// Unregister removes the connection for a worker.
 func (cm *ConnectionManager) Unregister(workerID string) {
 	cm.mu.Lock()
 	delete(cm.conns, workerID)
 	cm.mu.Unlock()
 }
 
-// Get returns the active connection for a worker, or nil.
 func (cm *ConnectionManager) Get(workerID string) *WorkerConnection {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.conns[workerID]
 }
 
-// ConnectedWorkerIDs returns a snapshot of all connected worker IDs.
 func (cm *ConnectionManager) ConnectedWorkerIDs() []string {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -356,9 +344,8 @@ func (cm *ConnectionManager) ConnectedWorkerIDs() []string {
 	return ids
 }
 
-// FindAvailableWorker returns a connected worker that handles the given queue,
-// has capacity for another job, and whose labels are a superset of selector.
-// An empty or nil selector matches any worker.
+// FindAvailableWorker returns a worker on queueName with free capacity whose labels
+// include every selector pair; an empty selector matches any worker.
 func (cm *ConnectionManager) FindAvailableWorker(queueName string, selector map[string]string) *WorkerConnection {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -391,7 +378,6 @@ func (cm *ConnectionManager) FindAvailableWorker(queueName string, selector map[
 	return best
 }
 
-// workerMatchesSelector returns true if workerLabels contains every key-value pair in selector.
 func workerMatchesSelector(workerLabels, selector map[string]string) bool {
 	for k, v := range selector {
 		if workerLabels[k] != v {
@@ -401,8 +387,6 @@ func workerMatchesSelector(workerLabels, selector map[string]string) bool {
 	return true
 }
 
-// UpdateWorkerLabels atomically replaces the in-memory label set for a connected worker.
-// Called after a REST label update to keep dispatch state current.
 func (cm *ConnectionManager) UpdateWorkerLabels(workerID string, labels map[string]string) {
 	cm.mu.RLock()
 	wc := cm.conns[workerID]
@@ -415,7 +399,6 @@ func (cm *ConnectionManager) UpdateWorkerLabels(workerID string, labels map[stri
 	wc.mu.Unlock()
 }
 
-// ActiveWorkers returns info about all connected workers.
 func (cm *ConnectionManager) ActiveWorkers() []WorkerInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -434,7 +417,6 @@ func (cm *ConnectionManager) ActiveWorkers() []WorkerInfo {
 	return out
 }
 
-// WorkerInfo holds summary data about a connected worker.
 type WorkerInfo struct {
 	WorkerID    string   `json:"worker_id"`
 	Queues      []string `json:"queues"`

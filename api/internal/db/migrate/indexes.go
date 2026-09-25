@@ -2,17 +2,15 @@ package migrate
 
 import "gorm.io/gorm"
 
-// ApplySecondaryIndexes creates partial indexes and composite indexes shared by SQLite and PostgreSQL.
-//
-// DDL lives here—not in repositories—because GORM struct tags cannot express every partial UNIQUE.
+// ApplySecondaryIndexes creates the partial and composite indexes GORM struct tags cannot express.
 func ApplySecondaryIndexes(db *gorm.DB) error {
 	stmts := []string{
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_nonempty ON users(email) WHERE email IS NOT NULL AND email != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_family ON refresh_tokens(user_id, family_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_workers_user_id ON workers(user_id)`,
-		// workers: one logical agent per IP per user when IP is set
+		// One agent per IP per user.
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_user_agent_ip ON workers(user_id, agent_ip) WHERE agent_ip IS NOT NULL AND agent_ip != ''`,
-		// runs: idempotency per user when key is set
+
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_user_idempotency ON runs(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL AND idempotency_key != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_runs_user_created ON runs(user_id, created_at DESC)`,
 
@@ -20,7 +18,6 @@ func ApplySecondaryIndexes(db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_created ON api_keys(user_id, created_at DESC)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_worker_snapshots_worker_at ON worker_snapshots(worker_id, at)`,
-		`CREATE INDEX IF NOT EXISTS idx_uptime_snapshots_user_at ON uptime_snapshots(user_id, at)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_executions_finished ON job_executions(finished_at)`,
 
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry ON webhook_deliveries(status, next_retry_at)`,

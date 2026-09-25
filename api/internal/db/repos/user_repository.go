@@ -39,12 +39,3 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 	}
 	return &u, nil
 }
-
-func (r *UserRepository) Update(ctx context.Context, uid id.ID, user *models.User) error {
-	user.ID = uid
-	return mapErr(r.q(ctx).Save(user).Error)
-}
-
-func (r *UserRepository) Delete(ctx context.Context, uid id.ID) error {
-	return mapErr(r.q(ctx).Where("id = ?", uid.Hex()).Delete(&models.User{}).Error)
-}

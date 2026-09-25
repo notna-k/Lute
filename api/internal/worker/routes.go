@@ -1,38 +1,29 @@
 package worker
 
-import (
-	"github.com/gin-gonic/gin"
-)
+import "github.com/gin-gonic/gin"
 
-// MountWorkerBootstrap registers unauthenticated /workers/bootstrap/* under parent
-// (e.g. parent is /api/v1 or /api/public/v1).
-func MountWorkerBootstrap(parent *gin.RouterGroup, h *WorkerHandler) {
-	w := parent.Group("/workers")
-	boot := w.Group("/bootstrap")
-	{
-		boot.GET("/install.sh", h.InstallScript)
-		boot.GET("/version", h.GetVersion)
-		boot.GET("/download/:os/:arch", h.DownloadBinary)
-		boot.GET("/download", h.DownloadAutoDetect)
-		boot.POST("/register", h.RegisterFromWorker)
-	}
+// MountBootstrap registers the unauthenticated /workers/bootstrap routes a new host uses
+// to install the agent and register. They live on the public API only.
+func MountBootstrap(parent *gin.RouterGroup, h *WorkerHandler) {
+	boot := parent.Group("/workers/bootstrap")
+	boot.GET("/install.sh", h.InstallScript)
+	boot.GET("/version", h.GetVersion)
+	boot.GET("/download/:os/:arch", h.DownloadBinary)
+	boot.GET("/download", h.DownloadAutoDetect)
+	boot.POST("/register", h.RegisterFromWorker)
 }
 
-// MountWorkerJWTAPI registers JWT-authenticated worker routes under parent.
-func MountWorkerJWTAPI(parent *gin.RouterGroup, h *WorkerHandler, authedMW gin.HandlerFunc) {
-	w := parent.Group("/workers")
-	authd := w.Group("")
-	authd.Use(authedMW)
-	mountWorkerAuthenticated(authd, h)
+// MountJWT registers worker management for the panel, behind authedMW.
+func MountJWT(parent *gin.RouterGroup, h *WorkerHandler, authedMW gin.HandlerFunc) {
+	mountManagement(parent.Group("/workers", authedMW), h)
 }
 
-// MountWorkerAPIKeyAPI registers worker routes under parent, which must already apply API key auth.
-func MountWorkerAPIKeyAPI(parent *gin.RouterGroup, h *WorkerHandler) {
-	w := parent.Group("/workers")
-	mountWorkerAuthenticated(w, h)
+// MountAPIKey registers worker management under a group that already enforces API-key auth.
+func MountAPIKey(parent *gin.RouterGroup, h *WorkerHandler) {
+	mountManagement(parent.Group("/workers"), h)
 }
 
-func mountWorkerAuthenticated(g *gin.RouterGroup, h *WorkerHandler) {
+func mountManagement(g *gin.RouterGroup, h *WorkerHandler) {
 	g.POST("/claim-code", h.CreateClaimCode)
 	g.GET("/connected", h.ListConnectedWorkers)
 	g.GET("/bootstrap/binaries", h.ListBinaries)

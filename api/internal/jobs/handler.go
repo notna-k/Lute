@@ -19,12 +19,12 @@ import (
 
 type JobHandler struct {
 	engine      *queue.Engine
-	stats       *queue.StatsAggregator
+	stats       *queue.Stats
 	grpcSrv     *grpc.Server
 	jobExecRepo *repos.JobExecutionRepository
 }
 
-func NewJobHandler(engine *queue.Engine, stats *queue.StatsAggregator, grpcSrv *grpc.Server, jobExecRepo *repos.JobExecutionRepository) *JobHandler {
+func NewJobHandler(engine *queue.Engine, stats *queue.Stats, grpcSrv *grpc.Server, jobExecRepo *repos.JobExecutionRepository) *JobHandler {
 	return &JobHandler{engine: engine, stats: stats, grpcSrv: grpcSrv, jobExecRepo: jobExecRepo}
 }
 
@@ -134,7 +134,7 @@ const (
 	logRPCDeadline  = 30 * time.Second
 )
 
-// GetJobLogs proxies a chunked read of the job log file from the worker that ran (or runs) the job.
+// GetJobLogs proxies a chunk of the job log from the worker that ran it.
 func (h *JobHandler) GetJobLogs(c *gin.Context) {
 	jobID := c.Param("id")
 	ctx := c.Request.Context()
@@ -246,9 +246,7 @@ func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (stri
 		return exec.WorkerID, nil
 	}
 
-	// No execution record yet — the job finished moments ago and the record is still
-	// being written, so falling back to the host it was dispatched to closes a window
-	// where a build reads as finished but its log answers 404.
+	// No execution record yet: fall back to the dispatch host, or a just-finished build's log is a 404.
 	if job.WorkerID != "" {
 		return job.WorkerID, nil
 	}
@@ -257,10 +255,10 @@ func (h *JobHandler) resolveLogWorker(ctx context.Context, job *queue.Job) (stri
 
 type QueueHandler struct {
 	engine *queue.Engine
-	stats  *queue.StatsAggregator
+	stats  *queue.Stats
 }
 
-func NewQueueHandler(engine *queue.Engine, stats *queue.StatsAggregator) *QueueHandler {
+func NewQueueHandler(engine *queue.Engine, stats *queue.Stats) *QueueHandler {
 	return &QueueHandler{engine: engine, stats: stats}
 }
 

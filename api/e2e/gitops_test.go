@@ -13,9 +13,8 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestDefinitionsComeFromGit covers the product's central claim: the YAML in the repo
-// is the source of truth, panel edits are visible as drift, and nothing silently
-// overwrites either one.
+// TestDefinitionsComeFromGit covers Git as the source of truth, panel edits as visible drift,
+// and neither silently overwriting the other.
 func TestDefinitionsComeFromGit(t *testing.T) {
 	t.Run("Success - definitions in the directory are synced at startup", func(t *testing.T) {
 		stack := newStack(t)
@@ -32,8 +31,7 @@ func TestDefinitionsComeFromGit(t *testing.T) {
 			}
 		}
 
-		// The schema is what the panel renders the run form from, so it has to survive
-		// the trip through YAML intact.
+		// The panel renders the run form from the schema, so it must survive YAML intact.
 		echo := findDef(t, defs, echoSlug)
 		if echo.Queue != "build" {
 			t.Errorf("queue = %q, want build", echo.Queue)
@@ -151,8 +149,7 @@ command: echo added
 		if err != nil {
 			t.Fatalf("list definitions: %v", err)
 		}
-		// Deleting a file must not silently destroy a job's history; the operator
-		// decides, and until then the panel says what happened.
+		// Deleting a file must not silently destroy a job's history.
 		orphan := findDef(t, defs, deploySlug)
 		if orphan.GitState != "removed" {
 			t.Errorf("gitState of a definition with no file = %q, want removed", orphan.GitState)
@@ -259,8 +256,7 @@ command: echo added
 	})
 }
 
-// TestAdhocBuildPolicy covers the switch that decides whether a build may run a schema
-// that is not the one in Git.
+// TestAdhocBuildPolicy covers the setting that allows builds with a schema not in Git.
 func TestAdhocBuildPolicy(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -304,8 +300,7 @@ func TestAdhocBuildPolicy(t *testing.T) {
 		if !build.AdHoc {
 			t.Error("the build does not record that it ran a panel-edited schema")
 		}
-		// The added input must actually be passed through — silently dropping it is
-		// what made this flag necessary in the first place.
+		// The added input must be passed through, not silently dropped.
 		if got := build.Params["EXTRA"]; got != "from-the-panel" {
 			t.Errorf("EXTRA = %q, want from-the-panel", got)
 		}
@@ -318,8 +313,7 @@ func TestAdhocBuildPolicy(t *testing.T) {
 			t.Fatalf("disable ad-hoc builds: %v", err)
 		}
 
-		// With the policy off, the normal path must still work: that is what the
-		// policy exists to enforce, not to block.
+		// With the policy off, committed definitions must still build.
 		build, err := admin.Trigger(echoSlug, map[string]any{"environment": "staging"})
 		if err != nil {
 			t.Fatalf("trigger the committed definition with ad-hoc off: %v", err)

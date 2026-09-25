@@ -17,8 +17,7 @@ import (
 	"time"
 )
 
-// workerBinaryName is what `make worker-build-linux` produces. Keeping the same
-// name means core's binary-serving endpoints index it the way they do in production.
+// workerBinaryName matches `make worker-build-linux`, so core indexes it as in production.
 var workerBinaryName = fmt.Sprintf("lute-worker-%s-%s", runtime.GOOS, runtime.GOARCH)
 
 var (
@@ -26,21 +25,16 @@ var (
 	buildErr  error
 )
 
-// repoRoot walks up from this file to the module's parent, which is the repo root.
 func repoRoot() string {
 	_, file, _, _ := runtime.Caller(0)
-	// .../api/e2e/harness/worker.go -> repo root
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
-// WorkerBinDir is where the worker binary and its VERSION file live.
 func WorkerBinDir() string { return filepath.Join(repoRoot(), "worker", "bin") }
 
-// WorkerBinaryPath is the agent the suite runs.
 func WorkerBinaryPath() string { return filepath.Join(WorkerBinDir(), workerBinaryName) }
 
-// BuildWorker compiles the agent once per suite run. `make e2e` builds it up front;
-// this keeps a bare `go test` working, and never rebuilds inside a test's timeout.
+// BuildWorker compiles the agent once per run, so a bare `go test` works too.
 func BuildWorker() error {
 	buildOnce.Do(func() {
 		if _, err := os.Stat(WorkerBinaryPath()); err == nil && os.Getenv("LUTE_E2E_REBUILD_WORKER") == "" {
@@ -61,7 +55,6 @@ func BuildWorker() error {
 	return buildErr
 }
 
-// Agent is a worker agent running as a child process, as on a real build host.
 type Agent struct {
 	t        *testing.T
 	WorkerID string
@@ -75,7 +68,6 @@ type Agent struct {
 	err    error
 }
 
-// AgentOption configures the agent's command line.
 type AgentOption func(*agentOpts)
 
 type agentOpts struct {
@@ -84,22 +76,14 @@ type agentOpts struct {
 	logsDir     string
 }
 
-// WithQueues sets the queues the agent pulls work for.
 func WithQueues(queues ...string) AgentOption {
 	return func(o *agentOpts) { o.queues = queues }
 }
 
-// WithConcurrency caps how many builds the agent runs at once.
 func WithConcurrency(n int) AgentOption {
 	return func(o *agentOpts) { o.concurrency = n }
 }
 
-// WithJobLogsDir puts the agent's job logs somewhere the test already knows about.
-func WithJobLogsDir(dir string) AgentOption {
-	return func(o *agentOpts) { o.logsDir = dir }
-}
-
-// StartAgent runs `lute-worker run` against this stack and stops it on cleanup.
 func (s *Stack) StartAgent(workerID string, options ...AgentOption) *Agent {
 	s.t.Helper()
 
@@ -157,21 +141,13 @@ func (s *Stack) StartAgent(workerID string, options ...AgentOption) *Agent {
 	return a
 }
 
-// Kill takes the agent down without warning — a crashed build host. The build it was
-// running is now core's problem to notice.
+// Kill takes the agent down without warning, like a crashed build host.
 func (a *Agent) Kill() {
 	a.t.Helper()
 	a.signal(syscall.SIGKILL)
 	a.WaitExit(10 * time.Second)
 }
 
-// Stop asks the agent to shut down the way a service manager would.
-func (a *Agent) Stop() {
-	a.t.Helper()
-	a.signal(syscall.SIGTERM)
-}
-
-// WaitExit fails the test if the agent has not exited within timeout.
 func (a *Agent) WaitExit(timeout time.Duration) {
 	a.t.Helper()
 	select {
@@ -181,7 +157,6 @@ func (a *Agent) WaitExit(timeout time.Duration) {
 	}
 }
 
-// Exited reports whether the agent process has finished.
 func (a *Agent) Exited() bool {
 	select {
 	case <-a.exited:
@@ -191,21 +166,14 @@ func (a *Agent) Exited() bool {
 	}
 }
 
-// Stderr is everything the agent has logged so far.
 func (a *Agent) Stderr() string { return a.stderr.String() }
 
-// ExitError is why the process ended: nil for a clean exit, non-nil for a crash or a
-// non-zero status. Only meaningful once Exited reports true, which is what publishes it.
+// ExitError is only meaningful once Exited reports true.
 func (a *Agent) ExitError() error {
 	if !a.Exited() {
 		return nil
 	}
 	return a.err
-}
-
-// JobLogPath is where the agent writes a build's log file.
-func (a *Agent) JobLogPath(jobID string) string {
-	return filepath.Join(a.LogsDir, "job-"+jobID+".log")
 }
 
 func (a *Agent) signal(sig syscall.Signal) {
@@ -231,8 +199,7 @@ func (a *Agent) stopQuietly() {
 	}
 }
 
-// syncBuffer collects a child process's output safely from the reader goroutine
-// while a test reads it, and mirrors it to an artifact file.
+// syncBuffer collects a child's output while a test reads it, and mirrors it to an artifact file.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer

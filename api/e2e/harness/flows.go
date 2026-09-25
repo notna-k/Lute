@@ -8,20 +8,15 @@ import (
 	"time"
 )
 
-// The flows here are the multi-step sequences a real operator performs, kept in one
-// place so a test reads as the scenario it is about rather than as plumbing.
-
 var ipSeq atomic.Uint32
 
-// NextAgentIP hands out a distinct address per registration. Core refuses a second
-// live worker at one address, which is correct — and which means tests that want
-// several workers must look like several machines.
+// NextAgentIP hands out a distinct address per registration: core refuses a second live
+// worker at one address, so several workers must look like several machines.
 func NextAgentIP() string {
 	return fmt.Sprintf("10.90.%d.%d", ipSeq.Add(1)/250%250, ipSeq.Load()%250+1)
 }
 
-// ClaimWorker performs the claim-code half of onboarding: the operator asks the panel
-// for a code, and the host registers itself with it. Returns core's answer.
+// ClaimWorker gets a claim code from the panel and registers a host with it.
 func (s *Stack) ClaimWorker(c *Client, name string) Registered {
 	s.t.Helper()
 
@@ -45,8 +40,7 @@ func (s *Stack) ClaimWorker(c *Client, name string) Registered {
 	return reg
 }
 
-// ConnectedAgent onboards a host and starts its agent, waiting until core reports the
-// stream as live. This is the state most scenarios need before they begin.
+// ConnectedAgent onboards a host and starts its agent, returning once its stream is live.
 func (s *Stack) ConnectedAgent(c *Client, name string, options ...AgentOption) *Agent {
 	s.t.Helper()
 
@@ -56,7 +50,6 @@ func (s *Stack) ConnectedAgent(c *Client, name string, options ...AgentOption) *
 	return agent
 }
 
-// WaitConnected blocks until core lists the worker as holding a live stream.
 func (s *Stack) WaitConnected(c *Client, workerID string) ConnectedWorker {
 	s.t.Helper()
 	return Eventually(s.t, 30*time.Second, "worker "+workerID+" to connect",
@@ -74,7 +67,6 @@ func (s *Stack) WaitConnected(c *Client, workerID string) ConnectedWorker {
 		})
 }
 
-// WaitDisconnected blocks until core no longer holds a stream for the worker.
 func (s *Stack) WaitDisconnected(c *Client, workerID string) {
 	s.t.Helper()
 	WaitFor(s.t, 30*time.Second, "worker "+workerID+" to disconnect", func() bool {
@@ -91,7 +83,6 @@ func (s *Stack) WaitDisconnected(c *Client, workerID string) {
 	})
 }
 
-// WaitAllDisconnected blocks until core holds no agent streams at all.
 func (s *Stack) WaitAllDisconnected(c *Client) {
 	s.t.Helper()
 	WaitFor(s.t, 30*time.Second, "every agent to disconnect", func() bool {
@@ -100,7 +91,6 @@ func (s *Stack) WaitAllDisconnected(c *Client) {
 	})
 }
 
-// WaitBuildStatus blocks until a build reaches one of the wanted statuses and returns it.
 func WaitBuildStatus(c *Client, slug, runID string, timeout time.Duration, wanted ...string) Build {
 	return Eventually(c.t, timeout,
 		fmt.Sprintf("build %s of %s to reach %v", runID, slug, wanted),
@@ -124,7 +114,6 @@ func WaitBuildStatus(c *Client, slug, runID string, timeout time.Duration, wante
 		})
 }
 
-// WaitJobStatus blocks until the queue reports one of the wanted statuses for a job.
 func WaitJobStatus(c *Client, jobID string, timeout time.Duration, wanted ...string) Job {
 	return Eventually(c.t, timeout,
 		fmt.Sprintf("job %s to reach %v", jobID, wanted),
@@ -142,7 +131,6 @@ func WaitJobStatus(c *Client, jobID string, timeout time.Duration, wanted ...str
 		})
 }
 
-// WaitExecution blocks until core has recorded a finished attempt for a job.
 func WaitExecution(c *Client, jobID string, timeout time.Duration) Execution {
 	return Eventually(c.t, timeout, "an execution record for job "+jobID,
 		func() (Execution, bool) {
@@ -156,22 +144,5 @@ func WaitExecution(c *Client, jobID string, timeout time.Duration) Execution {
 				}
 			}
 			return Execution{}, false
-		})
-}
-
-// WaitLogLine blocks until a build's log contains a line matching want.
-func WaitLogLine(c *Client, jobID string, timeout time.Duration, contains func(string) bool) []string {
-	return Eventually(c.t, timeout, "a matching line in the log of "+jobID,
-		func() ([]string, bool) {
-			page, err := c.JobLogs(jobID, LogOptions{Limit: 200})
-			if err != nil {
-				return nil, false
-			}
-			for _, line := range page.Lines {
-				if contains(line) {
-					return page.Lines, true
-				}
-			}
-			return page.Lines, false
 		})
 }

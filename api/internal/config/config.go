@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -8,6 +10,7 @@ import (
 )
 
 type Config struct {
+	LogLevel     slog.Level
 	Server       ServerConfig
 	Database     DatabaseConfig
 	GRPC         GRPCConfig
@@ -21,35 +24,24 @@ type Config struct {
 	Webhooks     WebhooksConfig
 }
 
-// QueueConfig tunes the sweep that promotes delayed jobs and reaps builds whose
-// worker stopped reporting. The defaults suit a real deployment; a test harness
-// shortens them so a lost build is observed in seconds rather than a minute.
+// QueueConfig tunes the queue sweep; see queue.Timings for LeaseGrace and ReclaimAfter.
 type QueueConfig struct {
-	// PollInterval is how often the scheduler sweeps for due and lost work.
 	PollInterval time.Duration
-	// LeaseGrace pads a job's timeout so reaping cannot race a result the
-	// worker is still reporting.
-	LeaseGrace time.Duration
-	// ReclaimAfter is how long a sweeper holds a claimed lease before another
-	// sweeper may retake it.
+	LeaseGrace   time.Duration
 	ReclaimAfter time.Duration
 }
 
-// WebhooksConfig tunes outbound run-event delivery.
 type WebhooksConfig struct {
-	// PollInterval is how often the dispatcher looks for due deliveries.
 	PollInterval time.Duration
 }
 
-// JobDefsConfig points Core at the directory of Git-managed job-definition
-// YAML files it syncs into Postgres on startup.
+// JobDefsConfig is the directory of Git-managed job-definition YAML synced on startup.
 type JobDefsConfig struct {
 	Dir string
 }
 
-// MetricsConfig controls machine snapshot job and dashboard polling.
 type MetricsConfig struct {
-	// SnapshotInterval is how often the snapshot job runs (e.g. 5m). UI should poll at this interval.
+	// SnapshotInterval is also how often the UI polls metrics.
 	SnapshotInterval time.Duration
 }
 
@@ -60,7 +52,7 @@ type HeartbeatConfig struct {
 }
 
 type WorkerBinaryConfig struct {
-	Dir string // directory containing compiled worker binaries
+	Dir string
 }
 
 type ServerConfig struct {
@@ -70,28 +62,13 @@ type ServerConfig struct {
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
 	Mode         string // "debug", "release", "test"
-	// AllowedOrigins is the CORS allow-list. The panel's own origin must be in
-	// here: browsers send Origin even on same-origin POSTs, and the CORS
-	// middleware rejects unlisted origins with 403.
+	// AllowedOrigins must include the panel's own origin: browsers send Origin even on
+	// same-origin POSTs, and unlisted origins get a 403.
 	AllowedOrigins []string
 }
 
-// SQLiteConfig stores file-backed SQLite options (when DB_DRIVER is sqlite).
-type SQLiteConfig struct {
-	Path        string
-	BusyTimeout time.Duration
-}
-
-// PostgresConfig holds libpq/pg connection parameters (when DB_DRIVER is postgres).
-type PostgresConfig struct {
-	DSN string
-}
-
-// DatabaseConfig selects SQLite or PostgreSQL and supplies driver-specific tuning.
 type DatabaseConfig struct {
-	Driver   string // sqlite (default) or postgres
-	SQLite   SQLiteConfig
-	Postgres PostgresConfig
+	DSN string
 }
 
 type GRPCConfig struct {
@@ -108,7 +85,6 @@ type WebSocketConfig struct {
 	WriteWait       time.Duration
 }
 
-// AuthConfig governs JWT signing and the seeded bootstrap admin user.
 type AuthConfig struct {
 	JWTSecret     string
 	AccessTTL     time.Duration
@@ -120,7 +96,12 @@ type AuthConfig struct {
 }
 
 func Load() (*Config, error) {
+	var logLevel slog.Level
+	if err := logLevel.UnmarshalText([]byte(getEnv("LOG_LEVEL", "info"))); err != nil {
+		return nil, fmt.Errorf("LOG_LEVEL: %w", err)
+	}
 	cfg := &Config{
+		LogLevel: logLevel,
 		Server: ServerConfig{
 			Port:         getEnv("SERVER_PORT", "8080"),
 			Host:         getEnv("SERVER_HOST", "0.0.0.0"),
@@ -135,16 +116,7 @@ func Load() (*Config, error) {
 			}),
 		},
 		Database: DatabaseConfig{
-			// Postgres is the primary/deployed database. SQLite remains available
-			// for quick local runs by setting DB_DRIVER=sqlite.
-			Driver: getEnv("DB_DRIVER", "postgres"),
-			SQLite: SQLiteConfig{
-				Path:        getEnv("SQLITE_PATH", "lute.db"),
-				BusyTimeout: getDurationEnv("SQLITE_BUSY_TIMEOUT", 5*time.Second),
-			},
-			Postgres: PostgresConfig{
-				DSN: getEnv("POSTGRES_DSN", "postgres://lute:lute@localhost:5432/lute?sslmode=disable"),
-			},
+			DSN: getEnv("POSTGRES_DSN", "postgres://lute:lute@localhost:5432/lute?sslmode=disable"),
 		},
 		GRPC: GRPCConfig{
 			Port: getEnv("GRPC_PORT", "50051"),
@@ -201,7 +173,6 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getCSVEnv reads a comma-separated list, trimming blanks around each entry.
 func getCSVEnv(key string, defaultValue []string) []string {
 	value := os.Getenv(key)
 	if value == "" {

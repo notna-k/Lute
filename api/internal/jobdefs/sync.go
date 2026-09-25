@@ -3,7 +3,7 @@ package jobdefs
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,7 +23,6 @@ func slugify(s string) string {
 	return strings.Trim(s, "-")
 }
 
-// SyncResult counts what a sync did, for the log line and the panel.
 type SyncResult struct {
 	Added     int `json:"added"`
 	Updated   int `json:"updated"`
@@ -35,9 +34,8 @@ type SyncResult struct {
 	Skipped []string `json:"skipped"`
 }
 
-// Syncer reconciles the job-definitions directory with Postgres. Git is the
-// source of truth for every change it makes; the panel's edits stand until the
-// file they diverged from changes.
+// Syncer reconciles the job-definitions directory with Postgres. Panel edits stand
+// until the file they diverged from changes.
 type Syncer struct {
 	defs     *repos.JobDefinitionRepository
 	settings *repos.SettingRepository
@@ -49,19 +47,18 @@ func NewSyncer(defs *repos.JobDefinitionRepository, settings *repos.SettingRepos
 	return &Syncer{defs: defs, settings: settings, dir: strings.TrimSpace(dir)}
 }
 
-// Sync runs one pass. A missing or unset directory is a no-op, not an error —
-// otherwise every definition would be detached (or pruned) by a typo.
+// Sync runs one pass. A missing directory is a no-op, so a typo cannot detach or prune everything.
 func (s *Syncer) Sync(ctx context.Context) (SyncResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	res := SyncResult{Skipped: []string{}}
 	if s.dir == "" {
-		log.Println("jobdefs: JOB_DEFS_DIR not set — skipping job-definition sync")
+		slog.Warn("JOB_DEFS_DIR not set, skipping job-definition sync")
 		return res, nil
 	}
 	if info, err := os.Stat(s.dir); err != nil || !info.IsDir() {
-		log.Printf("jobdefs: source dir %q not readable — skipping sync", s.dir)
+		slog.Warn("job-definition dir not readable, skipping sync", "dir", s.dir)
 		return res, nil
 	}
 
@@ -95,12 +92,11 @@ func (s *Syncer) Sync(ctx context.Context) (SyncResult, error) {
 	}
 
 	r := plan.result
-	log.Printf("jobdefs: synced %s — %d added, %d updated, %d unchanged, %d detached, %d pruned, %d skipped",
-		s.dir, r.Added, r.Updated, r.Unchanged, r.Detached, r.Pruned, len(r.Skipped))
+	slog.Info("synced job definitions", "dir", s.dir, "added", r.Added, "updated", r.Updated,
+		"unchanged", r.Unchanged, "detached", r.Detached, "pruned", r.Pruned, "skipped", len(r.Skipped))
 	return r, nil
 }
 
-// syncPlan is the set of writes one sync needs.
 type syncPlan struct {
 	creates []*models.JobDefinition
 	updates []*models.JobDefinition
@@ -108,14 +104,9 @@ type syncPlan struct {
 	result  SyncResult
 }
 
-// reconcile decides what a sync writes, given what Postgres holds and what Git
-// says. It does no I/O so the rules can be tested directly:
-//
-//   - new in Git                 → created
-//   - Git changed since last sync → overwritten, panel edits included
-//   - Git unchanged              → left alone, so panel edits survive
-//   - gone from Git              → deleted when prune is on, else detached
-//     (kept, and flagged in the panel)
+// reconcile decides what a sync writes, without I/O so the rules are testable:
+//   - new in Git → created; Git changed → overwritten, panel edits included
+//   - Git unchanged → left alone; gone from Git → deleted if prune, else detached
 func reconcile(current []models.JobDefinition, files []*models.JobDefinition, prune bool) syncPlan {
 	var plan syncPlan
 	bySlug := make(map[string]*models.JobDefinition, len(current))
@@ -167,10 +158,8 @@ func reconcile(current []models.JobDefinition, files []*models.JobDefinition, pr
 	return plan
 }
 
-// loadDir parses every *.yaml / *.yml under dir. A file may hold several
-// definitions as `---`-separated documents, which is what Export produces. A
-// file that fails to parse is skipped (and reported), not fatal: one typo must
-// not detach every definition. Duplicate slugs keep the first occurrence.
+// loadDir parses every *.yaml / *.yml under dir. A bad file is skipped and reported,
+// so one typo cannot detach every definition; duplicate slugs keep the first.
 func loadDir(dir string) ([]*models.JobDefinition, []string, error) {
 	var (
 		out     []*models.JobDefinition
@@ -197,14 +186,14 @@ func loadDir(dir string) ([]*models.JobDefinition, []string, error) {
 		}
 		defs, perr := parseDocs(data, rel)
 		if perr != nil {
-			log.Printf("jobdefs: skipping %s: %v", rel, perr)
+			slog.Warn("skipping job-definition file", "file", rel, "err", perr)
 			skipped = append(skipped, fmt.Sprintf("%s: %v", rel, perr))
 			return nil
 		}
 		for _, def := range defs {
 			if first, dup := seen[def.Slug]; dup {
 				msg := fmt.Sprintf("%s: slug %q already defined in %s", rel, def.Slug, first)
-				log.Printf("jobdefs: skipping %s", msg)
+				slog.Warn("skipping duplicate job definition", "file", rel, "slug", def.Slug, "first", first)
 				skipped = append(skipped, msg)
 				continue
 			}

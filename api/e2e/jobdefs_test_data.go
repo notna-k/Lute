@@ -2,14 +2,10 @@
 
 package e2e
 
-// The definitions here are the ones the suite triggers. They are deliberately the
-// same shape as infrastructure/dev/jobdefs: a queue, a runtime, a command and a typed
-// parameter schema. Job bodies run in bash:5 because it is small and has a shell the
-// runner can invoke; the alpine definition exists to prove the runner works with the
-// images the README actually advertises.
+// Definitions the suite triggers, shaped like infrastructure/dev/jobdefs. Bodies run in
+// bash:5; the alpine one proves the images the README advertises work.
 
-// echoBuildYAML prints its resolved parameters, so a test can read them back out of
-// the build log and prove they reached the container as environment variables.
+// echoBuildYAML prints its parameters, proving they reached the container as env vars.
 const echoBuildYAML = `
 name: Echo Build
 description: Prints its parameters so a test can read them back.
@@ -56,7 +52,6 @@ parameters:
     secretRef: secrets/deploy
 `
 
-// failingBuildYAML exits non-zero, which must surface as a failed build.
 const failingBuildYAML = `
 name: Failing Build
 description: Exits non-zero.
@@ -67,8 +62,7 @@ command: |
   exit 3
 `
 
-// slowBuildYAML runs long enough for a test to catch it mid-flight, kill its agent,
-// or watch a second build queue behind it.
+// slowBuildYAML runs long enough to be caught mid-flight.
 const slowBuildYAML = `
 name: Slow Build
 description: Sleeps, so a test can observe a build in progress.
@@ -80,8 +74,7 @@ command: |
   echo "slow build finished"
 `
 
-// regionBuildYAML only runs on an agent labelled for the region, so a test can prove
-// core withholds work from hosts that do not match.
+// regionBuildYAML needs an agent labelled for its region.
 const regionBuildYAML = `
 name: Region Build
 description: Requires an agent labelled region=eu.
@@ -92,7 +85,6 @@ runtime: bash:5
 command: echo "ran in eu"
 `
 
-// deployQueueYAML sits on another queue, to prove an agent only pulls what it asked for.
 const deployQueueYAML = `
 name: Deploy Only
 description: Lives on the deploy queue.
@@ -101,9 +93,7 @@ runtime: bash:5
 command: echo "deployed"
 `
 
-// alpineBuildYAML uses the kind of image the README advertises. Alpine ships
-// /bin/sh and no bash, so this definition is the one that says whether Lute can
-// really run the runtimes it documents.
+// alpineBuildYAML runs on an image with /bin/sh and no bash, as the README advertises.
 const alpineBuildYAML = `
 name: Alpine Build
 description: Runs on an alpine image, as the documented examples do.
@@ -112,7 +102,6 @@ runtime: alpine:3
 command: echo "alpine ran"
 `
 
-// Slugs of the definitions above, as slugify derives them from the names.
 const (
 	echoSlug    = "echo-build"
 	failingSlug = "failing-build"
@@ -122,7 +111,6 @@ const (
 	alpineSlug  = "alpine-build"
 )
 
-// allJobDefs is every definition file a stack starts with, keyed by file name.
 var allJobDefs = map[string]string{
 	"echo-build.yaml":    echoBuildYAML,
 	"failing-build.yaml": failingBuildYAML,

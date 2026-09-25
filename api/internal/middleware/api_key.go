@@ -14,9 +14,8 @@ import (
 	"github.com/lute/api/internal/db/repos"
 )
 
-// APIKeyAuthMiddleware validates an "Authorization: Bearer lute_sk_..." token
-// and stores the owning user id on the context. The last_used_at timestamp
-// is updated best-effort without blocking the request.
+// APIKeyAuthMiddleware authenticates "Bearer lute_sk_..." and sets user_id. last_used_at
+// is updated in the background.
 func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := extractBearer(c.GetHeader("Authorization"))

@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/enums"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
@@ -65,17 +66,15 @@ type claimEntry struct {
 	ExpiresAt time.Time
 }
 
-// WorkerHandler serves worker binaries, handles registration, claim codes, and worker management.
 type WorkerHandler struct {
 	binaryDir     string
-	binaryMu      sync.RWMutex // guards binaryCache — SHA256 is expensive, so cache is needed
+	binaryMu      sync.RWMutex // guards binaryCache
 	binaryCache   map[string]*WorkerBinaryInfo
 	claimMu       sync.RWMutex // guards claimCodes
 	claimCodes    map[string]*claimEntry
 	cfg           *config.Config
 	workerRepo    *repos.WorkerRepository
 	commandRepo   *repos.CommandRepository
-	workerService *WorkerService
 	connectionMgr *luteGrpc.ConnectionManager
 	grpcServer    *luteGrpc.Server
 }
@@ -95,15 +94,12 @@ func NewWorkerHandler(
 		cfg:           cfg,
 		workerRepo:    workerRepo,
 		commandRepo:   commandRepo,
-		workerService: NewWorkerService(workerRepo),
 		connectionMgr: connectionMgr,
 		grpcServer:    grpcServer,
 	}
 	handler.refreshBinaryCache()
 	return handler
 }
-
-// ── Claim codes ───────────────────────────────────────────────────────────────
 
 func (h *WorkerHandler) CreateClaimCode(c *gin.Context) {
 	rawUserID, exists := c.Get("user_id")
@@ -160,8 +156,6 @@ func (h *WorkerHandler) consumeClaimCode(code string) (string, bool) {
 	return entry.UserID, true
 }
 
-// ── Worker registration ───────────────────────────────────────────────────────
-
 func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	var req WorkerSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -199,7 +193,7 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	if agentIP != "" {
 		conflictingWorker, err := h.reclaimStaleWorkersAtIP(ctx, userID, agentIP)
 		if err != nil {
-			log.Printf("Failed to reclaim workers at IP %s: %v", agentIP, err)
+			slog.Error("reclaim workers at IP", "ip", agentIP, "err", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reclaim stale worker at this IP"})
 			return
 		}
@@ -234,13 +228,13 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 		Metadata:     metadata,
 	}
 	if err := h.workerRepo.Create(ctx, worker); err != nil {
-		log.Printf("Failed to create worker: %v", err)
+		slog.Error("create worker", "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register worker"})
 		return
 	}
 
 	grpcAddr := h.resolveGRPCAddress(c)
-	log.Printf("Worker registered: id=%s host=%s grpc=%s", worker.ID.Hex(), req.Hostname, grpcAddr)
+	slog.Info("worker registered from agent", "worker_id", worker.ID.Hex(), "host", req.Hostname, "grpc", grpcAddr)
 
 	c.JSON(http.StatusCreated, WorkerSetupResponse{
 		WorkerID:    worker.ID.Hex(),
@@ -249,8 +243,8 @@ func (h *WorkerHandler) RegisterFromWorker(c *gin.Context) {
 	})
 }
 
-// reclaimStaleWorkersAtIP returns the conflicting worker if one is alive at agentIP,
-// or deletes stale (disconnected) workers and returns nil.
+// reclaimStaleWorkersAtIP returns a live worker at agentIP if there is one; otherwise it
+// deletes the stale ones there and returns nil.
 func (h *WorkerHandler) reclaimStaleWorkersAtIP(ctx context.Context, userID id.ID, agentIP string) (*models.Worker, error) {
 	existing, err := h.workerRepo.GetByUserIDAndIP(ctx, userID, agentIP)
 	if err != nil {
@@ -272,7 +266,7 @@ func (h *WorkerHandler) reclaimStaleWorkersAtIP(ctx context.Context, userID id.I
 		if err := h.workerRepo.Delete(ctx, worker.ID); err != nil {
 			return nil, fmt.Errorf("delete stale worker %s: %w", worker.ID.Hex(), err)
 		}
-		log.Printf("Reclaimed stale worker id=%s name=%q status=%s on IP %s", worker.ID.Hex(), worker.Name, worker.Status, agentIP)
+		slog.Info("reclaimed stale worker", "worker_id", worker.ID.Hex(), "name", worker.Name, "status", worker.Status, "ip", agentIP)
 	}
 	return nil, nil
 }
@@ -293,8 +287,6 @@ func (h *WorkerHandler) resolveGRPCAddress(c *gin.Context) string {
 	}
 	return fmt.Sprintf("%s:%s", host, h.cfg.GRPC.Port)
 }
-
-// ── Worker binary serving ─────────────────────────────────────────────────────
 
 func (h *WorkerHandler) ListBinaries(c *gin.Context) {
 	h.binaryMu.RLock()
@@ -368,7 +360,7 @@ func (h *WorkerHandler) refreshBinaryCache() {
 
 	entries, err := os.ReadDir(h.binaryDir)
 	if err != nil {
-		log.Printf("Warning: cannot read worker binary dir %s: %v", h.binaryDir, err)
+		slog.Warn("cannot read worker binary dir", "dir", h.binaryDir, "err", err)
 		return
 	}
 
@@ -395,7 +387,7 @@ func (h *WorkerHandler) refreshBinaryCache() {
 
 		checksum, err := sha256File(fullPath)
 		if err != nil {
-			log.Printf("Warning: cannot compute checksum for %s: %v", filename, err)
+			slog.Warn("cannot checksum worker binary", "file", filename, "err", err)
 			continue
 		}
 
@@ -408,7 +400,7 @@ func (h *WorkerHandler) refreshBinaryCache() {
 			SHA256:   checksum,
 			Size:     fileInfo.Size(),
 		}
-		log.Printf("Indexed worker binary: %s (%s/%s, %d bytes)", filename, osName, arch, fileInfo.Size())
+		slog.Info("indexed worker binary", "file", filename, "os", osName, "arch", arch, "bytes", fileInfo.Size())
 	}
 
 	h.binaryCache = newCache
@@ -435,7 +427,7 @@ func (h *WorkerHandler) InstallScript(c *gin.Context) {
 set -e
 
 # Lute Worker Installer
-# Usage: curl -sSL %s | bash -s -- --worker-id <ID> --server <GRPC_ADDR>
+# Usage: curl -sSL %s | bash
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -461,106 +453,80 @@ echo "==> Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 ${INSTALL_DIR}/${BINARY_NAME} --version
 
 echo ""
-echo "==> Next step: register this host with the Lute server"
-echo "    ${BINARY_NAME} setup --claim-code <CODE>"
-echo ""
-echo "    (copy the full command from the Add Worker dialog in the Lute UI)"
+echo "==> Next steps:"
+echo "    1. Register this host (copy the command from the Add Worker dialog in the Lute UI):"
+echo "         ${BINARY_NAME} setup --claim-code <CODE>"
+echo "    2. Start the agent against the server's gRPC address:"
+echo "         ${BINARY_NAME} run --server <GRPC_ADDR>"
 `, installURL, baseURL, downloadURL)
 
 	c.Data(http.StatusOK, "text/x-shellscript", []byte(script))
 }
 
-// ── Worker management ─────────────────────────────────────────────────────────
-
 func (h *WorkerHandler) SendCommand(c *gin.Context) {
-	workerID, err := id.FromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
+	worker, ok := h.ownedWorker(c)
+	if !ok {
 		return
 	}
-
 	var req SendCommandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	ctx := c.Request.Context()
-
-	worker, err := h.workerRepo.GetByID(ctx, workerID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
-		return
-	}
-	if worker.Status == "" || worker.Status == "pending" {
+	if worker.Status == "" || worker.Status == enums.WorkerPending {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "worker has no active agent connection"})
 		return
 	}
 
 	cmd := &models.Command{
-		WorkerID: workerID,
+		WorkerID: worker.ID,
 		Command:  req.Command,
 		Args:     req.Args,
 		Env:      req.Env,
-		Status:   "pending",
+		Status:   enums.CommandPending,
 	}
-	if err := h.commandRepo.Create(ctx, cmd); err != nil {
-		log.Printf("Failed to create command: %v", err)
+	if err := h.commandRepo.Create(c.Request.Context(), cmd); err != nil {
+		slog.Error("create command", "worker_id", worker.ID.Hex(), "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to queue command"})
 		return
 	}
-
 	c.JSON(http.StatusCreated, gin.H{
 		"command_id": cmd.ID.Hex(),
-		"status":     "pending",
+		"status":     enums.CommandPending,
 		"message":    "Command queued for worker",
 	})
 }
 
 func (h *WorkerHandler) ListCommands(c *gin.Context) {
-	workerID, err := id.FromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
+	worker, ok := h.ownedWorker(c)
+	if !ok {
 		return
 	}
-
-	ctx := c.Request.Context()
-	commands, err := h.commandRepo.GetByWorkerID(ctx, workerID, 50)
+	commands, err := h.commandRepo.GetByWorkerID(c.Request.Context(), worker.ID, 50)
 	if err != nil {
-		log.Printf("Failed to list commands: %v", err)
+		slog.Error("list commands", "worker_id", worker.ID.Hex(), "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list commands"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"commands": commands, "count": len(commands)})
 }
 
 func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {
-	workerID, err := id.FromHex(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid worker_id"})
+	worker, ok := h.ownedWorker(c)
+	if !ok {
 		return
 	}
-
-	ctx := c.Request.Context()
-	worker, err := h.workerRepo.GetByID(ctx, workerID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "worker not found"})
-		return
-	}
-
 	result := gin.H{
 		"worker_id": worker.ID.Hex(),
 		"name":      worker.Name,
 		"status":    worker.Status,
 	}
-	if worker.Status != "pending" && !worker.LastSeen.IsZero() {
+	if worker.Status != enums.WorkerPending && !worker.LastSeen.IsZero() {
 		result["agent_ip"] = worker.AgentIP
 		result["agent_version"] = worker.AgentVersion
 		result["last_seen"] = worker.LastSeen
 		result["metrics"] = worker.Metrics
 	}
-
 	c.JSON(http.StatusOK, result)
 }
 
@@ -570,18 +536,22 @@ func (h *WorkerHandler) GetCommandResult(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid command_id"})
 		return
 	}
-
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
 	ctx := c.Request.Context()
 	cmd, err := h.commandRepo.GetByID(ctx, cmdID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
 		return
 	}
-
+	if w, err := h.workerRepo.GetByID(ctx, cmd.WorkerID); err != nil || w.UserID != userID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "command not found"})
+		return
+	}
 	c.JSON(http.StatusOK, cmd)
 }
-
-// ── File utilities ────────────────────────────────────────────────────────────
 
 func parseWorkerFilename(filename string) (osName, arch string) {
 	filename = strings.TrimSuffix(filename, ".exe")

@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ListConnectedWorkers handles GET /api/v1/workers/connected (authenticated).
 func (h *WorkerHandler) ListConnectedWorkers(c *gin.Context) {
 	if h.connectionMgr == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "connection manager unavailable"})

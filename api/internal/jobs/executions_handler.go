@@ -18,16 +18,13 @@ func NewExecutionsHandler(repo *repos.JobExecutionRepository) *ExecutionsHandler
 	return &ExecutionsHandler{repo: repo}
 }
 
-// ListExecutions returns paginated rows from job_executions with optional filters.
 func (h *ExecutionsHandler) ListExecutions(c *gin.Context) {
 	if h.repo == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "executions store unavailable"})
 		return
 	}
 
-	// queue and type repeat (?queue=a&queue=b): the panel's facets are
-	// multi-select, and repeating the key keeps a value containing a comma
-	// intact.
+	// Facets repeat the key (?queue=a&queue=b) so a value containing a comma survives.
 	filter := repos.JobExecutionListFilter{
 		Queues: values(c, "queue"),
 		Types:  values(c, "type"),
@@ -57,8 +54,7 @@ func (h *ExecutionsHandler) ListExecutions(c *gin.Context) {
 	})
 }
 
-// values reads a repeated query parameter, dropping blanks so a stale
-// "?queue=" from a cleared filter does not exclude every row.
+// values drops blanks, so a stale "?queue=" from a cleared filter does not exclude every row.
 func values(c *gin.Context, key string) []string {
 	var out []string
 	for _, v := range c.QueryArray(key) {
@@ -69,7 +65,6 @@ func values(c *gin.Context, key string) []string {
 	return out
 }
 
-// ExecutionFilterOptions returns distinct queue and type values.
 func (h *ExecutionsHandler) ExecutionFilterOptions(c *gin.Context) {
 	if h.repo == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "executions store unavailable"})

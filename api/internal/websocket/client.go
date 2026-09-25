@@ -1,7 +1,7 @@
 package websocket
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/lute/api/internal/config"
@@ -10,25 +10,19 @@ import (
 )
 
 const (
-	// Maximum message size allowed from peer
 	maxMessageSize = 512 * 1024
 )
 
-// Client is a middleman between the websocket connection and the hub
 type Client struct {
 	hub *Hub
 
-	// The websocket connection
 	conn *websocket.Conn
 
-	// Buffered channel of outbound messages
 	send chan []byte
 
-	// User ID associated with this client
 	userID string
 }
 
-// NewClient creates a new client instance
 func NewClient(hub *Hub, conn *websocket.Conn, userID string) *Client {
 	return &Client{
 		hub:    hub,
@@ -38,10 +32,9 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID string) *Client {
 	}
 }
 
-// readPump pumps messages from the websocket connection to the hub
 func (c *Client) ReadPump(cfg *config.WebSocketConfig) {
 	defer func() {
-		c.hub.unregister <- c
+		c.hub.Unregister(c)
 		_ = c.conn.Close()
 	}()
 
@@ -53,18 +46,17 @@ func (c *Client) ReadPump(cfg *config.WebSocketConfig) {
 	})
 
 	for {
-		// The hub is broadcast-only — relaying would let a client forge job events for
-		// every other. Reads continue so pongs and close frames are still processed.
+		// Inbound messages are discarded: relaying would let a client forge job events for
+		// everyone. Reading still processes pongs and close frames.
 		if _, _, err := c.conn.ReadMessage(); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error for client %s: %v", c.userID, err)
+				slog.Warn("websocket read", "user_id", c.userID, "err", err)
 			}
 			break
 		}
 	}
 }
 
-// writePump pumps messages from the hub to the websocket connection
 func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 	ticker := time.NewTicker(cfg.PingPeriod)
 	defer func() {
@@ -77,7 +69,6 @@ func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 		case message, ok := <-c.send:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(cfg.WriteWait))
 			if !ok {
-				// The hub closed the channel
 				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -88,7 +79,6 @@ func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 			}
 			_, _ = w.Write(message)
 
-			// Add queued messages to the current websocket message
 			n := len(c.send)
 			for i := 0; i < n; i++ {
 				_, _ = w.Write([]byte{'\n'})
@@ -108,9 +98,7 @@ func (c *Client) WritePump(cfg *config.WebSocketConfig) {
 	}
 }
 
-// Serve starts the client's read and write pumps
 func (c *Client) Serve(cfg *config.WebSocketConfig) {
-	// Start read and write pumps
 	go c.WritePump(cfg)
 	c.ReadPump(cfg)
 }

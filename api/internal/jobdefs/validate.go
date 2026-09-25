@@ -9,25 +9,19 @@ import (
 	"github.com/lute/api/internal/db/models"
 )
 
-// KnownTypes is the set of parameter types the schema supports. A definition
-// naming anything else is rejected at sync time rather than silently accepting
-// arbitrary values at trigger time.
+// KnownTypes are the parameter types a definition may use; others are rejected at sync.
 var KnownTypes = map[string]bool{
 	"string": true, "number": true, "bool": true, "select": true,
 	"multiselect": true, "date": true, "datetime": true, "secret": true,
 }
 
-// Resolved is the outcome of validating a trigger payload against a schema.
 type Resolved struct {
-	// Env maps each parameter's EnvVar to its stringified value, ready to hand
-	// to the container as request_params.
+	// Env maps each parameter's EnvVar to its value, handed to the container as request_params.
 	Env map[string]string
-	// Environment is the value of a parameter literally named "environment",
-	// surfaced on the build list. Empty when the job has no such parameter.
+	// Environment is the value of a parameter named "environment", shown on the build list.
 	Environment string
 }
 
-// ValidationError aggregates per-field problems for a 400 response.
 type ValidationError struct {
 	Fields map[string]string
 }
@@ -40,10 +34,8 @@ func (e *ValidationError) Error() string {
 	return "invalid parameters — " + strings.Join(parts, "; ")
 }
 
-// Validate checks submitted values against the job's parameter schema and
-// resolves them into container env vars. Secret parameters are not accepted
-// inline; they are resolved worker-side from their secretRef (not implemented
-// yet) and therefore skipped here.
+// Validate checks values against the schema and resolves them into env vars. Secret
+// parameters are skipped: they are meant to resolve worker-side (not implemented yet).
 func Validate(fields []models.ParameterField, values map[string]any) (*Resolved, error) {
 	res := &Resolved{Env: map[string]string{}}
 	verr := &ValidationError{Fields: map[string]string{}}
@@ -74,8 +66,7 @@ func Validate(fields []models.ParameterField, values map[string]any) (*Resolved,
 		}
 		envName := f.EnvName()
 		if envName == "" {
-			// Nothing usable to pass it as, and an empty name is not a variable any
-			// runtime accepts. Skipping beats failing every build of this definition.
+			// No usable variable name; skipping beats failing every build.
 			continue
 		}
 		res.Env[envName] = str
@@ -153,7 +144,6 @@ func coerce(f models.ParameterField, raw any) (string, error) {
 	case "datetime":
 		s := fmt.Sprintf("%v", raw)
 		if _, err := time.Parse(time.RFC3339, s); err != nil {
-			// Allow a plain date too.
 			if _, err2 := time.Parse("2006-01-02", s); err2 != nil {
 				return "", fmt.Errorf("must be an ISO-8601 datetime")
 			}

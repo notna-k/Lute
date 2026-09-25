@@ -47,8 +47,6 @@ type RunListFilter struct {
 	JobSlug string
 }
 
-// ListByJobSlug returns the most recent runs (builds) for a job definition,
-// scoped to a user, newest first.
 func (r *RunRepository) ListByJobSlug(ctx context.Context, userID id.ID, slug string, limit int) ([]models.Run, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
@@ -68,9 +66,7 @@ func (r *RunRepository) ListByJobSlug(ctx context.Context, userID id.ID, slug st
 	return rows, nil
 }
 
-// ListByJobSlugs returns recent runs across several job definitions in one
-// query, grouped by slug and capped at perSlug newest-first entries each. Used
-// to render the jobs list without a query per job.
+// ListByJobSlugs returns up to perSlug newest runs per slug in one query.
 func (r *RunRepository) ListByJobSlugs(ctx context.Context, userID id.ID, slugs []string, perSlug int) (map[string][]models.Run, error) {
 	out := make(map[string][]models.Run, len(slugs))
 	if len(slugs) == 0 {

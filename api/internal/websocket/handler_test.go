@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,7 +34,6 @@ func testConfig() *config.Config {
 	}
 }
 
-// newTestServer serves the WS route as the router mounts it, with a valid token for it.
 func newTestServer(t *testing.T) (wsURL, token string, hub *Hub) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -48,7 +48,9 @@ func newTestServer(t *testing.T) (wsURL, token string, hub *Hub) {
 	}
 
 	hub = NewHub()
-	go hub.Run()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go hub.Run(ctx)
 
 	h := NewWebSocketHandler(hub, testConfig(), tokens)
 	r := gin.New()

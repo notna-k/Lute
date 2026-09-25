@@ -2,7 +2,7 @@ package websocket
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -47,7 +47,6 @@ func NewWebSocketHandler(hub *Hub, cfg *config.Config, tokens *auth.TokenService
 	}
 }
 
-// HandleWebSocket authenticates the caller and joins it to the hub.
 func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	// Authenticate before upgrading: the hub broadcasts every build's resolved parameters.
 	claims, err := h.authenticate(c.Request)
@@ -58,8 +57,8 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		// Upgrade has already written the HTTP error response.
-		log.Printf("WebSocket upgrade error: %v", err)
+		// Upgrade has already written the error response.
+		slog.Warn("websocket upgrade", "err", err)
 		return
 	}
 
@@ -69,7 +68,6 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	client.Serve(&h.cfg.WebSocket)
 }
 
-// authenticate verifies the token from the Authorization header or the bearer subprotocol.
 func (h *WebSocketHandler) authenticate(r *http.Request) (*auth.AccessClaims, error) {
 	if h.tokens == nil {
 		return nil, errors.New("no token service configured")
@@ -92,7 +90,6 @@ func bearerToken(header string) string {
 	return strings.TrimSpace(parts[1])
 }
 
-// subprotocolToken returns the entry following the bearer marker.
 func subprotocolToken(protocols []string) string {
 	for i, p := range protocols {
 		if p == bearerSubprotocol && i+1 < len(protocols) {
@@ -102,8 +99,8 @@ func subprotocolToken(protocols []string) string {
 	return ""
 }
 
-// originAllowed matches Origin against the CORS allow-list. Absent passes (only browsers send
-// it, and every client still needs a token); "*" turns the check off.
+// originAllowed checks Origin against the CORS allow-list. An absent Origin passes: only
+// browsers send it and every client still needs a token. "*" turns the check off.
 func originAllowed(origin string, allowed []string) bool {
 	if origin == "" {
 		return true

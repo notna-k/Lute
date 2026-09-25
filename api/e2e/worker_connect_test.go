@@ -12,8 +12,7 @@ import (
 	"github.com/lute/api/e2e/harness"
 )
 
-// TestAgentConnection covers what core does with an agent's stream: accept it, describe
-// it to the panel, refuse the ones it should, and notice when it goes away.
+// TestAgentConnection covers accepting, describing, refusing and losing an agent's stream.
 func TestAgentConnection(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
@@ -34,7 +33,6 @@ func TestAgentConnection(t *testing.T) {
 			t.Errorf("connected worker mismatch (-want +got):\n%s", diff)
 		}
 
-		// The panel's worker list must agree that this host is live.
 		worker, err := admin.GetWorker(reg.WorkerID)
 		if err != nil {
 			t.Fatalf("get worker: %v", err)
@@ -55,10 +53,8 @@ func TestAgentConnection(t *testing.T) {
 		agent.WaitExit(30 * time.Second)
 		stack.WaitDisconnected(admin, reg.WorkerID)
 
-		// The interesting case is the host that comes back later — after a reboot, or
-		// because something restarts it. Retrying a worker id core has forgotten is a
-		// reconnect storm against a server that will never accept it, so the agent has
-		// to stop rather than back off and try again.
+		// A host coming back with a worker id core has forgotten must stop, not retry
+		// forever against a server that will never accept it.
 		revenant := stack.StartAgent(reg.WorkerID, harness.WithQueues("build"))
 		revenant.WaitExit(30 * time.Second)
 		harness.Never(t, 2*time.Second, "a deleted worker to reappear as connected", func() bool {
@@ -76,8 +72,6 @@ func TestAgentConnection(t *testing.T) {
 	})
 
 	t.Run("Success - a dead host is refused until an operator re-enables it", func(t *testing.T) {
-		// A short heartbeat is what makes a missing agent turn into a dead worker in
-		// a test's lifetime rather than a deployment's.
 		fast := newStack(t, harness.WithFastHeartbeat(300*time.Millisecond, time.Second, 2))
 		fastAdmin := fast.AdminClient()
 
@@ -91,8 +85,7 @@ func TestAgentConnection(t *testing.T) {
 			return err == nil && w.Status == "dead"
 		})
 
-		// Until an operator says otherwise, a dead host stays out: its agent may be a
-		// zombie, and letting it back in silently hides a real failure.
+		// A dead host stays out until re-enabled: letting a zombie back in hides a real failure.
 		refused := fast.StartAgent(reg.WorkerID, harness.WithQueues("build"))
 		refused.WaitExit(30 * time.Second)
 
@@ -118,8 +111,7 @@ func TestAgentConnection(t *testing.T) {
 				return s, s.LastSeen != "" && len(s.Metrics) > 0
 			})
 
-		// The dashboard is only as good as these: a host reporting nothing looks
-		// identical to one that is idle.
+		// A host reporting nothing would look identical to an idle one.
 		for _, key := range []string{"cpu_load", "mem_usage_mb"} {
 			if _, ok := status.Metrics[key]; !ok {
 				t.Errorf("metric %q missing; got %v", key, status.Metrics)
@@ -153,7 +145,6 @@ func TestAgentConnection(t *testing.T) {
 			t.Fatalf("the agent gave up when core restarted (exit: %v):\n%s", agent.ExitError(), agent.Stderr())
 		}
 
-		// And the host must be able to work again, not just be connected.
 		build, err := restarted.Trigger(echoSlug, map[string]any{"environment": "staging"})
 		if err != nil {
 			t.Fatalf("trigger after restart: %v", err)
@@ -162,8 +153,7 @@ func TestAgentConnection(t *testing.T) {
 	})
 }
 
-// TestConnectionRejections covers the protocol's front door, using a client that can
-// misbehave in ways the real agent never does.
+// TestConnectionRejections uses a raw client to misbehave in ways the real agent never does.
 func TestConnectionRejections(t *testing.T) {
 	stack := newBareStack(t)
 	admin := stack.AdminClient()
@@ -221,8 +211,7 @@ func TestConnectionRejections(t *testing.T) {
 			return false
 		})
 
-		// One host, one stream: work must not be handed to a connection that was
-		// replaced, or it vanishes into a socket nobody is reading.
+		// Work must not go to a replaced stream, or it vanishes into a socket nobody reads.
 		enqueued, err := admin.Enqueue(harness.EnqueueRequest{Queue: "build", Type: "noop"})
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
