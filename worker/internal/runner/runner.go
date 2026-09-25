@@ -1,7 +1,9 @@
+// Package runner runs "container" jobs in Docker.
 package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,8 +14,7 @@ import (
 	"github.com/docker/docker/client"
 )
 
-// Spec is the container job specification (mirrors proto ContainerJobSpec).
-// JobAssignment.payload for type "container" is JSON matching this struct.
+// Spec is the JSON payload of a "container" job (mirrors proto ContainerJobSpec).
 type Spec struct {
 	SourceRepository string            `json:"source_repository"`
 	Runtime          string            `json:"runtime"`
@@ -21,36 +22,30 @@ type Spec struct {
 	Command          string            `json:"command"`
 }
 
-const workspaceMount = "/workspace"
-const commandScriptName = "_user_command.sh"
+const (
+	workspaceMount    = "/workspace"
+	commandScriptName = "_user_command.sh"
+)
 
-// Run optionally clones a repo into the workspace, writes the command script, runs a Docker container, and cleans up.
-// System events are JSON-logged to job-{jobID}.log under logDir when logDir is set and also mirrored
-// to the default slog logger (console). Container stdout lines go to the job file only (source=container).
-// When logDir is empty, job file writes are discarded but system lines still appear on the default logger.
-// Returns elapsed milliseconds and an error on failure.
-func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32) (elapsedMs int64, err error) {
-	start := time.Now()
-	defer func() {
-		elapsedMs = time.Since(start).Milliseconds()
-	}()
-
+// Run clones the optional repository into a temp workspace and runs spec.Command in a container.
+// Container stdout goes only to the job log in logDir; system events also go to the default logger.
+func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32) error {
 	if spec == nil {
-		return 0, fmt.Errorf("spec is nil")
+		return errors.New("spec is nil")
 	}
 	if spec.Runtime == "" {
-		return 0, fmt.Errorf("runtime (Docker image) is required")
+		return errors.New("runtime (Docker image) is required")
 	}
 
 	jobLogger, closeLog, err := openJobLog(logDir, jobID)
 	if err != nil {
-		return 0, fmt.Errorf("job log: %w", err)
+		return fmt.Errorf("job log: %w", err)
 	}
 	defer closeLog()
 
 	dir, err := os.MkdirTemp("", "lute-job-*")
 	if err != nil {
-		return 0, fmt.Errorf("create temp dir: %w", err)
+		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	logSystem(jobLogger, slog.LevelInfo, "temp dir", slog.String("path", dir))
@@ -58,10 +53,10 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 	repo := strings.TrimSpace(spec.SourceRepository)
 	if repo != "" {
 		if err := validateGitHubRepo(repo); err != nil {
-			return 0, fmt.Errorf("invalid source_repository: %w", err)
+			return fmt.Errorf("invalid source_repository: %w", err)
 		}
 		if err := cloneRepo(ctx, dir, repo); err != nil {
-			return 0, fmt.Errorf("clone: %w", err)
+			return fmt.Errorf("clone: %w", err)
 		}
 		logSystem(jobLogger, slog.LevelInfo, "clone ok")
 	} else {
@@ -70,7 +65,7 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 
 	scriptPath := filepath.Join(dir, commandScriptName)
 	if err := os.WriteFile(scriptPath, []byte(spec.Command), 0700); err != nil {
-		return 0, fmt.Errorf("write command script: %w", err)
+		return fmt.Errorf("write command script: %w", err)
 	}
 
 	runCtx := ctx
@@ -82,18 +77,18 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return 0, fmt.Errorf("docker client: %w", err)
+		return fmt.Errorf("docker client: %w", err)
 	}
 	defer func() { _ = cli.Close() }()
 
 	exitCode, err := runContainer(runCtx, cli, dir, spec, jobLogger)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if exitCode != 0 {
-		return 0, fmt.Errorf("container exited with code %d", exitCode)
+		return fmt.Errorf("container exited with code %d", exitCode)
 	}
 
 	logSystem(jobLogger, slog.LevelInfo, "job finished successfully")
-	return time.Since(start).Milliseconds(), nil
+	return nil
 }

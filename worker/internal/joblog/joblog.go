@@ -1,18 +1,33 @@
+// Package joblog names per-job log files and reads them in pages from either end.
 package joblog
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 const (
-	// MaxLinesPerRequest caps lines returned in one response (gRPC message size).
-	MaxLinesPerRequest = 500
-	// MaxLineBytes truncates a single line beyond this size.
-	MaxLineBytes = 1 << 20
-	// readChunkSize is the buffer size for backward file reads.
-	readChunkSize = 256 * 1024
+	// maxLinesPerRequest keeps one response under the gRPC message size limit.
+	maxLinesPerRequest = 500
+	maxLineBytes       = 1 << 20
+	readChunkSize      = 256 * 1024
 )
+
+// FileName is the name of a job's log file inside the job logs directory.
+func FileName(jobID string) string {
+	return "job-" + jobID + ".log"
+}
+
+// Path is the job's log file in dir; it rejects ids that would place the file elsewhere.
+func Path(dir, jobID string) (string, error) {
+	name := FileName(jobID)
+	if jobID == "" || filepath.Base(name) != name {
+		return "", fmt.Errorf("invalid job id %q", jobID)
+	}
+	return filepath.Join(dir, name), nil
+}
 
 // Result is the outcome of reading a chunk of a job log file.
 type Result struct {
@@ -23,17 +38,14 @@ type Result struct {
 	Err        string
 }
 
-// ReadTail reads up to `limit` complete lines strictly before byte `beforeExclusive`.
-// If beforeExclusive is 0, reads from end of file. Lines are returned oldest-first
-// within the chunk. NextAnchor is the file offset of the first byte of the oldest
-// line returned (for the next "older" request). HasMore is true if more lines exist
-// before NextAnchor.
+// ReadTail returns up to limit lines, oldest-first, ending before byte beforeExclusive (0 = end of file).
+// NextAnchor is the offset of the oldest line returned, to pass back for the next older page.
 func ReadTail(path string, limit int, beforeExclusive int64) Result {
 	if limit < 1 {
 		limit = 1
 	}
-	if limit > MaxLinesPerRequest {
-		limit = MaxLinesPerRequest
+	if limit > maxLinesPerRequest {
+		limit = maxLinesPerRequest
 	}
 
 	f, err := os.Open(path)
@@ -70,13 +82,12 @@ func ReadTail(path string, limit int, beforeExclusive int64) Result {
 	if err != nil {
 		return Result{FileSize: fileSize, Err: err.Error()}
 	}
-	// reverse to oldest-first
 	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
 		lines[i], lines[j] = lines[j], lines[i]
 	}
 	for i := range lines {
-		if len(lines[i]) > MaxLineBytes {
-			lines[i] = lines[i][:MaxLineBytes]
+		if len(lines[i]) > maxLineBytes {
+			lines[i] = lines[i][:maxLineBytes]
 		}
 	}
 
@@ -89,8 +100,7 @@ func ReadTail(path string, limit int, beforeExclusive int64) Result {
 	}
 }
 
-// readBackwardLines reads up to n lines ending strictly before endExclusive.
-// Returns lines newest-first and the file offset of the first byte of the oldest line.
+// readBackwardLines returns up to n lines newest-first, and the offset of the oldest one.
 func readBackwardLines(f *os.File, endExclusive int64, n int) (lines []string, oldestStart int64, err error) {
 	chunk := make([]byte, readChunkSize)
 	pos := endExclusive
@@ -159,15 +169,14 @@ func trimTrailingNewlines(f *os.File, end int64) int64 {
 	return end
 }
 
-// ReadHead reads up to `limit` complete lines starting at byte `startOffset`.
-// Lines are returned oldest-first. NextAnchor is the offset after the last consumed
-// newline (or end of file). HasMore is true if more bytes remain after NextAnchor.
+// ReadHead returns up to limit lines starting at byte startOffset.
+// NextAnchor is the offset just past the last line returned, to pass back for the next page.
 func ReadHead(path string, limit int, startOffset int64) Result {
 	if limit < 1 {
 		limit = 1
 	}
-	if limit > MaxLinesPerRequest {
-		limit = MaxLinesPerRequest
+	if limit > maxLinesPerRequest {
+		limit = maxLinesPerRequest
 	}
 
 	f, err := os.Open(path)
@@ -221,8 +230,8 @@ func ReadHead(path string, limit int, startOffset int64) Result {
 			}
 			if idx < 0 {
 				tail := seg[off:]
-				if len(lineBuf)+len(tail) > MaxLineBytes {
-					lineBuf = append(lineBuf, tail[:MaxLineBytes-len(lineBuf)]...)
+				if len(lineBuf)+len(tail) > maxLineBytes {
+					lineBuf = append(lineBuf, tail[:maxLineBytes-len(lineBuf)]...)
 					lines = append(lines, string(lineBuf))
 					lineBuf = lineBuf[:0]
 					pos = fileSize
@@ -235,8 +244,8 @@ func ReadHead(path string, limit int, startOffset int64) Result {
 			piece := seg[off:idx]
 			full := append(lineBuf, piece...)
 			lineBuf = lineBuf[:0]
-			if len(full) > MaxLineBytes {
-				full = full[:MaxLineBytes]
+			if len(full) > maxLineBytes {
+				full = full[:maxLineBytes]
 			}
 			lines = append(lines, string(full))
 			pos = readStart + int64(idx+1)
@@ -247,8 +256,8 @@ func ReadHead(path string, limit int, startOffset int64) Result {
 		}
 	}
 	if len(lines) < limit && len(lineBuf) > 0 {
-		if len(lineBuf) > MaxLineBytes {
-			lineBuf = lineBuf[:MaxLineBytes]
+		if len(lineBuf) > maxLineBytes {
+			lineBuf = lineBuf[:maxLineBytes]
 		}
 		lines = append(lines, string(lineBuf))
 		pos = fileSize

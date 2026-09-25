@@ -44,16 +44,11 @@ func runContainer(ctx context.Context, cli *client.Client, dir string, spec *Spe
 	return exitCode, nil
 }
 
-// shellPicker runs the command script under bash when the image has it and falls back
-// to sh when it does not.
-//
-// Demanding bash rules out every alpine-based image — including the node:*-alpine and
-// alpine runtimes the documentation and example definitions use, which ship only
-// busybox sh. Those jobs failed at container start, before running a single line.
+// shellPicker prefers bash but falls back to sh: alpine-based images (node:*-alpine and
+// friends, used throughout the docs) ship only busybox sh.
 const shellPicker = `if command -v bash >/dev/null 2>&1; then exec bash "$1"; else exec sh "$1"; fi`
 
-// shellCommand is the container's command line for running the user's script.
-// The extra "lute" is $0 for the -c program; the script path is $1.
+// shellCommand's extra "lute" is $0 for the -c program; the script path is $1.
 func shellCommand(scriptPath string) []string {
 	return []string{"sh", "-c", shellPicker, "lute", scriptPath}
 }
@@ -111,7 +106,7 @@ func waitForExit(ctx context.Context, cli *client.Client, containerID string) (i
 	}
 }
 
-// lineLogWriter buffers stdout chunks and emits one slog record per line (same as former post-hoc scanner).
+// lineLogWriter buffers stdout chunks and emits one slog record per line.
 type lineLogWriter struct {
 	jobLogger *slog.Logger
 	buf       []byte
@@ -126,7 +121,7 @@ func (w *lineLogWriter) Write(p []byte) (int, error) {
 		}
 		line := string(w.buf[:i])
 		w.buf = w.buf[i+1:]
-		w.jobLogger.Info(line, slog.String("source", LogSourceContainer))
+		w.jobLogger.Info(line, slog.String("source", sourceContainer))
 	}
 	return len(p), nil
 }
@@ -135,7 +130,7 @@ func (w *lineLogWriter) flush() {
 	if len(w.buf) == 0 {
 		return
 	}
-	w.jobLogger.Info(string(w.buf), slog.String("source", LogSourceContainer))
+	w.jobLogger.Info(string(w.buf), slog.String("source", sourceContainer))
 	w.buf = nil
 }
 
