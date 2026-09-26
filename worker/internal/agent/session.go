@@ -113,24 +113,43 @@ func (a *Agent) accept(as *pb.JobAssignment) {
 	}()
 }
 
-// finishJob reports a job's result on the open stream, or keeps it for the next one.
+// finishJob queues a job's result and delivers it on the open stream, or on the next one.
 func (a *Agent) finishJob(r *pb.JobResult) {
 	a.mu.Lock()
 	delete(a.running, r.JobId)
-	s := a.sess
-	if s == nil {
-		a.pending = append(a.pending, r)
-	}
+	a.pending = append(a.pending, r)
 	a.mu.Unlock()
-	if s == nil {
-		slog.Warn("No connection; the job result waits for the next one", "job_id", r.JobId)
-		return
-	}
-	if err := s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Result{Result: r}}); err != nil {
-		slog.Warn("Failed to send job result; retrying on the next connection", "job_id", r.JobId, "err", err)
+	a.flushPending()
+}
+
+// flushPending sends queued results on the current stream. What fails to send goes back
+// to the queue; if a new stream took over meanwhile, it may have flushed the queue before
+// the failure was queued again, so the loop tries once more on that one.
+func (a *Agent) flushPending() {
+	for {
 		a.mu.Lock()
-		a.pending = append(a.pending, r)
+		s, batch := a.sess, a.pending
+		if s == nil || len(batch) == 0 {
+			a.mu.Unlock()
+			return
+		}
+		a.pending = nil
 		a.mu.Unlock()
+
+		for i, r := range batch {
+			if err := s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Result{Result: r}}); err != nil {
+				slog.Warn("Failed to send job result; retrying on the next connection", "job_id", r.JobId, "err", err)
+				a.mu.Lock()
+				a.pending = append(a.pending, batch[i:]...)
+				retry := a.sess != s
+				a.mu.Unlock()
+				if !retry {
+					return
+				}
+				break
+			}
+		}
+		// Loop: results may have been queued while this batch was sent.
 	}
 }
 

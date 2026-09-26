@@ -78,12 +78,28 @@ func TestFinishJobWithoutStreamKeepsResult(t *testing.T) {
 	a := New(Config{}, context.Background())
 	a.running["job-1"] = struct{}{}
 
-	a.finishJob(&pb.JobResult{JobId: "job-1", Success: true})
+	a.finishJob(&pb.JobResult{JobId: "job-1", Success: true}) // no stream: the result is queued
 
 	if _, ok := a.running["job-1"]; ok {
 		t.Error("finished job is still counted as running")
 	}
 	if len(a.pending) != 1 || a.pending[0].JobId != "job-1" {
 		t.Errorf("pending = %v, want the result kept for the next stream", a.pending)
+	}
+}
+
+func TestDrainWaitsForPendingResults(t *testing.T) {
+	a := New(Config{}, context.Background())
+	stopped := false
+	a.stop = func() { stopped = true }
+	a.pending = []*pb.JobResult{{JobId: "job-1"}}
+
+	a.finishGracefully(Drained)
+
+	if _, done := a.finished(); done || stopped {
+		t.Fatal("agent stopped with a result nobody received")
+	}
+	if a.finishing == nil || *a.finishing != Drained {
+		t.Errorf("finishing = %v, want Drained once the result is sent", a.finishing)
 	}
 }

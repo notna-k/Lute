@@ -143,22 +143,21 @@ func (wc *WorkerConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, erro
 	}
 }
 
-// AssignJob reserves capacity and queues the assignment for the Run loop.
+// AssignJob reserves capacity and queues the assignment for the Run loop. Both happen
+// under the lock that Shutdown takes to mark draining, so an assignment is either queued
+// before the drain (and flushed ahead of the DrainSignal) or refused.
 func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 	wc.mu.Lock()
+	defer wc.mu.Unlock()
 	if wc.draining || wc.ActiveJobs >= wc.Concurrency {
-		wc.mu.Unlock()
 		return false
 	}
-	wc.ActiveJobs++
-	wc.running[assignment.JobId] = struct{}{}
-	wc.mu.Unlock()
-
 	select {
 	case wc.jobCh <- assignment:
+		wc.ActiveJobs++
+		wc.running[assignment.JobId] = struct{}{}
 		return true
 	default:
-		wc.release(assignment.JobId)
 		return false
 	}
 }

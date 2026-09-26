@@ -69,6 +69,7 @@ type Agent struct {
 	drainedSent bool
 	done        bool
 	outcome     Outcome
+	finishing   *Outcome // drained, but results wait for a stream before the agent stops
 	stop        context.CancelFunc
 }
 
@@ -166,9 +167,18 @@ func (a *Agent) finishGracefully(o Outcome) {
 		a.mu.Unlock()
 		return
 	}
-	a.done, a.outcome = true, o
 	s, stop := a.sess, a.stop
+	waiting := s == nil && len(a.pending) > 0
+	if waiting {
+		a.finishing = &o
+	} else {
+		a.done, a.outcome = true, o
+	}
 	a.mu.Unlock()
+	if waiting {
+		slog.Info("Drained; reconnecting to report the last results before stopping")
+		return
+	}
 	if s == nil || s.closeSend() != nil {
 		stop()
 		return
@@ -279,6 +289,16 @@ func (a *Agent) connect(ctx context.Context) error {
 	}()
 	if draining {
 		_ = s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Status{Status: &pb.WorkerStatus{Draining: true}}})
+	}
+	a.flushPending()
+	a.mu.Lock()
+	var finishing *Outcome
+	if len(a.pending) == 0 {
+		finishing, a.finishing = a.finishing, nil
+	}
+	a.mu.Unlock()
+	if finishing != nil {
+		a.finishGracefully(*finishing)
 	}
 
 	slog.Info("Connected", "server", a.cfg.ServerAddr)
