@@ -1,14 +1,14 @@
-.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-all worker-build-linux go-format-check go-test go-lint e2e e2e-vet ui-build api-build
+.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-linux worker-image go-format-check go-test go-lint e2e e2e-image e2e-vet ui-build api-build
 
 export DOCKER_BUILDKIT := 1
-export WORKER_VERSION ?= 0.1.0
-export BUILD_TIME     := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+export VERSION    ?= 0.2.0
+export BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 ENV_FILE ?= .env
 COMPOSE  := docker compose -f infrastructure/dev/docker-compose.yml --env-file $(ENV_FILE)
 LINT     := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
-GOBUILD  := CGO_ENABLED=0 go build -ldflags '-X main.Version=$(WORKER_VERSION) -X main.BuildTime=$(BUILD_TIME)'
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+GOBUILD  := CGO_ENABLED=0 go build -ldflags '-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)'
+WORKER_IMAGE ?= lute-worker:dev
 
 dev-up:
 	$(COMPOSE) up -d --build
@@ -24,17 +24,15 @@ dev-logs:
 
 worker-build:
 	cd worker && $(GOBUILD) -o bin/lute-worker ./cmd/worker
-	echo $(WORKER_VERSION) > worker/bin/VERSION
 
-worker-build-all:
-	cd worker && for p in $(PLATFORMS); do \
-		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
-		GOOS=$$os GOARCH=$$arch $(GOBUILD) -o bin/lute-worker-$$os-$$arch$$ext ./cmd/worker || exit 1; \
-	done
-	echo $(WORKER_VERSION) > worker/bin/VERSION
-
+# The name the e2e harness runs.
 worker-build-linux:
-	$(MAKE) worker-build-all PLATFORMS=linux/amd64
+	cd worker && GOOS=linux GOARCH=amd64 $(GOBUILD) -o bin/lute-worker-linux-amd64 ./cmd/worker
+
+# linux/amd64 only; CI builds arm64 too when it publishes.
+worker-image:
+	docker build --platform linux/amd64 -f worker/Dockerfile \
+		--build-arg VERSION=$(VERSION) --build-arg BUILD_TIME=$(BUILD_TIME) -t $(WORKER_IMAGE) .
 
 go-format-check:
 	@unformatted="$$(gofmt -l api worker shared/proto)"; \
@@ -60,6 +58,10 @@ go-lint:
 # Point LUTE_E2E_POSTGRES_DSN at an existing server to skip starting a container.
 e2e: worker-build-linux
 	cd api && go test -tags e2e -count=1 -p 1 -timeout 20m ./e2e/...
+
+# The agent as a container: mount checks and a deleted worker staying stopped.
+e2e-image: worker-image
+	cd api && LUTE_E2E_WORKER_IMAGE=$(WORKER_IMAGE) go test -tags e2e -count=1 -p 1 -timeout 10m -run TestWorkerImage ./e2e/...
 
 e2e-vet:
 	cd api && go vet -tags e2e ./e2e/...

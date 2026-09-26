@@ -37,6 +37,7 @@ gRPC, so they describe how Lute behaves rather than how it is written.
 
 ```bash
 make e2e        # compiles the agent, then runs the suite (needs Docker)
+make e2e-image  # builds the worker image and checks it as operators run it
 make e2e-vet    # vet the e2e-tagged files
 ```
 
@@ -44,6 +45,8 @@ It is behind the `e2e` build tag, so `make go-test` stays fast and needs no Dock
 
 - `LUTE_E2E_POSTGRES_DSN=postgres://...` runs against an existing Postgres instead of starting a
   container — that is how CI uses its service container.
+- Agents run with `LUTE_ALLOW_ROOTFUL=1`, since CI Docker is rootful. Point `DOCKER_HOST` at a
+  rootless engine and set `LUTE_E2E_ROOTLESS=1` to run them as a real host does.
 - Each test writes its diagnostics to `api/e2e/_artifacts/<test>/`: core's log, every agent's
   stderr, and the job logs. CI uploads them when the suite fails.
 - A new scenario is a top-level `Test*` with one `harness.Stack`. Wait on observable state with

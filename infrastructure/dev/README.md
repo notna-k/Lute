@@ -1,6 +1,6 @@
 # Development Docker Compose Setup
 
-This directory runs the local Lute stack as **three separate containers**.
+This directory runs the local Lute stack as **four separate containers**.
 
 ## Services
 
@@ -11,6 +11,10 @@ This directory runs the local Lute stack as **three separate containers**.
   from `JOB_DEFS_DIR` (mounted read-only from `./jobdefs`) on startup.
 - **admin** — the decoupled React panel served by nginx. Talks to Core through
   the same origin: nginx proxies `/api` (and the `/api/ws` WebSocket) to `core`.
+- **worker** — the build agent image (`worker/Dockerfile`). It enrols itself with
+  `WORKER_BOOTSTRAP_TOKEN`, which core seeds as a registration token, and runs jobs
+  as sibling containers on the host's Docker. Dev Docker is rootful, so it sets
+  `LUTE_ALLOW_ROOTFUL=1`; real hosts run it on rootless Docker (`docs/worker.md`).
 
 ```
 browser ──▶ admin (nginx :8080) ──/api──▶ core (:8080) ──▶ postgres (:5432)
@@ -53,7 +57,7 @@ worker  ─────────────────── gRPC ───
    ```bash
    make dev-logs
    make dev-down        # stop
-   make dev-clean       # stop + remove volumes (wipes Postgres)
+   make dev-clean       # stop + remove volumes (wipes Postgres and the worker's identity)
    ```
 
 ## Access Points
@@ -79,6 +83,7 @@ Override the location with `make ENV_FILE=/path/to/env dev-up`. Highlights:
 - **Logging**: core logs structured text to stderr; `LOG_LEVEL` is `debug`, `info` (default), `warn` or `error`.
 - **Ports**: `ADMIN_PORT` (8080), `API_HTTP_PORT` (8081), `API_GRPC_PORT` (50051).
 - **Auth**: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, plus optional token TTLs.
+- **Workers**: `WORKER_BOOTSTRAP_TOKEN` (default `lute_rt_dev_bootstrap_token`), `WORKER_GRPC_ADDR` and `WORKER_IMAGE` for the Add Worker command.
 
 ### Vite build-time variables
 
@@ -97,3 +102,4 @@ docker compose up -d --build  # everything
 ## Volumes
 
 - `postgres_data`: PostgreSQL data directory.
+- `worker_data`: the dev worker's identity (`state.json`) and job logs.

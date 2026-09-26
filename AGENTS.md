@@ -27,11 +27,12 @@ Chrome plugin is available to check and test the UI.
 ```bash
 make dev-up / dev-down / dev-logs     # compose stack (dev-clean wipes Postgres)
 make worker-build                     # host (linux/amd64) worker binary
+make worker-image                     # the worker image, linux/amd64 only
 make go-lint                          # golangci-lint for api + worker
 cd ui && npm run dev                  # UI dev server on :3000
 ```
 
-Don't run `make worker-build-all` (cross-compiles 5 platforms) — use `worker-build` or `worker-build-linux`. `make api-build` runs `npm ci` + a full UI build; avoid it unless needed.
+The worker ships only as an image; CI builds arm64 when it publishes, so locally stay on `worker-build`, `worker-build-linux` or `worker-image`. `make api-build` runs `npm ci` + a full UI build; avoid it unless needed.
 
 ## Before calling a change done
 
@@ -60,11 +61,14 @@ HTTP, WebSocket and gRPC, so they survive refactors.
 
 ```bash
 make e2e        # compiles the agent, then runs the suite (needs Docker)
+make e2e-image  # builds the worker image, then runs TestWorkerImage against it
 make e2e-vet    # vet the tagged files
 ```
 
 - Guarded by `//go:build e2e`, so `make go-test` stays fast and does not touch Docker.
 - `LUTE_E2E_POSTGRES_DSN` points the suite at an existing Postgres instead of starting one.
+- Agents run with `LUTE_ALLOW_ROOTFUL=1`; with `DOCKER_HOST` at a rootless engine, set
+  `LUTE_E2E_ROOTLESS=1` to run them as a real host does.
 - Per-test diagnostics (core log, agent stderr, job logs) land in `api/e2e/_artifacts/<test>/`;
   CI uploads them on failure.
 - Add a scenario as a top-level `Test*` with one `harness.Stack`, and reach for
