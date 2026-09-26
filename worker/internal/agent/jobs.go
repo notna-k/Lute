@@ -12,7 +12,13 @@ import (
 	"github.com/lute/worker/internal/runner"
 )
 
-func execute(ctx context.Context, jobLogsDir string, a *pb.JobAssignment) error {
+// Jobs runs assignments with a runner and reads logs from the data dir.
+type Jobs struct {
+	Runner  *runner.Runner
+	DataDir string
+}
+
+func (j *Jobs) Execute(ctx context.Context, a *pb.JobAssignment) error {
 	slog.Info("Executing job", "job_id", a.JobId, "type", a.Type, "payload_size", len(a.Payload), "timeout_sec", a.TimeoutSec)
 	switch a.Type {
 	case "noop":
@@ -22,19 +28,15 @@ func execute(ctx context.Context, jobLogsDir string, a *pb.JobAssignment) error 
 		if err := json.Unmarshal(a.Payload, &spec); err != nil {
 			return fmt.Errorf("decode container spec: %w", err)
 		}
-		return runner.Run(ctx, a.JobId, jobLogsDir, &spec, a.TimeoutSec)
+		return j.Runner.Run(ctx, a.JobId, &spec, a.TimeoutSec)
 	default:
 		return fmt.Errorf("no handler registered for job type %q", a.Type)
 	}
 }
 
-func readJobLog(jobLogsDir string, req *pb.JobLogRequest) *pb.JobLogResponse {
+func (j *Jobs) ReadLog(req *pb.JobLogRequest) *pb.JobLogResponse {
 	resp := &pb.JobLogResponse{RequestId: req.RequestId}
-	if jobLogsDir == "" {
-		resp.Error = "job logs directory not configured on worker"
-		return resp
-	}
-	path, err := joblog.Path(jobLogsDir, req.JobId)
+	path, err := joblog.Path(j.DataDir, req.JobId)
 	if err != nil {
 		resp.Error = err.Error()
 		return resp

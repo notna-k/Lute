@@ -19,13 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WorkerService_Connect_FullMethodName = "/worker.WorkerService/Connect"
+	WorkerService_Register_FullMethodName = "/worker.WorkerService/Register"
+	WorkerService_Connect_FullMethodName  = "/worker.WorkerService/Connect"
 )
 
 // WorkerServiceClient is the client API for WorkerService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Register enrols a new agent with a registration token and returns its identity.
+// Connect authenticates with gRPC metadata "authorization: Bearer <worker_id>.<secret>".
 type WorkerServiceClient interface {
+	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[WorkerMessage, ServerMessage], error)
 }
 
@@ -35,6 +40,16 @@ type workerServiceClient struct {
 
 func NewWorkerServiceClient(cc grpc.ClientConnInterface) WorkerServiceClient {
 	return &workerServiceClient{cc}
+}
+
+func (c *workerServiceClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterResponse)
+	err := c.cc.Invoke(ctx, WorkerService_Register_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *workerServiceClient) Connect(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[WorkerMessage, ServerMessage], error) {
@@ -53,7 +68,11 @@ type WorkerService_ConnectClient = grpc.BidiStreamingClient[WorkerMessage, Serve
 // WorkerServiceServer is the server API for WorkerService service.
 // All implementations must embed UnimplementedWorkerServiceServer
 // for forward compatibility.
+//
+// Register enrols a new agent with a registration token and returns its identity.
+// Connect authenticates with gRPC metadata "authorization: Bearer <worker_id>.<secret>".
 type WorkerServiceServer interface {
+	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Connect(grpc.BidiStreamingServer[WorkerMessage, ServerMessage]) error
 	mustEmbedUnimplementedWorkerServiceServer()
 }
@@ -65,6 +84,9 @@ type WorkerServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedWorkerServiceServer struct{}
 
+func (UnimplementedWorkerServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Register not implemented")
+}
 func (UnimplementedWorkerServiceServer) Connect(grpc.BidiStreamingServer[WorkerMessage, ServerMessage]) error {
 	return status.Error(codes.Unimplemented, "method Connect not implemented")
 }
@@ -89,6 +111,24 @@ func RegisterWorkerServiceServer(s grpc.ServiceRegistrar, srv WorkerServiceServe
 	s.RegisterService(&WorkerService_ServiceDesc, srv)
 }
 
+func _WorkerService_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerServiceServer).Register(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkerService_Register_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerServiceServer).Register(ctx, req.(*RegisterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WorkerService_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(WorkerServiceServer).Connect(&grpc.GenericServerStream[WorkerMessage, ServerMessage]{ServerStream: stream})
 }
@@ -102,7 +142,12 @@ type WorkerService_ConnectServer = grpc.BidiStreamingServer[WorkerMessage, Serve
 var WorkerService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "worker.WorkerService",
 	HandlerType: (*WorkerServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Register",
+			Handler:    _WorkerService_Register_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Connect",

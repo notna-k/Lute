@@ -88,20 +88,6 @@ func (r *WorkerRepository) UpdateStatus(ctx context.Context, uid id.ID, status e
 	}).Error)
 }
 
-func (r *WorkerRepository) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {
-	_ = agentID
-	return nil, ErrNotFound
-}
-
-func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID id.ID, ip string) ([]*models.Worker, error) {
-	if ip == "" {
-		return nil, nil
-	}
-	var out []*models.Worker
-	err := r.q(ctx).Where("user_id = ? AND agent_ip = ?", userID.Hex(), ip).Find(&out).Error
-	return out, err
-}
-
 func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID id.ID) error {
 	nowMs := time.Now().UTC().UnixMilli()
 	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
@@ -119,14 +105,26 @@ func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID id.ID, me
 	return mapErr(r.q(ctx).Save(&w).Error)
 }
 
-func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, ipAddress, version string) error {
-	nowMs := time.Now().UTC().UnixMilli()
-	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
-		"agent_ip":      ipAddress,
-		"agent_version": version,
-		"last_seen":     nowMs,
-		"updated_at":    nowMs,
-	}).Error)
+// UpdateAgentInfo records what a connecting agent reported about itself.
+func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, version string, protocol int32, engine *models.Engine, peerIP string) error {
+	var w models.Worker
+	if err := r.q(ctx).Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
+		return mapErr(err)
+	}
+	w.AgentVersion = version
+	w.Protocol = protocol
+	if engine != nil {
+		w.Engine = engine
+	}
+	if peerIP != "" {
+		if w.Metadata == nil {
+			w.Metadata = map[string]any{}
+		}
+		w.Metadata["ip"] = peerIP
+	}
+	ls := types.NewMilliTime(time.Now())
+	w.LastSeen = &ls
+	return mapErr(r.q(ctx).Save(&w).Error)
 }
 
 func (r *WorkerRepository) ListByStatus(ctx context.Context, status enums.WorkerStatus) ([]*models.Worker, error) {

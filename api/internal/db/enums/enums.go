@@ -9,6 +9,8 @@ const (
 	WorkerRegistered WorkerStatus = "registered"
 	WorkerAlive      WorkerStatus = "alive"
 	WorkerDead       WorkerStatus = "dead"
+	// WorkerDeleting finishes its running jobs, then its row is removed.
+	WorkerDeleting WorkerStatus = "deleting"
 )
 
 type CommandStatus = string

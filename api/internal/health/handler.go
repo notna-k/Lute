@@ -8,6 +8,7 @@ import (
 
 	"github.com/lute/api/internal/db/connection"
 	"github.com/lute/api/internal/httpx"
+	"github.com/lute/api/internal/version"
 )
 
 type HealthHandler struct {
@@ -29,6 +30,7 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"service": "lute-api",
+		"version": version.Version,
 	})
 }
 

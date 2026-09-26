@@ -1,0 +1,17 @@
+{
+  "Name": "build-host",
+  "ServerVersion": "29.5.3",
+  "OSType": "linux",
+  "Architecture": "x86_64",
+  "NCPU": 8,
+  "SecurityOptions": [
+    "name=seccomp,profile=builtin",
+    "name=cgroupns"
+  ],
+  "MemoryLimit": true,
+  "CpuCfsQuota": true,
+  "PidsLimit": true,
+  "CgroupDriver": "systemd",
+  "CgroupVersion": "2",
+  "Warnings": null
+}

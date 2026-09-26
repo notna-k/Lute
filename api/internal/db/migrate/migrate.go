@@ -11,6 +11,7 @@ func RegisteredModels() []any {
 	return []any{
 		&models.User{},
 		&models.RefreshToken{},
+		&models.RegistrationToken{},
 		&models.Worker{},
 		&models.Command{},
 		&models.WorkerSnapshot{},

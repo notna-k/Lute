@@ -4,6 +4,7 @@ package setup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/jobdefs"
 	"github.com/lute/api/internal/queue"
+	"github.com/lute/api/internal/workerauth"
 )
 
 type Deps struct {
@@ -24,6 +26,7 @@ type Deps struct {
 	Stats *queue.Stats
 
 	Workers         *repos.WorkerRepository
+	WorkerTokens    *repos.RegistrationTokenRepository
 	WorkerSnapshots *repos.WorkerSnapshotRepository
 	Commands        *repos.CommandRepository
 	Users           *repos.UserRepository
@@ -68,6 +71,7 @@ func build(ctx context.Context, cfg *config.Config, db *connection.Database) (*D
 		}),
 		Stats:           queue.NewStats(g),
 		Workers:         repos.NewWorkerRepository(g),
+		WorkerTokens:    repos.NewRegistrationTokenRepository(g),
 		WorkerSnapshots: repos.NewWorkerSnapshotRepository(g),
 		Commands:        repos.NewCommandRepository(g),
 		Users:           repos.NewUserRepository(g),
@@ -83,6 +87,9 @@ func build(ctx context.Context, cfg *config.Config, db *connection.Database) (*D
 	d.JobDefSyncer = jobdefs.NewSyncer(d.JobDefs, d.Settings, cfg.JobDefs.Dir)
 
 	if err := seedAdminUser(ctx, cfg, d.Users); err != nil {
+		return nil, err
+	}
+	if err := seedBootstrapToken(ctx, cfg, d.Users, d.WorkerTokens); err != nil {
 		return nil, err
 	}
 	if _, err := d.JobDefSyncer.Sync(ctx); err != nil {
@@ -118,5 +125,32 @@ func seedAdminUser(ctx context.Context, cfg *config.Config, users *repos.UserRep
 		return err
 	}
 	slog.Info("seeded admin user", "email", email)
+	return nil
+}
+
+// seedBootstrapToken stores WORKER_BOOTSTRAP_TOKEN as a registration token owned by the
+// admin, so a compose stack's worker enrols itself with no clicks.
+func seedBootstrapToken(ctx context.Context, cfg *config.Config, users *repos.UserRepository, tokens *repos.RegistrationTokenRepository) error {
+	token := strings.TrimSpace(cfg.Workers.BootstrapToken)
+	if token == "" {
+		return nil
+	}
+	hash := workerauth.Hash(token)
+	if exists, err := tokens.ExistsByHash(ctx, hash); err != nil || exists {
+		return err
+	}
+	admin, err := users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(cfg.Auth.AdminEmail)))
+	if err != nil {
+		return fmt.Errorf("WORKER_BOOTSTRAP_TOKEN needs the seeded admin user to own it: %w", err)
+	}
+	if err := tokens.Create(ctx, &models.RegistrationToken{
+		Name:      "bootstrap",
+		Prefix:    workerauth.Display(token),
+		TokenHash: hash,
+		CreatedBy: admin.ID,
+	}); err != nil {
+		return err
+	}
+	slog.Info("seeded worker bootstrap token")
 	return nil
 }

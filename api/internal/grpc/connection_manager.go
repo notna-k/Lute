@@ -32,7 +32,7 @@ type pingResult struct {
 
 type JobResultCallback func(workerID string, result *pb.JobResult)
 
-type WorkerRegistrationCallback func(workerID string, reg *pb.WorkerRegistration)
+type WorkerStatusCallback func(conn *WorkerConnection, st *pb.WorkerStatus)
 
 // WorkerConnection is the bidirectional stream of one connected worker.
 type WorkerConnection struct {
@@ -53,6 +53,9 @@ type WorkerConnection struct {
 
 	mu       sync.Mutex
 	draining bool
+
+	closeOnce sync.Once
+	closed    chan struct{}
 }
 
 func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
@@ -65,7 +68,22 @@ func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer)
 		drainCh:     make(chan *pb.DrainSignal, 1),
 		logReqCh:    make(chan *pb.JobLogRequest, 32),
 		logWaiters:  make(map[string]chan jobLogResult),
+		closed:      make(chan struct{}),
 	}
+}
+
+func (wc *WorkerConnection) setCapacity(queues []string, concurrency int32) {
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
+	wc.Queues = queues
+	if concurrency > 0 {
+		wc.Concurrency = concurrency
+	}
+}
+
+// Close ends Run, and with it the worker's stream.
+func (wc *WorkerConnection) Close() {
+	wc.closeOnce.Do(func() { close(wc.closed) })
 }
 
 func (wc *WorkerConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, error) {
@@ -104,23 +122,19 @@ func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 	}
 }
 
-func (wc *WorkerConnection) Drain() {
-	wc.sendDrain(&pb.DrainSignal{})
-}
-
-// Shutdown tells the worker to exit once its in-flight jobs complete.
+// Shutdown tells a deleted worker to finish its in-flight jobs, report drained, and stop.
 func (wc *WorkerConnection) Shutdown() {
-	wc.sendDrain(&pb.DrainSignal{Shutdown: true})
+	wc.markDraining()
+	select {
+	case wc.drainCh <- &pb.DrainSignal{Shutdown: true}:
+	default:
+	}
 }
 
-func (wc *WorkerConnection) sendDrain(sig *pb.DrainSignal) {
+func (wc *WorkerConnection) markDraining() {
 	wc.mu.Lock()
 	wc.draining = true
 	wc.mu.Unlock()
-	select {
-	case wc.drainCh <- sig:
-	default:
-	}
 }
 
 func (wc *WorkerConnection) IsAvailable() bool {
@@ -191,7 +205,7 @@ func (wc *WorkerConnection) failAllLogWaiters(err error) {
 }
 
 // Run pumps both directions of the stream until it closes.
-func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration WorkerRegistrationCallback) {
+func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerStatusCallback) {
 	recvCh := make(chan *pb.WorkerMessage, 1)
 	recvErrCh := make(chan error, 1)
 
@@ -212,6 +226,10 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 		select {
 		case <-wc.stream.Context().Done():
 			wc.failAllLogWaiters(wc.stream.Context().Err())
+			return
+
+		case <-wc.closed:
+			wc.failAllLogWaiters(ErrNoConnection)
 			return
 
 		case err := <-recvErrCh:
@@ -238,15 +256,13 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 					onJobResult(wc.WorkerID, result)
 				}
 			}
-			if reg := msg.GetRegister(); reg != nil {
-				wc.mu.Lock()
-				wc.Queues = reg.Queues
-				if reg.Concurrency > 0 {
-					wc.Concurrency = reg.Concurrency
+			if st := msg.GetStatus(); st != nil {
+				// A draining agent refuses new work; stop offering it any.
+				if st.GetDraining() || st.GetDrained() {
+					wc.markDraining()
 				}
-				wc.mu.Unlock()
-				if onRegistration != nil {
-					onRegistration(wc.WorkerID, reg)
+				if onStatus != nil {
+					onStatus(wc, st)
 				}
 			}
 
@@ -279,9 +295,6 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 			}
 
 		case sig := <-wc.drainCh:
-			if sig == nil {
-				sig = &pb.DrainSignal{}
-			}
 			_ = wc.stream.Send(&pb.ServerMessage{
 				Payload: &pb.ServerMessage_Drain{
 					Drain: sig,
@@ -322,9 +335,12 @@ func (cm *ConnectionManager) Register(workerID string, stream pb.WorkerService_C
 	return wc
 }
 
-func (cm *ConnectionManager) Unregister(workerID string) {
+// Unregister drops conn unless a newer stream for the same worker has replaced it.
+func (cm *ConnectionManager) Unregister(conn *WorkerConnection) {
 	cm.mu.Lock()
-	delete(cm.conns, workerID)
+	if cm.conns[conn.WorkerID] == conn {
+		delete(cm.conns, conn.WorkerID)
+	}
 	cm.mu.Unlock()
 }
 
