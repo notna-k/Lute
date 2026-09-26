@@ -30,7 +30,7 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"service": "lute-api",
-		"version": version.Version,
+		"version": version.Core,
 	})
 }
 

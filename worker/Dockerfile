@@ -15,13 +15,13 @@ RUN --mount=type=cache,target=/go/pkg/mod cd worker && go mod download
 
 COPY shared/proto shared/proto
 COPY worker worker
-ARG VERSION=dev
+ARG WORKER_VERSION=dev
 ARG BUILD_TIME=unknown
 ARG TARGETOS
 ARG TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     cd worker && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
-      -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
+      -ldflags "-s -w -X main.Version=${WORKER_VERSION} -X main.BuildTime=${BUILD_TIME}" \
       -o /out/lute-worker ./cmd/worker
 
 # Root in the container is the unprivileged host user under rootless Docker.

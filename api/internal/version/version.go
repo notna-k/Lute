@@ -1,4 +1,5 @@
-// Package version is core's build version, set with -ldflags "-X github.com/lute/api/internal/version.Version=0.2.0".
+// Package version holds core's build version and the worker release it pairs with, both
+// set with -ldflags "-X github.com/lute/api/internal/version.Core=0.2.0 -X ...version.Worker=0.2.0".
 package version
 
 import (
@@ -6,7 +7,10 @@ import (
 	"strings"
 )
 
-var Version = "dev"
+var (
+	Core   = "dev"
+	Worker = "dev" // the worker release this core recommends: its image tag and the outdated mark
+)
 
 // Older reports whether version a is an older release than b. Anything that is not a
 // plain x.y.z release, such as "dev", is never older.

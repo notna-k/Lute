@@ -121,7 +121,7 @@ func (s *Server) WorkerImage() string {
 	if s.config.Workers.Image != "" {
 		return s.config.Workers.Image
 	}
-	return "ghcr.io/notna-k/lute-worker:" + version.MinorTag(version.Version)
+	return "ghcr.io/notna-k/lute-worker:" + version.MinorTag(version.Worker)
 }
 
 func engineOf(e *pb.EngineInfo) *models.Engine {

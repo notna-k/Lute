@@ -120,9 +120,9 @@ func (h *WorkerHandler) ListUserWorkers(c *gin.Context) {
 	c.JSON(http.StatusOK, list)
 }
 
-// withOutdated flags an agent older than core, so the panel can ask for an image pull.
+// withOutdated flags an agent older than the worker release core pairs with, so the panel can ask for an image pull.
 func withOutdated(w *models.Worker) *models.Worker {
-	w.Outdated = version.Older(w.AgentVersion, version.Version)
+	w.Outdated = version.Older(w.AgentVersion, version.Worker)
 	return w
 }
 

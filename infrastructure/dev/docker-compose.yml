@@ -26,7 +26,8 @@ services:
       context: ../..
       dockerfile: api/Dockerfile
       args:
-        - VERSION=${VERSION:-0.2.0}
+        - CORE_VERSION=${CORE_VERSION:-0.2.0}
+        - WORKER_VERSION=${WORKER_VERSION:-0.2.0}
     container_name: lute-core
     depends_on:
       postgres:
@@ -109,7 +110,7 @@ services:
       context: ../..
       dockerfile: worker/Dockerfile
       args:
-        - VERSION=${VERSION:-0.2.0}
+        - WORKER_VERSION=${WORKER_VERSION:-0.2.0}
     container_name: lute-worker
     depends_on:
       - core

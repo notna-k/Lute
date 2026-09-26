@@ -1,13 +1,14 @@
 .PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-linux worker-image go-format-check go-test go-lint e2e e2e-image e2e-vet ui-build api-build
 
 export DOCKER_BUILDKIT := 1
-export VERSION    ?= 0.2.0
+export CORE_VERSION   ?= 0.2.0
+export WORKER_VERSION ?= 0.2.0
 export BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 ENV_FILE ?= .env
 COMPOSE  := docker compose -f infrastructure/dev/docker-compose.yml --env-file $(ENV_FILE)
 LINT     := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
-GOBUILD  := CGO_ENABLED=0 go build -ldflags '-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)'
+GOBUILD  := CGO_ENABLED=0 go build -ldflags '-X main.Version=$(WORKER_VERSION) -X main.BuildTime=$(BUILD_TIME)'
 WORKER_IMAGE ?= lute-worker:dev
 
 dev-up:
@@ -32,7 +33,7 @@ worker-build-linux:
 # linux/amd64 only; CI builds arm64 too when it publishes.
 worker-image:
 	docker build --platform linux/amd64 -f worker/Dockerfile \
-		--build-arg VERSION=$(VERSION) --build-arg BUILD_TIME=$(BUILD_TIME) -t $(WORKER_IMAGE) .
+		--build-arg WORKER_VERSION=$(WORKER_VERSION) --build-arg BUILD_TIME=$(BUILD_TIME) -t $(WORKER_IMAGE) .
 
 go-format-check:
 	@unformatted="$$(gofmt -l api worker shared/proto)"; \
@@ -72,4 +73,4 @@ ui-build:
 	rm -rf api/internal/ui/web && cp -r ui/dist api/internal/ui/web
 
 api-build: ui-build
-	cd api && CGO_ENABLED=0 go build -ldflags '-s -w' -o ../bin/api ./cmd/api
+	cd api && CGO_ENABLED=0 go build -ldflags '-s -w -X github.com/lute/api/internal/version.Core=$(CORE_VERSION) -X github.com/lute/api/internal/version.Worker=$(WORKER_VERSION)' -o ../bin/api ./cmd/api

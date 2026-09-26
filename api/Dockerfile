@@ -16,11 +16,12 @@ RUN --mount=type=cache,target=/go/pkg/mod cd api && go mod download
 
 COPY shared/proto shared/proto
 COPY api api
-ARG VERSION=dev
+ARG CORE_VERSION=dev
+ARG WORKER_VERSION=dev
 WORKDIR /app/api
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build \
-      -ldflags "-s -w -X github.com/lute/api/internal/version.Version=${VERSION}" \
+      -ldflags "-s -w -X github.com/lute/api/internal/version.Core=${CORE_VERSION} -X github.com/lute/api/internal/version.Worker=${WORKER_VERSION}" \
       -o api ./cmd/api
 
 FROM alpine:3
