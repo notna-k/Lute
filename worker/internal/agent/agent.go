@@ -46,7 +46,7 @@ const (
 
 const (
 	maxBackoff = 30 * time.Second
-	// deletedGrace bounds the wait for core to close the stream after the agent reported drained.
+	// deletedGrace bounds the wait for core to close the stream after the agent is done.
 	deletedGrace = 30 * time.Second
 )
 
@@ -147,11 +147,29 @@ func (a *Agent) Drain() {
 	a.draining = true
 	a.mu.Unlock()
 	slog.Info("Draining: no new jobs, waiting for running ones")
-	a.sendStatus(&pb.WorkerStatus{Draining: true})
+	_ = a.sendStatus(&pb.WorkerStatus{Draining: true})
 	go func() {
 		a.jobs.Wait()
-		a.finish(Drained)
+		a.finishGracefully(Drained)
 	}()
+}
+
+// finishGracefully half-closes the stream so core reads every result sent so far before it
+// ends the stream; cancelling at once could drop the last one.
+func (a *Agent) finishGracefully(o Outcome) {
+	a.mu.Lock()
+	if a.done {
+		a.mu.Unlock()
+		return
+	}
+	a.done, a.outcome = true, o
+	s, stop := a.sess, a.stop
+	a.mu.Unlock()
+	if s == nil || s.closeSend() != nil {
+		stop()
+		return
+	}
+	time.AfterFunc(deletedGrace, stop)
 }
 
 // deleteRequested handles core's DrainSignal: finish running jobs, report drained, and
@@ -161,7 +179,7 @@ func (a *Agent) deleteRequested() {
 	a.draining, a.deleted = true, true
 	a.mu.Unlock()
 	slog.Info("Worker deleted in the panel: finishing running jobs, then stopping")
-	a.sendStatus(&pb.WorkerStatus{Draining: true})
+	_ = a.sendStatus(&pb.WorkerStatus{Draining: true})
 	go func() {
 		a.jobs.Wait()
 		if err := a.sendStatus(&pb.WorkerStatus{Drained: true}); err != nil {

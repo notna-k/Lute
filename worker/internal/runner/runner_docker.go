@@ -166,7 +166,7 @@ func (j *job) runCommand(ctx context.Context, spec *Spec) (int64, error) {
 	hc := j.hostConfig()
 	hc.Resources = container.Resources{Memory: j.Limits.Memory, NanoCPUs: j.Limits.NanoCPUs}
 	if j.Limits.Pids > 0 {
-		hc.Resources.PidsLimit = &j.Limits.Pids
+		hc.PidsLimit = &j.Limits.Pids
 	}
 	id, err := j.create(ctx, &container.Config{
 		Image:      spec.Runtime,

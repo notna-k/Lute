@@ -1,24 +1,31 @@
 # Lute worker
 
 Go module `github.com/lute/worker`: the `lute-worker` agent that runs jobs for the Lute core.
+It ships as a container image and runs jobs as sibling containers on the host's (rootless)
+Docker. Host setup, running and updating: [`docs/worker.md`](../docs/worker.md).
 
 ## Layout
 
-- **`cmd/worker/`** — CLI entrypoint (`run`, `setup`, `logs`, `version`).
-- **`internal/agent`** — gRPC connect/reconnect loop, job dispatch, heartbeats, job-log reads.
-- **`internal/runner`** — runs a `container` job in Docker.
-- **`internal/joblog`** — per-job log files and paged reads.
+- **`cmd/worker/`** — entrypoint: startup checks, registration, signals, stopping its own container.
+- **`internal/config`** — flags and `LUTE_*` variables.
+- **`internal/datadir`** — the mounted data dir: marker, mount check, `jobs/<id>/{log,meta.json}`, retention.
+- **`internal/state`** — `state.json`, the identity core returned from `Register`.
+- **`internal/engine`** — the Docker `/info` probe (rootless, limits) and the agent's own container id.
+- **`internal/agent`** — the authenticated gRPC stream, job dispatch, drain on SIGTERM and on delete.
+- **`internal/runner`** — a `container` job: per-job network and volume, clone container, reaper.
+- **`internal/joblog`** — paged reads of job logs.
 - **`internal/metrics`** — host metrics sent with heartbeats.
-- **`internal/setup`** — `lute-worker setup`: registers the host and starts the agent in the background.
-
-## Usage
-
-```bash
-lute-worker setup --api http://localhost:8080 --claim-code <CODE>   # register and start in the background
-lute-worker run --server localhost:50051 --worker-id <ID>           # run a registered agent in the foreground
-lute-worker logs -f                                                 # follow the background agent's log
-```
 
 ## Build
 
-`make worker-build` from the repository root, or `go build -o lute-worker ./cmd/worker` here.
+```bash
+make worker-build     # host binary, worker/bin/lute-worker
+make worker-image     # linux/amd64 image, lute-worker:dev
+```
+
+Run the binary directly against rootful Docker for local work:
+
+```bash
+LUTE_SERVER=localhost:50051 LUTE_TOKEN=lute_rt_dev_bootstrap_token LUTE_ALLOW_ROOTFUL=1 \
+  LUTE_DATA_DIR=./.worker-data ./bin/lute-worker run
+```

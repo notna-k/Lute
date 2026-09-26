@@ -25,6 +25,12 @@ func (s *session) send(msg *pb.WorkerMessage) error {
 	return s.stream.Send(msg)
 }
 
+func (s *session) closeSend() error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.stream.CloseSend()
+}
+
 func (s *session) serve() error {
 	a := s.agent
 	for {
