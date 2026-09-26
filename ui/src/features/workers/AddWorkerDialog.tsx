@@ -11,7 +11,7 @@ import { Field, Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { runCommand } from './utils';
+import { maskToken, runCommand } from './utils';
 
 interface AddWorkerDialogProps {
   open: boolean;
@@ -23,7 +23,9 @@ type TokenSource = 'new' | 'existing';
 export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
   const [source, setSource] = useState<TokenSource>('new');
   const [tokenName, setTokenName] = useState('');
-  const [created, setCreated] = useState<{ id: string; token: string } | null>(null);
+  const [created, setCreated] = useState<{ id: string; token: string; prefix: string } | null>(
+    null,
+  );
   const [existingId, setExistingId] = useState('');
   const [workerName, setWorkerName] = useState('');
   const [copied, copy] = useCopy();
@@ -47,15 +49,17 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
   }, [source, existingId, active]);
 
   const existing = active.find((t) => t.id === existingId);
-  const token = source === 'new' ? created?.token : existing ? `${existing.prefix}…` : undefined;
-  const command =
-    install.data && token
-      ? runCommand({
-          ...install.data,
-          token,
-          name: workerName.trim() || undefined,
-        })
+  // A new token goes into the copied command in full but stays masked on screen; for an
+  // existing one the panel only knows its start, so the user pastes the rest.
+  const token =
+    source === 'new' ? created?.token : existing ? `<your ${existing.prefix}… token>` : undefined;
+  const shown = source === 'new' && token ? maskToken(token, created?.prefix.length) : token;
+  const build = (t: string) =>
+    install.data
+      ? runCommand({ ...install.data, token: t, name: workerName.trim() || undefined })
       : '';
+  const command = token ? build(token) : '';
+  const display = shown ? build(shown) : '';
 
   return (
     <Dialog
@@ -109,7 +113,7 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
               loading={create.isPending}
               onClick={() =>
                 create.mutate(tokenName.trim(), {
-                  onSuccess: (t) => setCreated({ id: t.id, token: t.token }),
+                  onSuccess: (t) => setCreated({ id: t.id, token: t.token, prefix: t.prefix }),
                 })
               }
               className='mb-[22px]'
@@ -124,8 +128,9 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
           </Alert>
         )}
         {source === 'new' && created && (
-          <Alert tone='warning' title='The token is shown once'>
-            It is in the command below. Copy it now; the panel stores only its hash.
+          <Alert tone='warning' title='Copy the command now'>
+            It carries the new token, hidden on screen. Lute keeps only a hash, so once this dialog
+            closes the token cannot be copied again.
           </Alert>
         )}
 
@@ -169,7 +174,7 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
 
         {command && (
           <div className='relative rounded-md border border-border bg-bg-inverse p-3 font-mono text-[12.5px] text-fg-inverse'>
-            <pre className='overflow-x-auto whitespace-pre pr-8'>{command}</pre>
+            <pre className='overflow-x-auto whitespace-pre pr-8'>{display}</pre>
             <div className='absolute right-2 top-2'>
               <Tooltip content={copied ? 'Copied!' : 'Copy'}>
                 <IconButton
@@ -191,9 +196,8 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
         )}
 
         <p className='text-sm text-fg-muted'>
-          Run it as the unprivileged user that owns rootless Docker, after{' '}
-          <code className='font-mono text-[12px]'>mkdir -p ~/.local/share/lute-worker</code>. Host
-          setup is in <code className='font-mono text-[12px]'>docs/worker.md</code>.
+          Paste it into a shell as the unprivileged user that owns rootless Docker. Host setup is in{' '}
+          <code className='font-mono text-[12px]'>docs/worker.md</code>.
         </p>
       </div>
     </Dialog>

@@ -23,6 +23,11 @@ export function metric(w: Worker, key: string): number | null {
 }
 
 /** The `docker run` that starts a worker on a rootless Docker host. */
+/** Hides a secret token on screen, keeping the start the panel lists it by. */
+export function maskToken(token: string, visible = 12) {
+  return token.length <= visible ? token : token.slice(0, visible) + '*'.repeat(16);
+}
+
 export function runCommand(opts: { server: string; image: string; token: string; name?: string }) {
   const lines = [
     'docker run -d --name lute-worker --restart unless-stopped \\',

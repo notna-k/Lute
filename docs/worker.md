@@ -32,7 +32,6 @@ does not work under `sudo -u`.
 ```bash
 dockerd-rootless-setuptool.sh install
 systemctl --user enable --now docker
-mkdir -p ~/.local/share/lute-worker
 ```
 
 ## 3. Run the worker
@@ -50,7 +49,8 @@ docker run -d --name lute-worker --restart unless-stopped \
   ghcr.io/notna-k/lute-worker:0.2
 ```
 
-On its first start the worker registers with the token and writes `state.json` into the data
+Docker creates the data dir if it is missing; rootless Docker makes it owned by `ci`. On its
+first start the worker registers with the token and writes `state.json` into the data
 dir. After that the token is not needed: restarts, reboots and image updates keep the same
 worker. Revoking the token stops new registrations only.
 
