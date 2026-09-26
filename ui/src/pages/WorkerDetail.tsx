@@ -18,7 +18,8 @@ import { DetailHeader } from '@/components/layout/DetailHeader';
 import { PageBody, PageScroll, Section } from '@/components/layout/Page';
 import { MetricsChart, type MetricKey } from '@/features/workers/MetricsChart';
 import { LabelEditor } from '@/features/workers/LabelEditor';
-import { workerState } from '@/features/workers/utils';
+import { missingLimits, workerState } from '@/features/workers/utils';
+import { EngineBadge, OutdatedBadge } from '@/features/workers/WorkerBadges';
 import { workerService } from '@/services/workerService';
 import { relativeTime, toEpochMs } from '@/lib/format';
 
@@ -99,6 +100,7 @@ export default function WorkerDetail() {
   const tickCount = period === '24h' ? 6 : 8;
   const pointsByMetric = (k: MetricKey) => points.filter((p) => p[k] != null);
   const seen = toEpochMs(worker.last_seen);
+  const limitsMissing = missingLimits(worker);
 
   return (
     <>
@@ -106,7 +108,13 @@ export default function WorkerDetail() {
         crumbs={[{ label: 'Workers', to: '/workers' }]}
         title={worker.name}
         subtitle={worker.description}
-        tags={<StatusBadge state={workerState(worker.status)}>{worker.status}</StatusBadge>}
+        tags={
+          <>
+            <StatusBadge state={workerState(worker.status)}>{worker.status}</StatusBadge>
+            <EngineBadge worker={worker} />
+            <OutdatedBadge worker={worker} />
+          </>
+        }
         actions={
           worker.status === 'dead' ? (
             <Button
@@ -136,9 +144,14 @@ export default function WorkerDetail() {
         meta={
           <>
             {seen && <Fact title='Last heartbeat'>{relativeTime(seen)}</Fact>}
-            {worker.agent_ip && (
-              <Fact>
-                <span className='font-mono'>{worker.agent_ip}</span>
+            {typeof worker.metadata?.ip === 'string' && worker.metadata.ip && (
+              <Fact title='Address the agent connects from'>
+                <span className='font-mono'>{worker.metadata.ip}</span>
+              </Fact>
+            )}
+            {worker.engine && (
+              <Fact title='Container engine'>
+                <span className='font-mono'>docker {worker.engine.version}</span>
               </Fact>
             )}
             {worker.agent_version && (
@@ -152,6 +165,22 @@ export default function WorkerDetail() {
 
       <PageScroll>
         <PageBody>
+          {worker.status === 'deleting' && (
+            <Alert tone='info' title='Deleting' className='mb-6'>
+              The worker takes no new builds. It finishes the running ones, then stops its container
+              and disappears from this list.
+            </Alert>
+          )}
+          {limitsMissing.length > 0 && (
+            <Alert
+              tone='warning'
+              title='Jobs here run without some resource limits'
+              className='mb-6'
+            >
+              The engine cannot enforce {limitsMissing.join(', ')} limits. Delegate the cgroup v2
+              controllers to the worker&rsquo;s user (see docs/worker.md).
+            </Alert>
+          )}
           {worker.status === 'dead' && (
             <Alert tone='warning' title='This worker is marked dead' className='mb-6'>
               It stopped sending heartbeats. Re-enable it to let the agent connect again.

@@ -35,13 +35,13 @@ export function DeleteWorkerDialog({
       {worker && (
         <div className='space-y-2 text-sm text-fg-muted'>
           <p>
-            Are you sure you want to delete{' '}
-            <span className='font-semibold text-fg'>{worker.name}</span>? This will remove the
-            worker and its history. This action cannot be undone.
+            Delete <span className='font-semibold text-fg'>{worker.name}</span>? It finishes the
+            builds it is running, takes no new ones, and then stops its container.
           </p>
           <p>
-            If the agent is currently connected, the server will signal it to finish in-flight jobs
-            and exit.
+            Nothing on the host is removed: the container, its identity and its job logs stay. To
+            bring it back, delete <code className='font-mono text-[12px]'>state.json</code> and
+            start it with a registration token.
           </p>
         </div>
       )}

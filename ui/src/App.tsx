@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Workers from './pages/Workers';
 import WorkerDetail from './pages/WorkerDetail';
+import WorkerTokens from './pages/WorkerTokens';
 import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
 import JobNew from './pages/JobNew';
@@ -54,6 +55,7 @@ function AppRoutes() {
           <Route path='/' element={<Dashboard />} />
           <Route path='/dashboard' element={<Navigate to='/' replace />} />
           <Route path='/workers' element={<Workers />} />
+          <Route path='/workers/tokens' element={<WorkerTokens />} />
           <Route path='/workers/:id' element={<WorkerDetail />} />
           <Route path='/executions' element={<Executions />} />
           <Route path='/executions/:id' element={<ExecutionDetail />} />

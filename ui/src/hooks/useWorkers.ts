@@ -44,9 +44,44 @@ export const useDeleteWorker = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => workerService.deleteWorker(id),
-    onSuccess: (_, deletedId) => {
-      queryClient.removeQueries({ queryKey: workerKeys.detail(deletedId) });
+    onSuccess: (res, deletedId) => {
+      if (res.status === 'deleted') {
+        queryClient.removeQueries({ queryKey: workerKeys.detail(deletedId) });
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: workerKeys.detail(deletedId),
+        });
+      }
       queryClient.invalidateQueries({ queryKey: workerKeys.lists() });
     },
   });
 };
+
+const tokenKeys = ['worker-tokens'] as const;
+
+export const useWorkerTokens = () =>
+  useQuery({ queryKey: tokenKeys, queryFn: workerService.listTokens });
+
+export const useCreateWorkerToken = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => workerService.createToken(name),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tokenKeys }),
+  });
+};
+
+export const useRevokeWorkerToken = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => workerService.revokeToken(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tokenKeys }),
+  });
+};
+
+export const useInstallInfo = (enabled: boolean) =>
+  useQuery({
+    queryKey: ['worker-install'],
+    queryFn: workerService.installInfo,
+    enabled,
+    staleTime: Infinity,
+  });

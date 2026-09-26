@@ -1,11 +1,11 @@
 // The worker fleet. Facets offer the labels and versions workers actually report, since labels route jobs.
 import { useMemo, useState } from 'react';
-import { Plus, Server, Signal, Tag, Tags } from 'lucide-react';
+import { KeyRound, Plus, Server, Signal, Tag, Tags } from 'lucide-react';
 import { useDeleteWorker, useReEnableWorker, useUserWorkers } from '@/hooks/useWorkers';
 import { useFilterList, useFilterParam } from '@/hooks/useFilterParams';
 import type { Worker } from '@/types';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
+import { Button, LinkButton } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { facetOptions } from '@/components/ui/FacetMenu';
 import { FilterBar } from '@/components/ui/FilterBar';
@@ -35,7 +35,7 @@ function matchesLabels(w: Worker, selected: string[]): boolean {
 
 function matchesQuery(w: Worker, needle: string): boolean {
   if (!needle) return true;
-  return [w.name, w.description, w.agent_ip, w.id]
+  return [w.name, w.description, w.metadata?.ip as string | undefined, w.id]
     .filter(Boolean)
     .some((field) => (field as string).toLowerCase().includes(needle));
 }
@@ -105,9 +105,14 @@ export default function Workers() {
           </span>
         }
         actions={
-          <Button variant='primary' size='sm' onClick={() => setAddOpen(true)}>
-            <Plus className='h-3.5 w-3.5' /> Add worker
-          </Button>
+          <>
+            <LinkButton to='/workers/tokens' variant='secondary' size='sm'>
+              <KeyRound className='h-3.5 w-3.5' /> Tokens
+            </LinkButton>
+            <Button variant='primary' size='sm' onClick={() => setAddOpen(true)}>
+              <Plus className='h-3.5 w-3.5' /> Add worker
+            </Button>
+          </>
         }
       />
 
@@ -208,7 +213,10 @@ export default function Workers() {
         worker={deleteTarget}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() =>
-          deleteTarget && remove.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })
+          deleteTarget &&
+          remove.mutate(deleteTarget.id, {
+            onSuccess: () => setDeleteTarget(null),
+          })
         }
         pending={remove.isPending}
       />
