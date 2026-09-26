@@ -124,6 +124,9 @@ func (a *Agent) Run(ctx context.Context) (Outcome, error) {
 	}
 }
 
+// WaitJobs blocks until every job has returned and cleaned up after itself.
+func (a *Agent) WaitJobs() { a.jobs.Wait() }
+
 // finished reports the outcome once drain or delete completed.
 func (a *Agent) finished() (Outcome, bool) {
 	a.mu.Lock()
@@ -168,7 +171,8 @@ func (a *Agent) finishGracefully(o Outcome) {
 		return
 	}
 	s, stop := a.sess, a.stop
-	waiting := s == nil && len(a.pending) > 0
+	// Pending results mean the stream is gone or failing; stay up to send them on the next.
+	waiting := len(a.pending) > 0
 	if waiting {
 		a.finishing = &o
 	} else {
@@ -249,7 +253,7 @@ func (a *Agent) connect(ctx context.Context) error {
 	pending := a.pending
 	a.pending = nil
 	a.sess = s
-	draining := a.draining && !a.deleted
+	draining := a.draining
 	a.mu.Unlock()
 	err = stream.Send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Register{Register: &pb.WorkerRegistration{
 		Queues:      a.cfg.Queues,
@@ -258,6 +262,7 @@ func (a *Agent) connect(ctx context.Context) error {
 		Protocol:    pb.Protocol,
 		Engine:      a.cfg.Engine,
 		RunningJobs: running,
+		Draining:    draining,
 	}}})
 	for i := 0; err == nil && i < len(pending); i++ {
 		err = stream.Send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Result{Result: pending[i]}})
@@ -287,9 +292,6 @@ func (a *Agent) connect(ctx context.Context) error {
 		}
 		a.mu.Unlock()
 	}()
-	if draining {
-		_ = s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Status{Status: &pb.WorkerStatus{Draining: true}}})
-	}
 	a.flushPending()
 	a.mu.Lock()
 	var finishing *Outcome

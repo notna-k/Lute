@@ -113,6 +113,7 @@ message WorkerRegistration {
   int32 protocol = 5;
   EngineInfo engine = 6;
   repeated string running_jobs = 7; // still running from an earlier stream; they count against capacity
+  bool draining = 8;                 // already draining: core assigns nothing on this stream
 }
 
 // WorkerStatus reports a change in the agent's lifecycle.

@@ -349,3 +349,29 @@ func TestCapacityAcrossReconnects(t *testing.T) {
 	}
 	harness.Never(t, time.Second, "capacity to go below zero", func() bool { return active() < 1 })
 }
+
+// TestDrainingAgentReconnects: an agent that reconnects mid-drain gets no new work on the
+// new stream, even with spare capacity, as it would only refuse it.
+func TestDrainingAgentReconnects(t *testing.T) {
+	stack := newBareStack(t)
+	admin := stack.AdminClient()
+	reg := stack.RegisterWorker("draining-host")
+
+	queued, err := admin.Enqueue(harness.EnqueueRequest{Queue: "build", Type: "noop"})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	w, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := w.RegisterDraining(2, "build", "00000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	harness.Never(t, 2*time.Second, "a job on a draining worker", func() bool {
+		return len(w.Assignments()) > 0
+	})
+	if job, err := admin.GetJob(queued.JobID); err != nil || job.Status != "pending" {
+		t.Errorf("job = %+v (%v), want it still pending", job, err)
+	}
+}

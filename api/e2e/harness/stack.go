@@ -187,6 +187,14 @@ func (s *Stack) Restart() {
 	s.start()
 }
 
+// Outage takes core down for d, as an agent sees a network cut; it returns once core is back.
+func (s *Stack) Outage(d time.Duration) {
+	s.t.Helper()
+	s.stop()
+	time.Sleep(d)
+	s.start()
+}
+
 func (s *Stack) BaseURL() string { return "http://" + s.server.HTTPAddr() }
 
 func (s *Stack) GRPCAddr() string { return s.server.GRPCAddr() }

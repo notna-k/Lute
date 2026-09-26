@@ -947,6 +947,7 @@ type WorkerRegistration struct {
 	Protocol      int32                  `protobuf:"varint,5,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	Engine        *EngineInfo            `protobuf:"bytes,6,opt,name=engine,proto3" json:"engine,omitempty"`
 	RunningJobs   []string               `protobuf:"bytes,7,rep,name=running_jobs,json=runningJobs,proto3" json:"running_jobs,omitempty"` // still running from an earlier stream; they count against capacity
+	Draining      bool                   `protobuf:"varint,8,opt,name=draining,proto3" json:"draining,omitempty"`                         // already draining: core assigns nothing on this stream
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1021,6 +1022,13 @@ func (x *WorkerRegistration) GetRunningJobs() []string {
 		return x.RunningJobs
 	}
 	return nil
+}
+
+func (x *WorkerRegistration) GetDraining() bool {
+	if x != nil {
+		return x.Draining
+	}
+	return false
 }
 
 // WorkerStatus reports a change in the agent's lifecycle.
@@ -1427,14 +1435,15 @@ const file_worker_proto_rawDesc = "" +
 	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x1aO\n" +
 	"\fMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.worker.MetricValueR\x05value:\x028\x01\"\xd9\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.worker.MetricValueR\x05value:\x028\x01\"\xf5\x01\n" +
 	"\x12WorkerRegistration\x12\x16\n" +
 	"\x06queues\x18\x01 \x03(\tR\x06queues\x12 \n" +
 	"\vconcurrency\x18\x02 \x01(\x05R\vconcurrency\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1a\n" +
 	"\bprotocol\x18\x05 \x01(\x05R\bprotocol\x12*\n" +
 	"\x06engine\x18\x06 \x01(\v2\x12.worker.EngineInfoR\x06engine\x12!\n" +
-	"\frunning_jobs\x18\a \x03(\tR\vrunningJobsJ\x04\b\x03\x10\x04\"D\n" +
+	"\frunning_jobs\x18\a \x03(\tR\vrunningJobs\x12\x1a\n" +
+	"\bdraining\x18\b \x01(\bR\bdrainingJ\x04\b\x03\x10\x04\"D\n" +
 	"\fWorkerStatus\x12\x1a\n" +
 	"\bdraining\x18\x01 \x01(\bR\bdraining\x12\x18\n" +
 	"\adrained\x18\x02 \x01(\bR\adrained\"\x8b\x01\n" +

@@ -196,6 +196,10 @@ func run(args []string) int {
 	}
 	switch outcome {
 	case agent.Deleted:
+		// A worker deleted while offline may still run jobs nobody will collect; stop them and
+		// let them clean up, since a stopped container is never restarted to reap them.
+		cancelJobs()
+		a.WaitJobs()
 		if self != "" {
 			stopSelf(docker, self)
 		}

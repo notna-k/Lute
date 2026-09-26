@@ -210,3 +210,45 @@ func TestRepositoryJob(t *testing.T) {
 		t.Errorf("the finished job left %v behind", left)
 	}
 }
+
+// TestDeletedWhileOfflineStopsItsJobs: a worker deleted while cut off from core learns it on
+// reconnect; its build can no longer be reported, so it is stopped and cleaned up before
+// the agent exits.
+func TestDeletedWhileOfflineStopsItsJobs(t *testing.T) {
+	stack := newStack(t)
+	admin := stack.AdminClient()
+	agent := stack.ConnectedAgent(admin, "deleted-offline", harness.WithQueues("build"))
+
+	enqueued, err := admin.Enqueue(harness.EnqueueRequest{
+		Queue:      "build",
+		Type:       "container",
+		TimeoutSec: 300,
+		Payload:    containerPayload(t, "bash:5", "echo started; sleep 300"),
+	})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	harness.WaitJobStatus(admin, enqueued.JobID, time.Minute, "running")
+	harness.WaitFor(t, time.Minute, "the job's container, volume and network", func() bool {
+		return len(harness.JobResources(enqueued.JobID)) >= 3
+	})
+
+	// Down long enough for the agent's reconnect backoff to exceed the delete below.
+	stack.Outage(5 * time.Second)
+	admin = stack.AdminClient()
+	result, err := admin.DeleteWorker(agent.WorkerID)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if result != "deleted" {
+		t.Fatalf("delete result = %q, want deleted for a worker with no connection", result)
+	}
+
+	agent.WaitExit(time.Minute)
+	if agent.ExitCode() != 0 {
+		t.Errorf("exit code = %d, want 0:\n%s", agent.ExitCode(), agent.Stderr())
+	}
+	if left := harness.JobResources(enqueued.JobID); len(left) > 0 {
+		t.Errorf("the deleted worker left its job behind: %v", left)
+	}
+}

@@ -181,6 +181,9 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	conn.Labels = w.Labels
 	conn.setCapacity(reg.GetQueues(), reg.GetConcurrency())
 	conn.adoptRunning(reg.GetRunningJobs())
+	if reg.GetDraining() {
+		conn.markDraining()
+	}
 	s.ConnMgr.Publish(conn)
 	// Read the row after publishing: a delete either shows here, or finds this connection
 	// when it looks for one after marking the worker deleting.

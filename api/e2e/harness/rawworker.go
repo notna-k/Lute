@@ -91,6 +91,15 @@ func (w *RawWorker) RegisterRunning(concurrency int32, queue string, jobIDs ...s
 	})
 }
 
+// RegisterDraining opens the stream as an agent that was already draining when it reconnected.
+func (w *RawWorker) RegisterDraining(concurrency int32, queue string, jobIDs ...string) error {
+	return w.send(&pb.WorkerMessage{
+		Payload: &pb.WorkerMessage_Register{
+			Register: &pb.WorkerRegistration{Queues: []string{queue}, Concurrency: concurrency, Version: "e2e", Protocol: pb.Protocol, RunningJobs: jobIDs, Draining: true},
+		},
+	})
+}
+
 // RegisterWithProtocol opens the stream claiming an arbitrary protocol version.
 func (w *RawWorker) RegisterWithProtocol(protocol int32) error {
 	return w.send(&pb.WorkerMessage{
