@@ -107,6 +107,22 @@ func (wc *WorkerConnection) setCapacity(queues []string, concurrency int32) {
 	}
 }
 
+// flushAssignments sends every queued assignment; false means the stream broke.
+func (wc *WorkerConnection) flushAssignments() bool {
+	for {
+		select {
+		case a := <-wc.jobCh:
+			if err := wc.stream.Send(&pb.ServerMessage{Payload: &pb.ServerMessage_Assign{Assign: a}}); err != nil {
+				wc.release(a.JobId)
+				slog.Warn("send job to worker", "worker_id", wc.WorkerID, "err", err)
+				return false
+			}
+		default:
+			return true
+		}
+	}
+}
+
 // Close ends Run, and with it the worker's stream.
 func (wc *WorkerConnection) Close() {
 	wc.closeOnce.Do(func() { close(wc.closed) })
@@ -327,6 +343,11 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerSt
 			}
 
 		case sig := <-wc.drainCh:
+			// Assignments counted before the drain go out first, so the agent runs them
+			// instead of reporting drained with work still owed.
+			if !wc.flushAssignments() {
+				return
+			}
 			_ = wc.stream.Send(&pb.ServerMessage{
 				Payload: &pb.ServerMessage_Drain{
 					Drain: sig,
@@ -359,12 +380,16 @@ func NewConnectionManager() *ConnectionManager {
 	}
 }
 
-func (cm *ConnectionManager) Register(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
-	wc := newWorkerConnection(workerID, stream)
+// NewConnection prepares a stream's connection; dispatch sees it only after Publish.
+func (cm *ConnectionManager) NewConnection(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
+	return newWorkerConnection(workerID, stream)
+}
+
+// Publish makes wc the worker's connection, replacing any older stream.
+func (cm *ConnectionManager) Publish(wc *WorkerConnection) {
 	cm.mu.Lock()
-	cm.conns[workerID] = wc
+	cm.conns[wc.WorkerID] = wc
 	cm.mu.Unlock()
-	return wc
 }
 
 // Unregister drops conn unless a newer stream for the same worker has replaced it.

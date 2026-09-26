@@ -176,17 +176,20 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 		slog.Error("record agent info", "worker_id", workerID, "err", err)
 	}
 
-	conn := s.ConnMgr.Register(workerID, stream)
+	// Ready the connection in full before dispatch can see it.
+	conn := s.ConnMgr.NewConnection(workerID, stream)
 	conn.Labels = w.Labels
 	conn.setCapacity(reg.GetQueues(), reg.GetConcurrency())
 	conn.adoptRunning(reg.GetRunningJobs())
-	// A delete that ran before Register saw no connection and removed the row outright.
-	if _, err := s.stillExists(ctx, w.ID); err != nil {
+	s.ConnMgr.Publish(conn)
+	// Read the row after publishing: a delete either shows here, or finds this connection
+	// when it looks for one after marking the worker deleting.
+	current, err := s.stillExists(ctx, w.ID)
+	if err != nil {
 		s.ConnMgr.Unregister(conn)
 		return err
 	}
-	if w.Status == enums.WorkerDeleting {
-		// Deleted while its stream was down: finish what it runs, then go.
+	if current.Status == enums.WorkerDeleting {
 		conn.Shutdown()
 	}
 	slog.Info("worker connected", "worker_id", workerID, "queues", reg.GetQueues(), "concurrency", reg.GetConcurrency(), "version", reg.GetVersion())

@@ -83,6 +83,14 @@ func (r *WorkerRepository) UpdateLabels(ctx context.Context, uid id.ID, labels m
 	return r.UpdateFields(ctx, uid, map[string]any{"labels": jsonText(labels)})
 }
 
+// MarkDead fails a worker that stopped answering pings, unless it has moved on meanwhile
+// (a worker being deleted stays "deleting").
+func (r *WorkerRepository) MarkDead(ctx context.Context, uid id.ID) error {
+	return mapErr(r.q(ctx).Model(&models.Worker{}).
+		Where("id = ? AND status IN ?", uid.Hex(), []enums.WorkerStatus{enums.WorkerRegistered, enums.WorkerAlive}).
+		Updates(map[string]any{"status": enums.WorkerDead, "updated_at": time.Now().UTC().UnixMilli()}).Error)
+}
+
 func (r *WorkerRepository) Delete(ctx context.Context, uid id.ID) error {
 	return mapErr(r.q(ctx).Where("id = ?", uid.Hex()).Delete(&models.Worker{}).Error)
 }

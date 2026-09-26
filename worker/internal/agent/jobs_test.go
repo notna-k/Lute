@@ -73,3 +73,17 @@ func TestReadLog(t *testing.T) {
 		})
 	}
 }
+
+func TestFinishJobWithoutStreamKeepsResult(t *testing.T) {
+	a := New(Config{}, context.Background())
+	a.running["job-1"] = struct{}{}
+
+	a.finishJob(&pb.JobResult{JobId: "job-1", Success: true})
+
+	if _, ok := a.running["job-1"]; ok {
+		t.Error("finished job is still counted as running")
+	}
+	if len(a.pending) != 1 || a.pending[0].JobId != "job-1" {
+		t.Errorf("pending = %v, want the result kept for the next stream", a.pending)
+	}
+}

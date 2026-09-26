@@ -109,18 +109,35 @@ func (a *Agent) accept(as *pb.JobAssignment) {
 		} else {
 			slog.Info("Job completed", "job_id", as.JobId, "elapsed_ms", result.ElapsedMs)
 		}
-		a.mu.Lock()
-		delete(a.running, as.JobId)
-		a.mu.Unlock()
-		a.sendResult(result)
+		a.finishJob(result)
 	}()
 }
 
-// sendResult reports on whichever stream is open; with none, core's lease reaper settles the job.
+// finishJob reports a job's result on the open stream, or keeps it for the next one.
+func (a *Agent) finishJob(r *pb.JobResult) {
+	a.mu.Lock()
+	delete(a.running, r.JobId)
+	s := a.sess
+	if s == nil {
+		a.pending = append(a.pending, r)
+	}
+	a.mu.Unlock()
+	if s == nil {
+		slog.Warn("No connection; the job result waits for the next one", "job_id", r.JobId)
+		return
+	}
+	if err := s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Result{Result: r}}); err != nil {
+		slog.Warn("Failed to send job result; retrying on the next connection", "job_id", r.JobId, "err", err)
+		a.mu.Lock()
+		a.pending = append(a.pending, r)
+		a.mu.Unlock()
+	}
+}
+
+// sendResult reports a refusal; it is not kept, since core requeues on its own.
 func (a *Agent) sendResult(r *pb.JobResult) {
 	s := a.session()
 	if s == nil {
-		slog.Error("No connection to report a job result on", "job_id", r.JobId)
 		return
 	}
 	if err := s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Result{Result: r}}); err != nil {

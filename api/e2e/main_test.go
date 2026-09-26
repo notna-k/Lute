@@ -38,8 +38,8 @@ func run(m *testing.M) (int, error) {
 		}
 	}
 
-	// Only containers created from here on, e.g. by a killed agent, are the suite's to reap.
-	existing := harness.SnapshotContainers()
+	// Only job resources created from here on, e.g. by a killed agent, are the suite's to reap.
+	existing := harness.SnapshotJobResources()
 
 	started, err := pgtest.Start()
 	if err != nil {
@@ -51,8 +51,8 @@ func run(m *testing.M) (int, error) {
 
 	pg.Stop()
 	if harness.DockerAvailable() {
-		if n := harness.ReapJobContainers(existing); n > 0 {
-			fmt.Fprintf(os.Stderr, "e2e: removed %d job container(s) left by killed agents\n", n)
+		if n := harness.ReapJobResources(existing); n > 0 {
+			fmt.Fprintf(os.Stderr, "e2e: removed %d job container(s), volume(s) and network(s) left by killed agents\n", n)
 		}
 	}
 	return code, nil

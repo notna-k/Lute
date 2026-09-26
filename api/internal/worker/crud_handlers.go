@@ -209,6 +209,11 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 			httpx.Internal(c, err)
 			return
 		}
+		// Look again: a reconnect may have replaced the stream since; its Connect reads
+		// the status after publishing, so one of the two always signals the live stream.
+		if current := h.connectionMgr.Get(w.ID.Hex()); current != nil {
+			conn = current
+		}
 		conn.Shutdown()
 		c.JSON(http.StatusAccepted, gin.H{"status": enums.WorkerDeleting, "message": "The worker finishes its running jobs, then stops."})
 		return

@@ -62,6 +62,7 @@ type Agent struct {
 
 	mu          sync.Mutex
 	running     map[string]struct{} // job ids, reported again on every new stream
+	pending     []*pb.JobResult     // results that found no stream; sent on the next one
 	sess        *session
 	draining    bool // takes no new jobs
 	deleted     bool // core asked it to drain and stop
@@ -225,22 +226,50 @@ func (a *Agent) connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open stream: %w", err)
 	}
+	// Publishing the session and listing running jobs happen under one lock, and sends
+	// wait for the registration: a job that finishes during the handover is either in
+	// running_jobs and reports on this stream after it, or in pending and flushed here.
 	s := &session{agent: a, stream: stream}
-	if err := s.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Register{Register: &pb.WorkerRegistration{
+	s.sendMu.Lock()
+	a.mu.Lock()
+	running := make([]string, 0, len(a.running))
+	for id := range a.running {
+		running = append(running, id)
+	}
+	pending := a.pending
+	a.pending = nil
+	a.sess = s
+	draining := a.draining && !a.deleted
+	a.mu.Unlock()
+	err = stream.Send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Register{Register: &pb.WorkerRegistration{
 		Queues:      a.cfg.Queues,
 		Concurrency: a.cfg.Concurrency,
 		Version:     a.cfg.Version,
 		Protocol:    pb.Protocol,
 		Engine:      a.cfg.Engine,
-		RunningJobs: a.runningJobs(),
-	}}}); err != nil {
+		RunningJobs: running,
+	}}})
+	for i := 0; err == nil && i < len(pending); i++ {
+		err = stream.Send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Result{Result: pending[i]}})
+		if err == nil {
+			pending[i] = nil
+		}
+	}
+	s.sendMu.Unlock()
+	if err != nil {
+		a.mu.Lock()
+		if a.sess == s {
+			a.sess = nil
+		}
+		for _, r := range pending {
+			if r != nil {
+				a.pending = append(a.pending, r)
+			}
+		}
+		a.mu.Unlock()
 		return fmt.Errorf("send registration: %w", err)
 	}
 
-	a.mu.Lock()
-	a.sess = s
-	draining := a.draining && !a.deleted
-	a.mu.Unlock()
 	defer func() {
 		a.mu.Lock()
 		if a.sess == s {
@@ -292,14 +321,4 @@ func Dial(server string, useTLS bool) (*grpc.ClientConn, error) {
 		creds = credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
 	}
 	return grpc.NewClient(server, grpc.WithTransportCredentials(creds))
-}
-
-func (a *Agent) runningJobs() []string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	out := make([]string, 0, len(a.running))
-	for id := range a.running {
-		out = append(out, id)
-	}
-	return out
 }

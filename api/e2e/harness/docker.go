@@ -37,41 +37,52 @@ func PullTestImages() error {
 	return err
 }
 
-// ContainerSet tells the containers a suite run created from the ones already on the host.
-type ContainerSet map[string]struct{}
+// jobKinds lists what the engine holds for jobs: containers, volumes and networks, all
+// labelled lute.job, with the command that removes each.
+var jobKinds = []struct{ list, remove []string }{
+	{[]string{"ps", "-aq", "--no-trunc"}, []string{"rm", "-f"}},
+	{[]string{"volume", "ls", "-q"}, []string{"volume", "rm", "-f"}},
+	{[]string{"network", "ls", "-q", "--no-trunc"}, []string{"network", "rm"}},
+}
 
-func SnapshotContainers() ContainerSet {
-	out, err := docker("ps", "-aq", "--no-trunc")
+// JobResourceSet tells the job resources a suite run created from the ones already on the host.
+type JobResourceSet map[string]struct{}
+
+func listJobResources(kind int) []string {
+	out, err := docker(append(jobKinds[kind].list, "--filter", "label=lute.job")...)
 	if err != nil {
 		return nil
 	}
-	set := ContainerSet{}
+	var ids []string
 	for line := range strings.SplitSeq(out, "\n") {
 		if id := strings.TrimSpace(line); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func SnapshotJobResources() JobResourceSet {
+	set := JobResourceSet{}
+	for kind := range jobKinds {
+		for _, id := range listJobResources(kind) {
 			set[id] = struct{}{}
 		}
 	}
 	return set
 }
 
-// ReapJobContainers removes job containers created since the snapshot: an agent killed
-// mid-build never cleans up after itself.
-func ReapJobContainers(before ContainerSet) int {
+// ReapJobResources removes job resources created since the snapshot: an agent killed
+// mid-build never cleans up after itself. Containers go first, so their networks and
+// volumes are free to go.
+func ReapJobResources(before JobResourceSet) int {
 	removed := 0
-	for _, img := range TestImages {
-		out, err := docker("ps", "-aq", "--no-trunc", "--filter", "ancestor="+img)
-		if err != nil {
-			continue
-		}
-		for line := range strings.SplitSeq(out, "\n") {
-			id := strings.TrimSpace(line)
-			if id == "" {
-				continue
-			}
+	for kind, k := range jobKinds {
+		for _, id := range listJobResources(kind) {
 			if _, existed := before[id]; existed {
 				continue // not ours: it was here before the suite started
 			}
-			if _, err := docker("rm", "-f", id); err == nil {
+			if _, err := docker(append(k.remove, id)...); err == nil {
 				removed++
 			}
 		}
