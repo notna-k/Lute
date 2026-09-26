@@ -82,6 +82,15 @@ func (w *RawWorker) Register(concurrency int32, queues ...string) error {
 	})
 }
 
+// RegisterRunning opens the stream as an agent that reconnected while jobIDs kept running.
+func (w *RawWorker) RegisterRunning(concurrency int32, queue string, jobIDs ...string) error {
+	return w.send(&pb.WorkerMessage{
+		Payload: &pb.WorkerMessage_Register{
+			Register: &pb.WorkerRegistration{Queues: []string{queue}, Concurrency: concurrency, Version: "e2e", Protocol: pb.Protocol, RunningJobs: jobIDs},
+		},
+	})
+}
+
 // RegisterWithProtocol opens the stream claiming an arbitrary protocol version.
 func (w *RawWorker) RegisterWithProtocol(protocol int32) error {
 	return w.send(&pb.WorkerMessage{

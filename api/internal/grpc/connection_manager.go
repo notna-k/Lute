@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -53,6 +54,8 @@ type WorkerConnection struct {
 
 	mu       sync.Mutex
 	draining bool
+	// running holds the jobs counted in ActiveJobs, so only a result for one of them frees a slot.
+	running map[string]struct{}
 
 	closeOnce sync.Once
 	closed    chan struct{}
@@ -69,6 +72,29 @@ func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer)
 		logReqCh:    make(chan *pb.JobLogRequest, 32),
 		logWaiters:  make(map[string]chan jobLogResult),
 		closed:      make(chan struct{}),
+		running:     make(map[string]struct{}),
+	}
+}
+
+// adoptRunning counts jobs an agent still runs from an earlier stream against this one.
+func (wc *WorkerConnection) adoptRunning(jobIDs []string) {
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
+	for _, id := range jobIDs {
+		if _, ok := wc.running[id]; !ok {
+			wc.running[id] = struct{}{}
+			wc.ActiveJobs++
+		}
+	}
+}
+
+// release frees the slot of a job this connection counted; results for others change nothing.
+func (wc *WorkerConnection) release(jobID string) {
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
+	if _, ok := wc.running[jobID]; ok {
+		delete(wc.running, jobID)
+		wc.ActiveJobs--
 	}
 }
 
@@ -109,15 +135,14 @@ func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 		return false
 	}
 	wc.ActiveJobs++
+	wc.running[assignment.JobId] = struct{}{}
 	wc.mu.Unlock()
 
 	select {
 	case wc.jobCh <- assignment:
 		return true
 	default:
-		wc.mu.Lock()
-		wc.ActiveJobs--
-		wc.mu.Unlock()
+		wc.release(assignment.JobId)
 		return false
 	}
 }
@@ -206,17 +231,25 @@ func (wc *WorkerConnection) failAllLogWaiters(err error) {
 
 // Run pumps both directions of the stream until it closes.
 func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerStatusCallback) {
-	recvCh := make(chan *pb.WorkerMessage, 1)
-	recvErrCh := make(chan error, 1)
-
+	defer wc.Close() // also stops the receive goroutine
+	// One channel for messages and the terminal error keeps their order: a result sent
+	// just before the agent half-closes is handled before the EOF that follows it.
+	type received struct {
+		msg *pb.WorkerMessage
+		err error
+	}
+	recvCh := make(chan received, 1)
 	go func() {
 		for {
 			msg, err := wc.stream.Recv()
-			if err != nil {
-				recvErrCh <- err
+			select {
+			case recvCh <- received{msg, err}:
+			case <-wc.closed:
 				return
 			}
-			recvCh <- msg
+			if err != nil {
+				return
+			}
 		}
 	}()
 
@@ -232,15 +265,18 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerSt
 			wc.failAllLogWaiters(ErrNoConnection)
 			return
 
-		case err := <-recvErrCh:
-			if pendingPing != nil {
-				pendingPing.resultCh <- pingResult{Err: err}
+		case r := <-recvCh:
+			if r.err != nil {
+				if pendingPing != nil {
+					pendingPing.resultCh <- pingResult{Err: r.err}
+				}
+				wc.failAllLogWaiters(r.err)
+				if !errors.Is(r.err, io.EOF) {
+					slog.Warn("worker stream recv", "worker_id", wc.WorkerID, "err", r.err)
+				}
+				return
 			}
-			wc.failAllLogWaiters(err)
-			slog.Warn("worker stream recv", "worker_id", wc.WorkerID, "err", err)
-			return
-
-		case msg := <-recvCh:
+			msg := r.msg
 			if pong := msg.GetHeartbeatPong(); pong != nil && pendingPing != nil {
 				pendingPing.resultCh <- pingResult{Pong: pong}
 				pendingPing = nil
@@ -249,9 +285,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerSt
 				wc.finishLogWaiter(lr.RequestId, jobLogResult{Resp: lr})
 			}
 			if result := msg.GetResult(); result != nil {
-				wc.mu.Lock()
-				wc.ActiveJobs--
-				wc.mu.Unlock()
+				wc.release(result.JobId)
 				if onJobResult != nil {
 					onJobResult(wc.WorkerID, result)
 				}
@@ -287,9 +321,7 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerSt
 				},
 			})
 			if err != nil {
-				wc.mu.Lock()
-				wc.ActiveJobs--
-				wc.mu.Unlock()
+				wc.release(assignment.JobId)
 				slog.Warn("send job to worker", "worker_id", wc.WorkerID, "err", err)
 				return
 			}

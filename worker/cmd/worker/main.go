@@ -170,6 +170,7 @@ func run(args []string) int {
 	}
 	a := agent.New(agent.Config{
 		ServerAddr:  cfg.Server,
+		TLS:         cfg.TLS,
 		WorkerID:    st.WorkerID,
 		Secret:      st.Secret,
 		Queues:      cfg.Queues,
@@ -214,7 +215,7 @@ func register(ctx context.Context, cfg *config.Config, eng engine.Info, data *da
 	if name == "" {
 		name = eng.Name
 	}
-	resp, err := agent.Register(ctx, cfg.Server, &pb.RegisterRequest{
+	resp, err := agent.Register(ctx, cfg.Server, cfg.TLS, &pb.RegisterRequest{
 		Token:    cfg.Token,
 		Name:     name,
 		Version:  Version,

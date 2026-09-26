@@ -160,6 +160,10 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	if err := s.checkProtocol(reg.GetProtocol()); err != nil {
 		return err
 	}
+	// Look again: the worker may have been deleted while core waited for the registration.
+	if w, err = s.stillExists(ctx, w.ID); err != nil {
+		return err
+	}
 	if w.Status == enums.WorkerDead {
 		return status.Errorf(codes.FailedPrecondition, "worker %s is dead; re-enable it in the panel", workerID)
 	}
@@ -175,6 +179,12 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	conn := s.ConnMgr.Register(workerID, stream)
 	conn.Labels = w.Labels
 	conn.setCapacity(reg.GetQueues(), reg.GetConcurrency())
+	conn.adoptRunning(reg.GetRunningJobs())
+	// A delete that ran before Register saw no connection and removed the row outright.
+	if _, err := s.stillExists(ctx, w.ID); err != nil {
+		s.ConnMgr.Unregister(conn)
+		return err
+	}
 	if w.Status == enums.WorkerDeleting {
 		// Deleted while its stream was down: finish what it runs, then go.
 		conn.Shutdown()
@@ -193,6 +203,17 @@ func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
 	}
 	conn.Run(s.handleJobResult, s.handleWorkerStatus)
 	return nil
+}
+
+func (s *Server) stillExists(ctx context.Context, wid id.ID) (*models.Worker, error) {
+	w, err := s.workerRepo.GetByID(ctx, wid)
+	if errors.Is(err, repos.ErrNotFound) {
+		return nil, status.Errorf(codes.NotFound, "worker %s was deleted", wid.Hex())
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "look up worker: %v", err)
+	}
+	return w, nil
 }
 
 // handleWorkerStatus forgets a deleted worker once it reports its last job done.

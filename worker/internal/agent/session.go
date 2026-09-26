@@ -90,6 +90,7 @@ func (a *Agent) accept(as *pb.JobAssignment) {
 		return
 	}
 	a.jobs.Add(1)
+	a.running[as.JobId] = struct{}{}
 	a.mu.Unlock()
 
 	go func() {
@@ -108,6 +109,9 @@ func (a *Agent) accept(as *pb.JobAssignment) {
 		} else {
 			slog.Info("Job completed", "job_id", as.JobId, "elapsed_ms", result.ElapsedMs)
 		}
+		a.mu.Lock()
+		delete(a.running, as.JobId)
+		a.mu.Unlock()
 		a.sendResult(result)
 	}()
 }

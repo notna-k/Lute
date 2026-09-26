@@ -71,8 +71,12 @@ func (h *WorkerHandler) PatchLabels(c *gin.Context) {
 		return
 	}
 
-	w.Labels = req.Labels
-	updated, err := h.save(c.Request.Context(), w)
+	ctx := c.Request.Context()
+	if err := h.workerRepo.UpdateLabels(ctx, w.ID, req.Labels); err != nil {
+		httpx.Internal(c, err)
+		return
+	}
+	updated, err := h.workerRepo.GetByID(ctx, w.ID)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
@@ -122,23 +126,50 @@ func withOutdated(w *models.Worker) *models.Worker {
 	return w
 }
 
+type updateWorkerRequest struct {
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+}
+
+// UpdateWorker renames or re-describes a worker. Only those columns are written: the
+// secret, status and what the agent reported belong to core.
 func (h *WorkerHandler) UpdateWorker(c *gin.Context) {
-	existing, ok := h.ownedWorker(c)
+	w, ok := h.ownedWorker(c)
 	if !ok {
 		return
 	}
-	var w models.Worker
-	if err := c.ShouldBindJSON(&w); err != nil {
+	var req updateWorkerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	w.ID, w.UserID = existing.ID, existing.UserID
-	updated, err := h.save(c.Request.Context(), &w)
+	updates := map[string]any{}
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if err := models.ValidateWorkerName(name); err != nil {
+			httpx.Invalid(c, err.Error(), map[string]string{"name": err.Error()})
+			return
+		}
+		updates["name"] = name
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	ctx := c.Request.Context()
+	if err := h.workerRepo.UpdateFields(ctx, w.ID, updates); err != nil {
+		if errors.Is(err, repos.ErrDuplicate) {
+			httpx.Error(c, http.StatusConflict, "a worker with that name already exists")
+			return
+		}
+		httpx.Internal(c, err)
+		return
+	}
+	updated, err := h.workerRepo.GetByID(ctx, w.ID)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, updated)
+	c.JSON(http.StatusOK, withOutdated(updated))
 }
 
 // ReEnableWorker moves a dead worker back to pending so its agent may reconnect.
@@ -187,13 +218,6 @@ func (h *WorkerHandler) DeleteWorker(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
-}
-
-func (h *WorkerHandler) save(ctx context.Context, w *models.Worker) (*models.Worker, error) {
-	if err := h.workerRepo.Update(ctx, w.ID, w); err != nil {
-		return nil, err
-	}
-	return h.workerRepo.GetByID(ctx, w.ID)
 }
 
 func (h *WorkerHandler) GetWorkerLiveStatus(c *gin.Context) {

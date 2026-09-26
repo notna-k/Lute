@@ -112,6 +112,7 @@ message WorkerRegistration {
   string version = 4;
   int32 protocol = 5;
   EngineInfo engine = 6;
+  repeated string running_jobs = 7; // still running from an earlier stream; they count against capacity
 }
 
 // WorkerStatus reports a change in the agent's lifecycle.

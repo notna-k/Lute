@@ -3,14 +3,17 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -25,7 +28,9 @@ type JobRunner interface {
 }
 
 type Config struct {
-	ServerAddr  string
+	ServerAddr string
+	// TLS dials core with TLS, as behind a proxy that terminates it; off is plaintext.
+	TLS         bool
 	WorkerID    string
 	Secret      string
 	Queues      []string
@@ -46,8 +51,8 @@ const (
 
 const (
 	maxBackoff = 30 * time.Second
-	// deletedGrace bounds the wait for core to close the stream after the agent is done.
-	deletedGrace = 30 * time.Second
+	// closeGrace bounds the wait for core to end the stream after the agent half-closed it.
+	closeGrace = 30 * time.Second
 )
 
 type Agent struct {
@@ -56,6 +61,7 @@ type Agent struct {
 	jobs   sync.WaitGroup
 
 	mu          sync.Mutex
+	running     map[string]struct{} // job ids, reported again on every new stream
 	sess        *session
 	draining    bool // takes no new jobs
 	deleted     bool // core asked it to drain and stop
@@ -67,7 +73,7 @@ type Agent struct {
 
 // New returns an agent whose jobs run under jobCtx, which outlives any one connection.
 func New(cfg Config, jobCtx context.Context) *Agent {
-	return &Agent{cfg: cfg, jobCtx: jobCtx}
+	return &Agent{cfg: cfg, jobCtx: jobCtx, running: map[string]struct{}{}}
 }
 
 // Run connects and reconnects with backoff until the agent is drained or deleted, ctx
@@ -84,6 +90,11 @@ func (a *Agent) Run(ctx context.Context) (Outcome, error) {
 		err := a.connect(ctx)
 		if outcome, ok := a.finished(); ok {
 			return outcome, nil
+		}
+		// Core ends the stream cleanly only after it has removed a drained worker; any
+		// other end is a lost connection, and the next stream repeats the drain.
+		if a.drainConfirmed(err) {
+			return Deleted, nil
 		}
 		if ctx.Err() != nil {
 			return Stopped, nil
@@ -118,23 +129,15 @@ func (a *Agent) finished() (Outcome, bool) {
 	if a.done {
 		return a.outcome, true
 	}
-	// Core closes the stream once it has forgotten a drained worker.
-	if a.drainedSent {
-		return Deleted, true
-	}
 	return Stopped, false
 }
 
-func (a *Agent) finish(o Outcome) {
+func (a *Agent) drainConfirmed(streamErr error) bool {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.done {
-		return
-	}
-	a.done, a.outcome = true, o
-	if a.stop != nil {
-		a.stop()
-	}
+	sent := a.drainedSent
+	a.drainedSent = false
+	a.mu.Unlock()
+	return sent && errors.Is(streamErr, io.EOF)
 }
 
 // Drain stops taking jobs and tells core; Run returns Drained once running jobs finish.
@@ -169,7 +172,7 @@ func (a *Agent) finishGracefully(o Outcome) {
 		stop()
 		return
 	}
-	time.AfterFunc(deletedGrace, stop)
+	time.AfterFunc(closeGrace, stop)
 }
 
 // deleteRequested handles core's DrainSignal: finish running jobs, report drained, and
@@ -188,7 +191,6 @@ func (a *Agent) deleteRequested() {
 		a.mu.Lock()
 		a.drainedSent = true
 		a.mu.Unlock()
-		time.AfterFunc(deletedGrace, func() { a.finish(Deleted) })
 	}()
 }
 
@@ -212,7 +214,7 @@ func (a *Agent) session() *session {
 
 // connect opens one authenticated stream, registers on it, and serves it until it breaks.
 func (a *Agent) connect(ctx context.Context) error {
-	conn, err := grpc.NewClient(a.cfg.ServerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := Dial(a.cfg.ServerAddr, a.cfg.TLS)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -230,6 +232,7 @@ func (a *Agent) connect(ctx context.Context) error {
 		Version:     a.cfg.Version,
 		Protocol:    pb.Protocol,
 		Engine:      a.cfg.Engine,
+		RunningJobs: a.runningJobs(),
 	}}}); err != nil {
 		return fmt.Errorf("send registration: %w", err)
 	}
@@ -254,8 +257,8 @@ func (a *Agent) connect(ctx context.Context) error {
 }
 
 // Register enrols a new worker with a registration token, retrying while core is unreachable.
-func Register(ctx context.Context, server string, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
-	conn, err := grpc.NewClient(server, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func Register(ctx context.Context, server string, useTLS bool, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+	conn, err := Dial(server, useTLS)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", server, err)
 	}
@@ -279,4 +282,24 @@ func Register(ctx context.Context, server string, req *pb.RegisterRequest) (*pb.
 		}
 		backoff = min(backoff*2, maxBackoff)
 	}
+}
+
+// Dial connects to core. Without TLS the token, secret and job data cross the network in
+// plaintext, so that is for a local core or a private network only.
+func Dial(server string, useTLS bool) (*grpc.ClientConn, error) {
+	creds := insecure.NewCredentials()
+	if useTLS {
+		creds = credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+	}
+	return grpc.NewClient(server, grpc.WithTransportCredentials(creds))
+}
+
+func (a *Agent) runningJobs() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make([]string, 0, len(a.running))
+	for id := range a.running {
+		out = append(out, id)
+	}
+	return out
 }

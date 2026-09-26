@@ -34,6 +34,7 @@ func TestDefaults(t *testing.T) {
 func TestFlagOverridesEnv(t *testing.T) {
 	env := envOf(map[string]string{
 		"LUTE_SERVER":        "from-env:50051",
+		"LUTE_TLS":           "true",
 		"LUTE_NAME":          "env-name",
 		"LUTE_QUEUES":        "build, deploy",
 		"LUTE_LABELS":        "os=linux, gpu = 2",
@@ -52,7 +53,7 @@ func TestFlagOverridesEnv(t *testing.T) {
 	if c.Concurrency != 8 {
 		t.Errorf("concurrency = %d, want the flag's 8", c.Concurrency)
 	}
-	if c.Name != "env-name" || !c.RequireMount {
+	if c.Name != "env-name" || !c.RequireMount || !c.TLS {
 		t.Errorf("name %q, require mount %v: env values were lost", c.Name, c.RequireMount)
 	}
 	if diff := cmp.Diff([]string{"build", "deploy"}, c.Queues); diff != "" {

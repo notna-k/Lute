@@ -286,6 +286,10 @@ func (c *Client) DeleteWorker(id string) (string, error) {
 	return callField[string](c, http.MethodDelete, "/api/v1/workers/"+id, "status", nil)
 }
 
+func (c *Client) UpdateWorker(id string, fields map[string]any) (Worker, error) {
+	return call[Worker](c, http.MethodPut, "/api/v1/workers/"+id, fields)
+}
+
 func (c *Client) ReEnableWorker(id string) (Worker, error) {
 	return call[Worker](c, http.MethodPost, "/api/v1/workers/"+id+"/re-enable", nil)
 }

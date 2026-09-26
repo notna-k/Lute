@@ -54,6 +54,9 @@ On its first start the worker registers with the token and writes `state.json` i
 dir. After that the token is not needed: restarts, reboots and image updates keep the same
 worker. Revoking the token stops new registrations only.
 
+Core's gRPC port speaks plaintext. Across any network you do not trust, put a TLS-terminating
+proxy in front of it and add `-e LUTE_TLS=1`, or the token and the worker secret travel in the clear.
+
 The name defaults to the engine's host name; a second worker on the same host needs
 `-e LUTE_NAME=...`, since names are unique across Lute.
 
@@ -62,6 +65,7 @@ The name defaults to the engine's host name; a second worker on the same host ne
 | Variable | Default | Meaning |
 |---|---|---|
 | `LUTE_SERVER` | required | core's gRPC address, `host:port` |
+| `LUTE_TLS` | `0` | dial core with TLS; set it when a proxy terminates TLS in front of core |
 | `LUTE_TOKEN` | first start only | registration token |
 | `LUTE_NAME` | engine host name | worker name |
 | `LUTE_QUEUES` | `default` | comma-separated queues |

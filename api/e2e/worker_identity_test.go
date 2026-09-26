@@ -253,6 +253,40 @@ func TestWorkerCredentials(t *testing.T) {
 		stack.WaitConnected(admin, reg.WorkerID)
 	})
 
+	t.Run("Fail - a worker deleted between authenticating and registering is refused", func(t *testing.T) {
+		doomed := stack.RegisterWorker("deleted-mid-handshake")
+		raw, err := stack.DialRawWorker(doomed.WorkerID, doomed.Secret)
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		// Let core authenticate the stream, then delete the worker before it registers.
+		time.Sleep(200 * time.Millisecond)
+		if result, err := admin.DeleteWorker(doomed.WorkerID); err != nil || result != "deleted" {
+			t.Fatalf("delete: %q, %v", result, err)
+		}
+		if err := raw.Register(1, "build"); err != nil {
+			t.Logf("send: %v", err)
+		}
+		if code := status.Code(raw.WaitForStreamEnd(15 * time.Second)); code != codes.NotFound {
+			t.Errorf("stream ended with %v, want NotFound", code)
+		}
+	})
+
+	t.Run("Success - editing a worker in the panel keeps its credential", func(t *testing.T) {
+		agent := stack.ConnectedAgent(admin, "renamed-later")
+		w, err := admin.UpdateWorker(agent.WorkerID, map[string]any{"description": "moved to rack 4"})
+		if err != nil {
+			t.Fatalf("update: %v", err)
+		}
+		if w.Description != "moved to rack 4" {
+			t.Errorf("description = %q", w.Description)
+		}
+		agent.Kill()
+		stack.WaitDisconnected(admin, agent.WorkerID)
+		agent.Restart()
+		stack.WaitConnected(admin, agent.WorkerID)
+	})
+
 	t.Run("Fail - token management needs a signed-in operator", func(t *testing.T) {
 		if _, err := stack.Client().ListTokens(); harness.StatusOf(err) != http.StatusUnauthorized {
 			t.Errorf("anonymous list: err = %v, want 401", err)

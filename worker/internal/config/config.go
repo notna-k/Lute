@@ -18,6 +18,7 @@ const DefaultDataDir = "/var/lib/lute-worker"
 
 type Config struct {
 	Server       string
+	TLS          bool
 	Token        string
 	Name         string
 	Queues       []string
@@ -49,6 +50,7 @@ func Load(args []string, getenv func(string) string, usage io.Writer) (*Config, 
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(usage)
 	server := fs.String("server", env("LUTE_SERVER", ""), "core gRPC address, host:port [LUTE_SERVER]")
+	useTLS := fs.String("tls", env("LUTE_TLS", "0"), "dial core with TLS, e.g. behind a TLS proxy [LUTE_TLS]")
 	token := fs.String("token", env("LUTE_TOKEN", ""), "registration token, used on the first start only [LUTE_TOKEN]")
 	name := fs.String("name", env("LUTE_NAME", ""), "worker name, unique across Lute; defaults to the engine's host name [LUTE_NAME]")
 	queues := fs.String("queues", env("LUTE_QUEUES", "default"), "comma-separated queues [LUTE_QUEUES]")
@@ -84,6 +86,9 @@ func Load(args []string, getenv func(string) string, usage io.Writer) (*Config, 
 	}
 	if c.Concurrency, err = strconv.Atoi(*concurrency); err != nil || c.Concurrency < 1 || c.Concurrency > 1024 {
 		errs = append(errs, fmt.Errorf("concurrency %q: want a number from 1 to 1024", *concurrency))
+	}
+	if c.TLS, err = strconv.ParseBool(*useTLS); err != nil {
+		errs = append(errs, fmt.Errorf("tls %q: %w", *useTLS, err))
 	}
 	if c.RequireMount, err = strconv.ParseBool(*requireMount); err != nil {
 		errs = append(errs, fmt.Errorf("require-mount %q: %w", *requireMount, err))
