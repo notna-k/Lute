@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/lute/api/e2e/harness"
 )
@@ -18,12 +20,11 @@ func TestAgentConnection(t *testing.T) {
 	admin := stack.AdminClient()
 
 	t.Run("Success - a connected agent advertises its queues and capacity", func(t *testing.T) {
-		reg := stack.ClaimWorker(admin, "connect-basic")
-		stack.StartAgent(reg.WorkerID, harness.WithQueues("build", "deploy"), harness.WithConcurrency(3))
+		agent := stack.ConnectedAgent(admin, "connect-basic", harness.WithQueues("build", "deploy"), harness.WithConcurrency(3))
 
-		got := stack.WaitConnected(admin, reg.WorkerID)
+		got := stack.WaitConnected(admin, agent.WorkerID)
 		want := harness.ConnectedWorker{
-			WorkerID:    reg.WorkerID,
+			WorkerID:    agent.WorkerID,
 			Queues:      []string{"build", "deploy"},
 			Concurrency: 3,
 			ActiveJobs:  0,
@@ -33,7 +34,7 @@ func TestAgentConnection(t *testing.T) {
 			t.Errorf("connected worker mismatch (-want +got):\n%s", diff)
 		}
 
-		worker, err := admin.GetWorker(reg.WorkerID)
+		worker, err := admin.GetWorker(agent.WorkerID)
 		if err != nil {
 			t.Fatalf("get worker: %v", err)
 		}
@@ -42,28 +43,35 @@ func TestAgentConnection(t *testing.T) {
 		}
 	})
 
-	t.Run("Success - an agent started against a deleted worker gives up", func(t *testing.T) {
-		reg := stack.ClaimWorker(admin, "deleted-host")
-		agent := stack.StartAgent(reg.WorkerID, harness.WithQueues("build"))
-		stack.WaitConnected(admin, reg.WorkerID)
+	t.Run("Success - a worker deleted while offline stops when it comes back", func(t *testing.T) {
+		agent := stack.ConnectedAgent(admin, "deleted-offline", harness.WithQueues("build"))
+		agent.Kill()
+		stack.WaitDisconnected(admin, agent.WorkerID)
 
-		if err := admin.DeleteWorker(reg.WorkerID); err != nil {
+		result, err := admin.DeleteWorker(agent.WorkerID)
+		if err != nil {
 			t.Fatalf("delete worker: %v", err)
 		}
-		agent.WaitExit(30 * time.Second)
-		stack.WaitDisconnected(admin, reg.WorkerID)
+		if result != "deleted" {
+			t.Errorf("delete result = %q, want deleted: nothing is connected to drain", result)
+		}
 
-		// A host coming back with a worker id core has forgotten must stop, not retry
-		// forever against a server that will never accept it.
-		revenant := stack.StartAgent(reg.WorkerID, harness.WithQueues("build"))
+		// A host coming back with an id core has forgotten must stop, not retry forever.
+		revenant := agent.Restart()
 		revenant.WaitExit(30 * time.Second)
+		if revenant.ExitCode() != 0 {
+			t.Errorf("exit code = %d, want 0 so a container stays stopped:\n%s", revenant.ExitCode(), revenant.Stderr())
+		}
+		if !strings.Contains(revenant.Stderr(), "remove state.json") {
+			t.Errorf("the agent did not say how to register again:\n%s", revenant.Stderr())
+		}
 		harness.Never(t, 2*time.Second, "a deleted worker to reappear as connected", func() bool {
 			workers, err := admin.ConnectedWorkers()
 			if err != nil {
 				return false
 			}
 			for _, w := range workers {
-				if w.WorkerID == reg.WorkerID {
+				if w.WorkerID == agent.WorkerID {
 					return true
 				}
 			}
@@ -75,25 +83,26 @@ func TestAgentConnection(t *testing.T) {
 		fast := newStack(t, harness.WithFastHeartbeat(300*time.Millisecond, time.Second, 2))
 		fastAdmin := fast.AdminClient()
 
-		reg := fast.ClaimWorker(fastAdmin, "flatlined")
-		agent := fast.StartAgent(reg.WorkerID, harness.WithQueues("build"))
-		fast.WaitConnected(fastAdmin, reg.WorkerID)
+		agent := fast.ConnectedAgent(fastAdmin, "flatlined", harness.WithQueues("build"))
 
 		agent.Kill()
 		harness.WaitFor(t, 30*time.Second, "core to mark the host dead", func() bool {
-			w, err := fastAdmin.GetWorker(reg.WorkerID)
+			w, err := fastAdmin.GetWorker(agent.WorkerID)
 			return err == nil && w.Status == "dead"
 		})
 
 		// A dead host stays out until re-enabled: letting a zombie back in hides a real failure.
-		refused := fast.StartAgent(reg.WorkerID, harness.WithQueues("build"))
+		refused := agent.Restart()
 		refused.WaitExit(30 * time.Second)
+		if refused.ExitCode() != 78 {
+			t.Errorf("exit code = %d, want 78", refused.ExitCode())
+		}
 
-		if _, err := fastAdmin.ReEnableWorker(reg.WorkerID); err != nil {
+		if _, err := fastAdmin.ReEnableWorker(agent.WorkerID); err != nil {
 			t.Fatalf("re-enable: %v", err)
 		}
-		fast.StartAgent(reg.WorkerID, harness.WithQueues("build"))
-		fast.WaitConnected(fastAdmin, reg.WorkerID)
+		refused.Restart()
+		fast.WaitConnected(fastAdmin, agent.WorkerID)
 	})
 
 	t.Run("Success - a heartbeat records the host's metrics", func(t *testing.T) {
@@ -116,20 +125,6 @@ func TestAgentConnection(t *testing.T) {
 			if _, ok := status.Metrics[key]; !ok {
 				t.Errorf("metric %q missing; got %v", key, status.Metrics)
 			}
-		}
-	})
-
-	t.Run("Success - deleting a live host stops its agent", func(t *testing.T) {
-		agent := stack.ConnectedAgent(admin, "stop-on-delete", harness.WithQueues("build"))
-
-		if err := admin.DeleteWorker(agent.WorkerID); err != nil {
-			t.Fatalf("delete worker: %v", err)
-		}
-		// Leaving the agent running would keep a deleted host claiming work.
-		agent.WaitExit(30 * time.Second)
-
-		if _, err := admin.GetWorker(agent.WorkerID); harness.StatusOf(err) != 404 {
-			t.Errorf("get deleted worker: err = %v, want 404", err)
 		}
 	})
 
@@ -159,18 +154,17 @@ func TestConnectionRejections(t *testing.T) {
 	admin := stack.AdminClient()
 
 	t.Run("Fail - an unknown worker id is refused", func(t *testing.T) {
-		raw, err := stack.DialRawWorker("0123456789abcdef01234567")
+		raw, err := stack.DialRawWorker("0123456789abcdef01234567", "lute_ws_x")
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
-		streamErr := raw.WaitForStreamEnd(15 * time.Second)
-		if !strings.Contains(streamErr.Error(), "not found") {
-			t.Errorf("stream ended with %v, want a not-found refusal", streamErr)
+		if code := status.Code(raw.WaitForStreamEnd(15 * time.Second)); code != codes.NotFound {
+			t.Errorf("stream ended with %v, want NotFound", code)
 		}
 	})
 
 	t.Run("Fail - a malformed worker id is refused", func(t *testing.T) {
-		raw, err := stack.DialRawWorker("not-a-worker-id")
+		raw, err := stack.DialRawWorker("not-a-worker-id", "lute_ws_x")
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -180,9 +174,9 @@ func TestConnectionRejections(t *testing.T) {
 	})
 
 	t.Run("Success - the newest stream for a worker is the one that gets work", func(t *testing.T) {
-		reg := stack.ClaimWorker(admin, "double-agent")
+		reg := stack.RegisterWorker("double-agent")
 
-		first, err := stack.DialRawWorker(reg.WorkerID)
+		first, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial first: %v", err)
 		}
@@ -191,7 +185,7 @@ func TestConnectionRejections(t *testing.T) {
 		}
 		stack.WaitConnected(admin, reg.WorkerID)
 
-		second, err := stack.DialRawWorker(reg.WorkerID)
+		second, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial second: %v", err)
 		}

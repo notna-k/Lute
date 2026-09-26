@@ -10,9 +10,28 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	pb "github.com/lute/proto"
 )
+
+// Register calls the Register RPC as an agent's first start does.
+func (s *Stack) Register(token, name string) (*pb.RegisterResponse, error) {
+	conn, err := grpc.NewClient(s.GRPCAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return pb.NewWorkerServiceClient(conn).Register(ctx, &pb.RegisterRequest{
+		Token:    token,
+		Name:     name,
+		Version:  "e2e",
+		Protocol: pb.Protocol,
+		Queues:   []string{"default"},
+	})
+}
 
 // RawWorker speaks the protocol directly, for what a correct agent never does: results
 // for builds it was not given or that core gave up on, or a second stream for one worker.
@@ -34,41 +53,46 @@ type RawWorker struct {
 	recvErr     error
 }
 
-// DialRawWorker sends the identifying first message but does not Register.
-func (s *Stack) DialRawWorker(workerID string) (*RawWorker, error) {
+// DialRawWorker opens a stream with workerID and secret as its credential; it sends nothing.
+func (s *Stack) DialRawWorker(workerID, secret string) (*RawWorker, error) {
 	s.t.Helper()
 
 	conn, err := grpc.NewClient(s.GRPCAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
-	stream, err := pb.NewWorkerServiceClient(conn).Connect(context.Background())
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+workerID+"."+secret)
+	stream, err := pb.NewWorkerServiceClient(conn).Connect(ctx)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
 	}
 	w := &RawWorker{t: s.t, WorkerID: workerID, conn: conn, stream: stream}
-	if err := stream.Send(&pb.WorkerMessage{WorkerId: workerID}); err != nil {
-		w.Close()
-		return nil, err
-	}
 	go w.receive()
 	s.t.Cleanup(w.Close)
 	return w, nil
 }
 
+// Register sends the registration every stream must open with.
 func (w *RawWorker) Register(concurrency int32, queues ...string) error {
 	return w.send(&pb.WorkerMessage{
-		WorkerId: w.WorkerID,
 		Payload: &pb.WorkerMessage_Register{
-			Register: &pb.WorkerRegistration{Queues: queues, Concurrency: concurrency},
+			Register: &pb.WorkerRegistration{Queues: queues, Concurrency: concurrency, Version: "e2e", Protocol: pb.Protocol},
+		},
+	})
+}
+
+// RegisterWithProtocol opens the stream claiming an arbitrary protocol version.
+func (w *RawWorker) RegisterWithProtocol(protocol int32) error {
+	return w.send(&pb.WorkerMessage{
+		Payload: &pb.WorkerMessage_Register{
+			Register: &pb.WorkerRegistration{Queues: []string{"default"}, Concurrency: 1, Version: "0.0.1", Protocol: protocol},
 		},
 	})
 }
 
 func (w *RawWorker) ReportResult(jobID string, success bool, errMsg string, elapsedMs int64) error {
 	return w.send(&pb.WorkerMessage{
-		WorkerId: w.WorkerID,
 		Payload: &pb.WorkerMessage_Result{
 			Result: &pb.JobResult{
 				JobId:     jobID,
@@ -78,6 +102,10 @@ func (w *RawWorker) ReportResult(jobID string, success bool, errMsg string, elap
 			},
 		},
 	})
+}
+
+func (w *RawWorker) ReportStatus(st *pb.WorkerStatus) error {
+	return w.send(&pb.WorkerMessage{Payload: &pb.WorkerMessage_Status{Status: st}})
 }
 
 func (w *RawWorker) Close() {

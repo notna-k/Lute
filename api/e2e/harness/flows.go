@@ -4,50 +4,52 @@ package harness
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 )
 
-var ipSeq atomic.Uint32
-
-// NextAgentIP hands out a distinct address per registration: core refuses a second live
-// worker at one address, so several workers must look like several machines.
-func NextAgentIP() string {
-	return fmt.Sprintf("10.90.%d.%d", ipSeq.Add(1)/250%250, ipSeq.Load()%250+1)
+// Registered is a worker enrolled through the Register RPC, as an agent would.
+type Registered struct {
+	WorkerID string
+	Secret   string
 }
 
-// ClaimWorker gets a claim code from the panel and registers a host with it.
-func (s *Stack) ClaimWorker(c *Client, name string) Registered {
+// RegisterWorker enrols name with the bootstrap token over gRPC, for a RawWorker to use.
+func (s *Stack) RegisterWorker(name string) Registered {
 	s.t.Helper()
-
-	code, err := c.CreateClaimCode()
-	if err != nil {
-		s.t.Fatalf("create claim code: %v", err)
-	}
-	reg, err := c.RegisterWorker(WorkerRegistration{
-		Name:      name,
-		Hostname:  name + ".e2e",
-		OS:        "linux",
-		Arch:      "amd64",
-		CPUs:      2,
-		IP:        NextAgentIP(),
-		Version:   "e2e",
-		ClaimCode: code.Code,
-	})
+	resp, err := s.Register(BootstrapToken, name)
 	if err != nil {
 		s.t.Fatalf("register worker %s: %v", name, err)
 	}
-	return reg
+	return Registered{WorkerID: resp.WorkerId, Secret: resp.Secret}
 }
 
-// ConnectedAgent onboards a host and starts its agent, returning once its stream is live.
+// ConnectedAgent starts an agent and returns once it has registered and its stream is live.
 func (s *Stack) ConnectedAgent(c *Client, name string, options ...AgentOption) *Agent {
 	s.t.Helper()
-
-	reg := s.ClaimWorker(c, name)
-	agent := s.StartAgent(reg.WorkerID, options...)
-	s.WaitConnected(c, reg.WorkerID)
+	agent := s.StartAgent(name, options...)
+	agent.WorkerID = s.WaitWorkerNamed(c, agent).ID
+	s.WaitConnected(c, agent.WorkerID)
 	return agent
+}
+
+// WaitWorkerNamed waits for the worker an agent registers under its name.
+func (s *Stack) WaitWorkerNamed(c *Client, agent *Agent) Worker {
+	s.t.Helper()
+	return Eventually(s.t, 30*time.Second, "a worker named "+agent.Name+" to register", func() (Worker, bool) {
+		if agent.Exited() {
+			s.t.Fatalf("agent %s exited before registering (%v):\n%s", agent.Name, agent.ExitError(), agent.Stderr())
+		}
+		workers, err := c.ListWorkers()
+		if err != nil {
+			return Worker{}, false
+		}
+		for _, w := range workers {
+			if w.Name == agent.Name {
+				return w, true
+			}
+		}
+		return Worker{}, false
+	})
 }
 
 func (s *Stack) WaitConnected(c *Client, workerID string) ConnectedWorker {

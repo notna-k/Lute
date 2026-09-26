@@ -12,7 +12,10 @@ import (
 )
 
 // TestImages are pulled once up front, so no test pays for a pull inside its timeout.
-var TestImages = []string{"bash:5", "alpine:3"}
+var TestImages = []string{"bash:5", "alpine:3", GitImage}
+
+// GitImage is the agent's default clone image, pulled up front like the job images.
+const GitImage = "alpine/git:2.52.0"
 
 func DockerAvailable() bool {
 	return exec.Command("docker", "info").Run() == nil
@@ -74,6 +77,28 @@ func ReapJobContainers(before ContainerSet) int {
 		}
 	}
 	return removed
+}
+
+// JobResources lists the containers, volumes and networks the engine holds for a job.
+func JobResources(jobID string) []string {
+	filter := "label=lute.job=" + jobID
+	var out []string
+	for _, kind := range [][]string{
+		{"ps", "-aq", "--filter", filter},
+		{"volume", "ls", "-q", "--filter", filter},
+		{"network", "ls", "-q", "--filter", filter},
+	} {
+		got, err := docker(kind...)
+		if err != nil {
+			continue
+		}
+		for line := range strings.SplitSeq(got, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				out = append(out, kind[0]+":"+line)
+			}
+		}
+	}
+	return out
 }
 
 func docker(args ...string) (string, error) {

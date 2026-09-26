@@ -235,13 +235,21 @@ func (c *Client) SetRefreshCookie(value string) {
 	c.http.Jar.SetCookies(u, []*http.Cookie{{Name: "lute_refresh", Value: value, Path: "/api/v1/auth"}})
 }
 
-func (c *Client) CreateClaimCode() (ClaimCode, error) {
-	return call[ClaimCode](c, http.MethodPost, "/api/v1/workers/claim-code", nil)
+func (c *Client) CreateToken(name string) (RegistrationToken, error) {
+	return call[RegistrationToken](c, http.MethodPost, "/api/v1/workers/tokens", map[string]string{"name": name})
 }
 
-// RegisterWorker is the unauthenticated call an agent makes with its claim code.
-func (c *Client) RegisterWorker(req WorkerRegistration) (Registered, error) {
-	return call[Registered](c, http.MethodPost, "/api/public/v1/workers/bootstrap/register", req)
+func (c *Client) ListTokens() ([]RegistrationToken, error) {
+	return callField[[]RegistrationToken](c, http.MethodGet, "/api/v1/workers/tokens", "tokens", nil)
+}
+
+func (c *Client) RevokeToken(id string) error {
+	_, _, err := c.request(http.MethodDelete, "/api/v1/workers/tokens/"+id, nil)
+	return err
+}
+
+func (c *Client) InstallInfo() (InstallInfo, error) {
+	return call[InstallInfo](c, http.MethodGet, "/api/v1/workers/install", nil)
 }
 
 func (c *Client) ListWorkers(labelFilters ...string) ([]Worker, error) {
@@ -273,9 +281,9 @@ func (c *Client) PatchLabels(id string, labels map[string]string) (Worker, error
 		map[string]any{"labels": labels})
 }
 
-func (c *Client) DeleteWorker(id string) error {
-	_, _, err := c.request(http.MethodDelete, "/api/v1/workers/"+id, nil)
-	return err
+// DeleteWorker returns "deleting" for a connected worker, which drains first, and "deleted" otherwise.
+func (c *Client) DeleteWorker(id string) (string, error) {
+	return callField[string](c, http.MethodDelete, "/api/v1/workers/"+id, "status", nil)
 }
 
 func (c *Client) ReEnableWorker(id string) (Worker, error) {

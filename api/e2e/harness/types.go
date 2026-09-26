@@ -19,27 +19,26 @@ type User struct {
 	DisplayName string `json:"display_name"`
 }
 
-type ClaimCode struct {
-	Code      string `json:"code"`
-	ExpiresAt string `json:"expires_at"`
+type RegistrationToken struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"`
+	Token      string `json:"token"` // only in the create response
+	LastUsedAt string `json:"last_used_at"`
+	RevokedAt  string `json:"revoked_at"`
 }
 
-type WorkerRegistration struct {
-	Name      string            `json:"name"`
-	Hostname  string            `json:"hostname,omitempty"`
-	OS        string            `json:"os,omitempty"`
-	Arch      string            `json:"arch,omitempty"`
-	CPUs      int               `json:"cpus,omitempty"`
-	IP        string            `json:"ip,omitempty"`
-	Version   string            `json:"version,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
-	ClaimCode string            `json:"claim_code,omitempty"`
+type InstallInfo struct {
+	Server string `json:"server"`
+	Image  string `json:"image"`
 }
 
-type Registered struct {
-	WorkerID    string `json:"worker_id"`
-	GRPCAddress string `json:"grpc_address"`
-	Message     string `json:"message"`
+type Engine struct {
+	Kind        string `json:"kind"`
+	Rootless    bool   `json:"rootless"`
+	MemoryLimit bool   `json:"memory_limit"`
+	CPULimit    bool   `json:"cpu_limit"`
+	PidsLimit   bool   `json:"pids_limit"`
 }
 
 type Worker struct {
@@ -48,8 +47,11 @@ type Worker struct {
 	Name         string            `json:"name"`
 	Description  string            `json:"description"`
 	Status       string            `json:"status"`
-	AgentIP      string            `json:"agent_ip"`
 	AgentVersion string            `json:"agent_version"`
+	Protocol     int32             `json:"protocol"`
+	Engine       *Engine           `json:"engine"`
+	Outdated     bool              `json:"outdated"`
+	Metadata     map[string]any    `json:"metadata"`
 	Labels       map[string]string `json:"labels"`
 	Metrics      map[string]any    `json:"metrics"`
 	LastSeen     string            `json:"last_seen"`
@@ -67,7 +69,6 @@ type WorkerLiveStatus struct {
 	WorkerID     string         `json:"worker_id"`
 	Name         string         `json:"name"`
 	Status       string         `json:"status"`
-	AgentIP      string         `json:"agent_ip"`
 	AgentVersion string         `json:"agent_version"`
 	LastSeen     string         `json:"last_seen"`
 	Metrics      map[string]any `json:"metrics"`

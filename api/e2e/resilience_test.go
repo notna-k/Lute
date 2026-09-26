@@ -191,8 +191,8 @@ func TestMisbehavingHosts(t *testing.T) {
 		stack := newStack(t)
 		admin := stack.AdminClient()
 
-		reg := stack.ClaimWorker(admin, "liar-host")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("liar-host")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -219,8 +219,8 @@ func TestMisbehavingHosts(t *testing.T) {
 		stack := newStack(t)
 		admin := stack.AdminClient()
 
-		reg := stack.ClaimWorker(admin, "ghost-reporter")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("ghost-reporter")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -242,8 +242,8 @@ func TestMisbehavingHosts(t *testing.T) {
 		stack := newStack(t, harness.WithLeaseGrace(time.Second, time.Second))
 		admin := stack.AdminClient()
 
-		reg := stack.ClaimWorker(admin, "slow-reporter")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("slow-reporter")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -308,8 +308,8 @@ func TestDrainingHost(t *testing.T) {
 	stack := newStack(t)
 	admin := stack.AdminClient()
 
-	reg := stack.ClaimWorker(admin, "draining-host")
-	raw, err := stack.DialRawWorker(reg.WorkerID)
+	reg := stack.RegisterWorker("draining-host")
+	raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestDrainingHost(t *testing.T) {
 	}
 	stack.WaitConnected(admin, reg.WorkerID)
 
-	if err := admin.DeleteWorker(reg.WorkerID); err != nil {
+	if _, err := admin.DeleteWorker(reg.WorkerID); err != nil {
 		t.Fatalf("delete worker: %v", err)
 	}
 	harness.WaitFor(t, 30*time.Second, "the host to be told to stand down", func() bool {

@@ -22,6 +22,8 @@ const (
 	AdminEmail    = "admin@e2e.test"
 	AdminPassword = "e2e-admin-password"
 	jwtSecret     = "e2e-jwt-secret-long-enough-for-hs256-signing"
+	// BootstrapToken is seeded as a registration token; agents enrol with it unless told otherwise.
+	BootstrapToken = "lute_rt_e2e_bootstrap_token"
 )
 
 // Stack is one Lute: its own database, core in this process, and the agents a test starts.
@@ -127,8 +129,8 @@ func (s *Stack) baseConfig() *config.Config {
 			AdminEmail:    AdminEmail,
 			AdminPassword: AdminPassword,
 		},
-		WorkerBinary: config.WorkerBinaryConfig{Dir: WorkerBinDir()},
-		Metrics:      config.MetricsConfig{SnapshotInterval: time.Hour},
+		Workers: config.WorkersConfig{BootstrapToken: BootstrapToken},
+		Metrics: config.MetricsConfig{SnapshotInterval: time.Hour},
 		Queue: config.QueueConfig{
 			PollInterval: 200 * time.Millisecond,
 			LeaseGrace:   2 * time.Second,
@@ -261,14 +263,15 @@ func artifactDir(t *testing.T) string {
 	if root == "" {
 		root = "_artifacts"
 	}
-	dir := filepath.Join(root, safeName(t.Name()))
+	dir := filepath.Join(root, SafeName(t.Name()))
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("create artifact dir: %v", err)
 	}
 	return dir
 }
 
-func safeName(name string) string {
+// SafeName makes a test name usable as a file or resource name.
+func SafeName(name string) string {
 	out := make([]rune, 0, len(name))
 	for _, r := range name {
 		switch {

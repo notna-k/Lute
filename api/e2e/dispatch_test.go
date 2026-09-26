@@ -157,8 +157,8 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			t.Fatalf("enqueue high: %v", err)
 		}
 
-		reg := stack.ClaimWorker(admin, "priority-host")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("priority-host")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -211,8 +211,8 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			t.Fatalf("cancel: %v", err)
 		}
 
-		reg := stack.ClaimWorker(admin, "cancel-host")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("cancel-host")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
