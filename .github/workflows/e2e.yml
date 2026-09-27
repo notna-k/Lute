@@ -9,8 +9,6 @@ on:
       - 'ui/**'
       - 'docs/**'
       - '**.md'
-  push:
-    branches: [master]
   # Nightly, to catch flakiness and image drift that a green PR would not show.
   schedule:
     - cron: '0 4 * * *'
