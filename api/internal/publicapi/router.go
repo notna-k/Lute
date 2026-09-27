@@ -8,10 +8,8 @@ import (
 	"github.com/lute/api/internal/worker"
 )
 
-// SetupPublicRoutes mounts /api/public/v1: worker bootstrap is open, everything else needs an API key.
+// SetupPublicRoutes mounts /api/public/v1; every route needs an API key.
 func SetupPublicRoutes(r *gin.RouterGroup, keyRepo *repos.APIKeyRepository, runs *RunsHandler, wh *worker.WorkerHandler) {
-	worker.MountBootstrap(r, wh)
-
 	authed := r.Group("")
 	authed.Use(middleware.APIKeyAuthMiddleware(keyRepo))
 

@@ -1,4 +1,4 @@
-// Package joblog names per-job log files and reads them in pages from either end.
+// Package joblog locates per-job log files and reads them in pages from either end.
 package joblog
 
 import (
@@ -15,18 +15,26 @@ const (
 	readChunkSize      = 256 * 1024
 )
 
-// FileName is the name of a job's log file inside the job logs directory.
+// FileName is a job's log file relative to the data dir.
 func FileName(jobID string) string {
-	return "job-" + jobID + ".log"
+	return filepath.Join("jobs", jobID, "log")
 }
 
-// Path is the job's log file in dir; it rejects ids that would place the file elsewhere.
-func Path(dir, jobID string) (string, error) {
-	name := FileName(jobID)
-	if jobID == "" || filepath.Base(name) != name {
+// Dir is the job's directory under the data dir root; it rejects ids that would place it elsewhere.
+func Dir(root, jobID string) (string, error) {
+	if jobID == "" || jobID == "." || jobID == ".." || filepath.Base(jobID) != jobID {
 		return "", fmt.Errorf("invalid job id %q", jobID)
 	}
-	return filepath.Join(dir, name), nil
+	return filepath.Join(root, "jobs", jobID), nil
+}
+
+// Path is the job's log file under the data dir root.
+func Path(root, jobID string) (string, error) {
+	dir, err := Dir(root, jobID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "log"), nil
 }
 
 // Result is the outcome of reading a chunk of a job log file.

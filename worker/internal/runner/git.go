@@ -1,16 +1,14 @@
 package runner
 
 import (
-	"context"
 	"fmt"
 	"net/url"
-	"os"
-	"os/exec"
 	"strings"
 )
 
+// validateGitHubRepo accepts an empty URL or an https github.com one.
 func validateGitHubRepo(repoURL string) error {
-	if strings.TrimSpace(repoURL) == "" {
+	if repoURL == "" {
 		return nil
 	}
 	u, err := url.Parse(repoURL)
@@ -27,13 +25,11 @@ func validateGitHubRepo(repoURL string) error {
 	return nil
 }
 
-func cloneRepo(ctx context.Context, dir, repoURL string) error {
-	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", repoURL, ".")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
+// cloneScript clones $1 into the workspace and prints the commit as its last line.
+const cloneScript = `git clone --depth 1 "$1" ` + workspaceMount + ` && git -C ` + workspaceMount + ` rev-parse HEAD`
+
+// lastLine is the last non-empty line of s.
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }

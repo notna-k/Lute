@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusText } from '@/components/ui/Status';
 import { relativeTime, toEpochMs } from '@/lib/format';
 import { metric, workerState } from './utils';
+import { EngineBadge, OutdatedBadge } from './WorkerBadges';
 
 export interface WorkerListProps {
   workers: Worker[];
@@ -67,9 +68,12 @@ export function WorkerList({
           return (
             <RowLink key={w.id} to={`/workers/${w.id}`}>
               <Td>
-                <Link to={`/workers/${w.id}`} className='font-mono font-medium hover:underline'>
-                  {w.name}
-                </Link>
+                <span className='inline-flex items-center gap-2'>
+                  <Link to={`/workers/${w.id}`} className='font-mono font-medium hover:underline'>
+                    {w.name}
+                  </Link>
+                  <EngineBadge worker={w} />
+                </span>
                 {w.description && <p className='row-subtext max-w-[40ch]'>{w.description}</p>}
               </Td>
               <Td>
@@ -90,7 +94,12 @@ export function WorkerList({
                 <LabelChips labels={w.labels} emptyText='none' />
               </Td>
               <Td className='text-fg-muted tabular-nums'>{seen ? relativeTime(seen) : '—'}</Td>
-              <Td className='font-mono text-fg-subtle'>{w.agent_version || '—'}</Td>
+              <Td className='font-mono text-fg-subtle'>
+                <span className='inline-flex items-center gap-2'>
+                  {w.agent_version || '—'}
+                  <OutdatedBadge worker={w} />
+                </span>
+              </Td>
               <Td className='text-right'>
                 <span className='inline-flex items-center gap-1.5'>
                   {w.status === 'dead' && onReEnable && (

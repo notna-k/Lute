@@ -1,12 +1,10 @@
 package runner
 
 import (
+	"bytes"
 	"context"
-	"io"
 	"log/slog"
 	"os"
-
-	"github.com/lute/worker/internal/joblog"
 )
 
 // Values of the "source" attribute on job log lines.
@@ -22,17 +20,9 @@ func logSystem(jobLogger *slog.Logger, level slog.Level, msg string, args ...any
 	jobLogger.Log(context.Background(), level, msg, a...)
 }
 
-// openJobLog returns a JSON logger writing to the job's log file in logDir, or discarding when logDir is empty.
-func openJobLog(logDir, jobID string) (jobLogger *slog.Logger, closeLog func(), err error) {
-	opts := &slog.HandlerOptions{Level: slog.LevelDebug}
-	if logDir == "" {
-		return slog.New(slog.NewJSONHandler(io.Discard, opts)), func() {}, nil
-	}
-	path, err := joblog.Path(logDir, jobID)
-	if err != nil {
-		return nil, nil, err
-	}
-	f, err := os.Create(path)
+// openJobLog returns a JSON logger writing to path.
+func openJobLog(path string) (jobLogger *slog.Logger, closeLog func(), err error) {
+	f, err := os.Create(path) //nolint:gosec // path is built by joblog.Path from a validated id
 	if err != nil {
 		return nil, nil, err
 	}
@@ -40,5 +30,34 @@ func openJobLog(logDir, jobID string) (jobLogger *slog.Logger, closeLog func(), 
 		_ = f.Sync()
 		_ = f.Close()
 	}
-	return slog.New(slog.NewJSONHandler(f, opts)), closeLog, nil
+	return slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})), closeLog, nil
+}
+
+// lineLogWriter emits one job log record per line written to it.
+type lineLogWriter struct {
+	jobLogger *slog.Logger
+	source    string
+	buf       []byte
+}
+
+func (w *lineLogWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := string(w.buf[:i])
+		w.buf = w.buf[i+1:]
+		w.jobLogger.Info(line, slog.String("source", w.source))
+	}
+	return len(p), nil
+}
+
+func (w *lineLogWriter) flush() {
+	if len(w.buf) == 0 {
+		return
+	}
+	w.jobLogger.Info(string(w.buf), slog.String("source", w.source))
+	w.buf = nil
 }

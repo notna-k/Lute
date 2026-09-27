@@ -25,3 +25,4 @@ worker/bin
 .cursor
 .DS_Store
 *.log
+api/e2e/_artifacts

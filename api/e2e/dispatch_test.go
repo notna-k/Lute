@@ -157,8 +157,8 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			t.Fatalf("enqueue high: %v", err)
 		}
 
-		reg := stack.ClaimWorker(admin, "priority-host")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("priority-host")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -211,8 +211,8 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			t.Fatalf("cancel: %v", err)
 		}
 
-		reg := stack.ClaimWorker(admin, "cancel-host")
-		raw, err := stack.DialRawWorker(reg.WorkerID)
+		reg := stack.RegisterWorker("cancel-host")
+		raw, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
@@ -285,4 +285,93 @@ func TestDispatchWaitsForACapableHost(t *testing.T) {
 			return busy[first.WorkerID] && busy[second.WorkerID]
 		})
 	})
+}
+
+// TestCapacityAcrossReconnects: a job that outlives its stream still counts against the
+// worker's capacity on the next one, and its late result frees exactly one slot.
+func TestCapacityAcrossReconnects(t *testing.T) {
+	stack := newBareStack(t)
+	admin := stack.AdminClient()
+	reg := stack.RegisterWorker("reconnecting-host")
+
+	first, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := first.Register(1, "build"); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	enqueued, err := admin.Enqueue(harness.EnqueueRequest{Queue: "build", Type: "noop", TimeoutSec: 300})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	first.WaitForAssignment(30 * time.Second)
+	first.Close()
+	stack.WaitDisconnected(admin, reg.WorkerID)
+
+	second, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
+	if err != nil {
+		t.Fatalf("dial again: %v", err)
+	}
+	if err := second.RegisterRunning(1, "build", enqueued.JobID); err != nil {
+		t.Fatalf("register again: %v", err)
+	}
+	active := func() int32 {
+		workers, _ := admin.ConnectedWorkers()
+		for _, w := range workers {
+			if w.WorkerID == reg.WorkerID {
+				return w.ActiveJobs
+			}
+		}
+		return -99
+	}
+	harness.WaitFor(t, 15*time.Second, "the running job to count on the new stream", func() bool { return active() == 1 })
+
+	// A full worker gets nothing more.
+	queued, err := admin.Enqueue(harness.EnqueueRequest{Queue: "build", Type: "noop"})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	harness.Never(t, 2*time.Second, "a second job on a worker at capacity", func() bool {
+		return len(second.Assignments()) > 0
+	})
+
+	if err := second.ReportResult(enqueued.JobID, true, "", 10); err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	a := second.WaitForAssignment(15 * time.Second)
+	if a.JobId != queued.JobID {
+		t.Errorf("assigned %s, want %s", a.JobId, queued.JobID)
+	}
+	// A result for a job this stream never counted must not free a slot it does not have.
+	if err := second.ReportResult("00000000-0000-0000-0000-000000000000", true, "", 1); err != nil {
+		t.Fatalf("report stray: %v", err)
+	}
+	harness.Never(t, time.Second, "capacity to go below zero", func() bool { return active() < 1 })
+}
+
+// TestDrainingAgentReconnects: an agent that reconnects mid-drain gets no new work on the
+// new stream, even with spare capacity, as it would only refuse it.
+func TestDrainingAgentReconnects(t *testing.T) {
+	stack := newBareStack(t)
+	admin := stack.AdminClient()
+	reg := stack.RegisterWorker("draining-host")
+
+	queued, err := admin.Enqueue(harness.EnqueueRequest{Queue: "build", Type: "noop"})
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	w, err := stack.DialRawWorker(reg.WorkerID, reg.Secret)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := w.RegisterDraining(2, "build", "00000000-0000-0000-0000-000000000001"); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	harness.Never(t, 2*time.Second, "a job on a draining worker", func() bool {
+		return len(w.Assignments()) > 0
+	})
+	if job, err := admin.GetJob(queued.JobID); err != nil || job.Status != "pending" {
+		t.Errorf("job = %+v (%v), want it still pending", job, err)
+	}
 }

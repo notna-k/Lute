@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/lute/api/internal/config"
+	"github.com/lute/api/internal/db/enums"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
@@ -37,6 +38,7 @@ type Server struct {
 	pb.UnimplementedWorkerServiceServer
 	config                 *config.Config
 	workerRepo             *repos.WorkerRepository
+	tokenRepo              *repos.RegistrationTokenRepository
 	jobExecRepo            *repos.JobExecutionRepository
 	queueEngine            *queue.Engine
 	statsAgg               *queue.Stats
@@ -51,6 +53,7 @@ type Server struct {
 func NewServer(
 	cfg *config.Config,
 	workerRepo *repos.WorkerRepository,
+	tokenRepo *repos.RegistrationTokenRepository,
 	jobExecRepo *repos.JobExecutionRepository,
 	queueEngine *queue.Engine,
 	statsAgg *queue.Stats,
@@ -59,6 +62,7 @@ func NewServer(
 	return &Server{
 		config:      cfg,
 		workerRepo:  workerRepo,
+		tokenRepo:   tokenRepo,
 		jobExecRepo: jobExecRepo,
 		queueEngine: queueEngine,
 		statsAgg:    statsAgg,
@@ -136,56 +140,112 @@ func (s *Server) Stop(ctx context.Context) {
 	}
 }
 
-// Connect serves a worker's stream; its first message must carry worker_id.
+// Connect serves an authenticated worker's stream; its first message must be a WorkerRegistration.
 func (s *Server) Connect(stream pb.WorkerService_ConnectServer) error {
+	ctx := stream.Context()
+	w, err := s.authenticate(ctx)
+	if err != nil {
+		return err
+	}
+	workerID := w.ID.Hex()
+
 	first, err := stream.Recv()
 	if err != nil {
-		return fmt.Errorf("connect: failed to receive initial message: %w", err)
+		return fmt.Errorf("connect: receive registration: %w", err)
 	}
-
-	workerID := first.GetWorkerId()
-	if workerID == "" {
-		return fmt.Errorf("connect: worker_id is required in the first message")
+	reg := first.GetRegister()
+	if reg == nil {
+		return status.Error(codes.InvalidArgument, "the first message must be a registration")
 	}
-
-	wid, err := ParseWorkerID(workerID)
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
+	if err := s.checkProtocol(reg.GetProtocol()); err != nil {
+		return err
 	}
-
-	w, err := s.workerRepo.GetByID(stream.Context(), wid)
-	if err != nil {
-		if errors.Is(err, repos.ErrNotFound) {
-			return status.Errorf(codes.NotFound, "worker %s not found (it may have been deleted)", workerID)
-		}
-		return fmt.Errorf("connect: worker %s lookup failed: %w", workerID, err)
+	// Look again: the worker may have been deleted while core waited for the registration.
+	if w, err = s.stillExists(ctx, w.ID); err != nil {
+		return err
 	}
-	if w.Status == "dead" {
-		return status.Errorf(codes.FailedPrecondition, "worker %s is dead; set status to pending to re-enable", workerID)
+	if w.Status == enums.WorkerDead {
+		return status.Errorf(codes.FailedPrecondition, "worker %s is dead; re-enable it in the panel", workerID)
 	}
-
-	if w.Status == "pending" {
-		if err := s.workerRepo.UpdateStatus(stream.Context(), wid, "registered"); err != nil {
+	if w.Status == enums.WorkerPending {
+		if err := s.workerRepo.UpdateStatus(ctx, w.ID, enums.WorkerRegistered); err != nil {
 			slog.Error("mark worker registered", "worker_id", workerID, "err", err)
-		} else {
-			w.Status = "registered"
 		}
 	}
+	if err := s.workerRepo.UpdateAgentInfo(ctx, w.ID, reg.GetVersion(), reg.GetProtocol(), engineOf(reg.GetEngine()), peerIP(ctx)); err != nil {
+		slog.Error("record agent info", "worker_id", workerID, "err", err)
+	}
 
-	slog.Info("worker connected", "worker_id", workerID)
-
-	conn := s.ConnMgr.Register(workerID, stream)
+	// Ready the connection in full before dispatch can see it.
+	conn := s.ConnMgr.NewConnection(workerID, stream)
 	conn.Labels = w.Labels
+	conn.setCapacity(reg.GetQueues(), reg.GetConcurrency())
+	conn.adoptRunning(reg.GetRunningJobs())
+	if reg.GetDraining() {
+		conn.markDraining()
+	}
+	s.ConnMgr.Publish(conn)
+	// Read the row after publishing: a delete either shows here, or finds this connection
+	// when it looks for one after marking the worker deleting.
+	current, err := s.stillExists(ctx, w.ID)
+	if err != nil {
+		s.ConnMgr.Unregister(conn)
+		return err
+	}
+	if current.Status == enums.WorkerDeleting {
+		conn.Shutdown()
+	}
+	slog.Info("worker connected", "worker_id", workerID, "queues", reg.GetQueues(), "concurrency", reg.GetConcurrency(), "version", reg.GetVersion())
 	if s.OnConnectionRegistered != nil {
 		s.OnConnectionRegistered()
 	}
 	defer func() {
-		s.ConnMgr.Unregister(workerID)
+		s.ConnMgr.Unregister(conn)
 		slog.Info("worker disconnected", "worker_id", workerID)
 	}()
 
-	conn.Run(s.handleJobResult, s.handleWorkerRegistration)
+	for _, q := range reg.GetQueues() {
+		s.DispatchQueue(context.Background(), q)
+	}
+	conn.Run(s.handleJobResult, s.handleWorkerStatus)
 	return nil
+}
+
+func (s *Server) stillExists(ctx context.Context, wid id.ID) (*models.Worker, error) {
+	w, err := s.workerRepo.GetByID(ctx, wid)
+	if errors.Is(err, repos.ErrNotFound) {
+		return nil, status.Errorf(codes.NotFound, "worker %s was deleted", wid.Hex())
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "look up worker: %v", err)
+	}
+	return w, nil
+}
+
+// handleWorkerStatus forgets a deleted worker once it reports its last job done.
+func (s *Server) handleWorkerStatus(conn *WorkerConnection, st *pb.WorkerStatus) {
+	if !st.GetDrained() {
+		return
+	}
+	ctx := context.Background()
+	wid, err := ParseWorkerID(conn.WorkerID)
+	if err != nil {
+		return
+	}
+	w, err := s.workerRepo.GetByID(ctx, wid)
+	if errors.Is(err, repos.ErrNotFound) {
+		conn.Close()
+		return
+	}
+	if err != nil || w.Status != enums.WorkerDeleting {
+		return
+	}
+	if err := s.workerRepo.Delete(ctx, wid); err != nil {
+		slog.Error("delete drained worker", "worker_id", conn.WorkerID, "err", err)
+		return
+	}
+	slog.Info("deleted drained worker", "worker_id", conn.WorkerID, "name", w.Name)
+	conn.Close()
 }
 
 func (s *Server) handleJobResult(workerID string, result *pb.JobResult) {
@@ -317,14 +377,6 @@ func (s *Server) persistExecution(ctx context.Context, workerID string, result *
 
 	if err := s.jobExecRepo.Upsert(ctx, exec); err != nil {
 		slog.Error("persist job execution", "job_id", result.JobId, "err", err)
-	}
-}
-
-func (s *Server) handleWorkerRegistration(workerID string, reg *pb.WorkerRegistration) {
-	slog.Info("worker registered", "worker_id", workerID, "queues", reg.Queues, "concurrency", reg.Concurrency)
-	ctx := context.Background()
-	for _, q := range reg.Queues {
-		s.DispatchQueue(ctx, q)
 	}
 }
 

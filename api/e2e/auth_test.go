@@ -74,8 +74,8 @@ func TestSignInFlow(t *testing.T) {
 		if _, err := c.ListWorkers(); harness.StatusOf(err) != http.StatusUnauthorized {
 			t.Errorf("GET /workers anonymously: err = %v, want 401", err)
 		}
-		if _, err := c.CreateClaimCode(); harness.StatusOf(err) != http.StatusUnauthorized {
-			t.Errorf("POST /workers/claim-code anonymously: err = %v, want 401", err)
+		if _, err := c.CreateToken("anonymous"); harness.StatusOf(err) != http.StatusUnauthorized {
+			t.Errorf("POST /workers/tokens anonymously: err = %v, want 401", err)
 		}
 	})
 

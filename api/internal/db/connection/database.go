@@ -42,7 +42,8 @@ func Open(ctx context.Context, dsn string) (*Database, error) {
 		return nil, fmt.Errorf("POSTGRES_DSN is required")
 	}
 	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		NowFunc: func() time.Time { return time.Now().UTC() },
+		NowFunc:        func() time.Time { return time.Now().UTC() },
+		TranslateError: true, // unique violations surface as gorm.ErrDuplicatedKey
 	})
 	if err != nil {
 		return nil, err

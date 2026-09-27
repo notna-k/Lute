@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-// workerBinaryName matches `make worker-build-linux`, so core indexes it as in production.
+// workerBinaryName matches `make worker-build-linux`.
 var workerBinaryName = fmt.Sprintf("lute-worker-%s-%s", runtime.GOOS, runtime.GOARCH)
 
 var (
@@ -45,22 +45,26 @@ func BuildWorker() error {
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("build worker: %w: %s", err, strings.TrimSpace(string(out)))
-			return
-		}
-		versionFile := filepath.Join(WorkerBinDir(), "VERSION")
-		if _, err := os.Stat(versionFile); err != nil {
-			buildErr = os.WriteFile(versionFile, []byte("e2e\n"), 0o600)
 		}
 	})
 	return buildErr
 }
 
+// Rootless reports that DOCKER_HOST points at a rootless engine (LUTE_E2E_ROOTLESS=1), so
+// agents run without the rootful opt-in, as on a real host.
+func Rootless() bool { return os.Getenv("LUTE_E2E_ROOTLESS") == "1" }
+
+// Agent is one lute-worker process. It enrols itself from its environment, as the
+// container does; WorkerID is known once it has connected.
 type Agent struct {
 	t        *testing.T
+	stack    *Stack
+	Name     string
 	WorkerID string
+	DataDir  string
 	Queues   []string
-	LogsDir  string
 
+	vars   []string
 	cmd    *exec.Cmd
 	stderr *syncBuffer
 	exited chan struct{}
@@ -73,7 +77,8 @@ type AgentOption func(*agentOpts)
 type agentOpts struct {
 	queues      []string
 	concurrency int
-	logsDir     string
+	dataDir     string
+	vars        map[string]string
 }
 
 func WithQueues(queues ...string) AgentOption {
@@ -84,43 +89,66 @@ func WithConcurrency(n int) AgentOption {
 	return func(o *agentOpts) { o.concurrency = n }
 }
 
-func (s *Stack) StartAgent(workerID string, options ...AgentOption) *Agent {
-	s.t.Helper()
+// WithDataDir reuses a data dir, e.g. to start an agent that is already registered.
+func WithDataDir(dir string) AgentOption {
+	return func(o *agentOpts) { o.dataDir = dir }
+}
 
+// WithVar sets, or with an empty value removes, a LUTE_* variable of the agent.
+func WithVar(key, value string) AgentOption {
+	return func(o *agentOpts) { o.vars[key] = value }
+}
+
+// StartAgent runs lute-worker named name with the stack's bootstrap token; it does not wait.
+func (s *Stack) StartAgent(name string, options ...AgentOption) *Agent {
+	s.t.Helper()
 	if err := BuildWorker(); err != nil {
 		s.t.Fatal(err)
 	}
-
-	opts := &agentOpts{queues: []string{"default"}, concurrency: 1}
+	opts := &agentOpts{queues: []string{"default"}, concurrency: 1, vars: map[string]string{}}
 	for _, o := range options {
 		o(opts)
 	}
-	if opts.logsDir == "" {
-		opts.logsDir = s.t.TempDir()
+	if opts.dataDir == "" {
+		opts.dataDir = s.t.TempDir()
 	}
 
-	a := &Agent{
-		t:        s.t,
-		WorkerID: workerID,
-		Queues:   opts.queues,
-		LogsDir:  opts.logsDir,
-		stderr:   &syncBuffer{},
-		exited:   make(chan struct{}),
+	vars := map[string]string{
+		"LUTE_SERVER":      s.GRPCAddr(),
+		"LUTE_TOKEN":       BootstrapToken,
+		"LUTE_NAME":        name,
+		"LUTE_DATA_DIR":    opts.dataDir,
+		"LUTE_QUEUES":      strings.Join(opts.queues, ","),
+		"LUTE_CONCURRENCY": strconv.Itoa(opts.concurrency),
+	}
+	if !Rootless() {
+		vars["LUTE_ALLOW_ROOTFUL"] = "1" // CI runners and dev machines run rootful Docker
+	}
+	for k, v := range opts.vars {
+		vars[k] = v
+	}
+	all := os.Environ()
+	for k, v := range vars {
+		if v != "" {
+			all = append(all, k+"="+v)
+		}
 	}
 
-	a.cmd = exec.Command(WorkerBinaryPath(), //nolint:gosec // path is the binary we just built
-		"run",
-		"--server", s.GRPCAddr(),
-		"--worker-id", workerID,
-		"--queues", strings.Join(opts.queues, ","),
-		"--concurrency", strconv.Itoa(opts.concurrency),
-		"--job-logs-dir", opts.logsDir,
-	)
-	a.cmd.Env = os.Environ()
+	a := &Agent{t: s.t, stack: s, Name: name, DataDir: opts.dataDir, Queues: opts.queues, vars: all}
+	a.start()
+	return a
+}
+
+func (a *Agent) start() {
+	s := a.stack
+	a.stderr = &syncBuffer{}
+	a.exited = make(chan struct{})
+	a.cmd = exec.Command(WorkerBinaryPath(), "run") //nolint:gosec // path is the binary we just built
+	a.cmd.Env = a.vars
 	// Own process group, so Kill takes down the agent and anything it spawned.
 	a.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	artifact := filepath.Join(s.ArtifactDir, "agent-"+shortID(workerID)+".log")
+	artifact := filepath.Join(s.ArtifactDir, fmt.Sprintf("agent-%s-%d.log", SafeName(a.Name), len(s.agents)))
 	if f, err := os.Create(artifact); err == nil { //nolint:gosec // derived from the test name
 		a.stderr.tee = f
 		s.t.Cleanup(func() { _ = f.Close() })
@@ -129,16 +157,25 @@ func (s *Stack) StartAgent(workerID string, options ...AgentOption) *Agent {
 	a.cmd.Stderr = a.stderr
 
 	if err := a.cmd.Start(); err != nil {
-		s.t.Fatalf("start agent %s: %v", workerID, err)
+		s.t.Fatalf("start agent %s: %v", a.Name, err)
 	}
 	go func() {
 		a.err = a.cmd.Wait()
 		close(a.exited)
 	}()
-
 	s.agents = append(s.agents, a)
 	s.t.Cleanup(a.stopQuietly)
-	return a
+}
+
+// Restart starts the same agent again, with the same data dir and so the same identity.
+func (a *Agent) Restart() *Agent {
+	a.t.Helper()
+	if !a.Exited() {
+		a.t.Fatalf("agent %s is still running", a.Name)
+	}
+	again := &Agent{t: a.t, stack: a.stack, Name: a.Name, WorkerID: a.WorkerID, DataDir: a.DataDir, Queues: a.Queues, vars: a.vars}
+	again.start()
+	return again
 }
 
 // Kill takes the agent down without warning, like a crashed build host.
@@ -148,12 +185,15 @@ func (a *Agent) Kill() {
 	a.WaitExit(10 * time.Second)
 }
 
+// Terminate sends SIGTERM, as `docker stop` does; it does not wait.
+func (a *Agent) Terminate() { a.signal(syscall.SIGTERM) }
+
 func (a *Agent) WaitExit(timeout time.Duration) {
 	a.t.Helper()
 	select {
 	case <-a.exited:
 	case <-time.After(timeout):
-		a.t.Fatalf("agent %s still running after %s\nstderr:\n%s", a.WorkerID, timeout, a.Stderr())
+		a.t.Fatalf("agent %s still running after %s\nstderr:\n%s", a.Name, timeout, a.Stderr())
 	}
 }
 
@@ -168,6 +208,14 @@ func (a *Agent) Exited() bool {
 
 func (a *Agent) Stderr() string { return a.stderr.String() }
 
+// ExitCode is the process's exit status, or -1 while it runs.
+func (a *Agent) ExitCode() int {
+	if !a.Exited() || a.cmd.ProcessState == nil {
+		return -1
+	}
+	return a.cmd.ProcessState.ExitCode()
+}
+
 // ExitError is only meaningful once Exited reports true.
 func (a *Agent) ExitError() error {
 	if !a.Exited() {
@@ -180,10 +228,13 @@ func (a *Agent) signal(sig syscall.Signal) {
 	if a.cmd == nil || a.cmd.Process == nil || a.Exited() {
 		return
 	}
-	// Negative pid signals the whole group: the agent plus any child it started.
-	if err := syscall.Kill(-a.cmd.Process.Pid, sig); err != nil {
-		_ = a.cmd.Process.Signal(sig)
+	// SIGKILL takes the whole group; other signals go to the agent alone, as Docker sends them.
+	if sig == syscall.SIGKILL {
+		if err := syscall.Kill(-a.cmd.Process.Pid, sig); err == nil {
+			return
+		}
 	}
+	_ = a.cmd.Process.Signal(sig)
 }
 
 func (a *Agent) stopQuietly() {
@@ -219,11 +270,4 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
-}
-
-func shortID(s string) string {
-	if len(s) > 8 {
-		return s[:8]
-	}
-	return s
 }

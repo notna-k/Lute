@@ -33,7 +33,7 @@ func New(d *setup.Deps) *Server {
 	cfg := d.Config
 	hub := websocket.NewHub()
 
-	grpcServer := grpc.NewServer(cfg, d.Workers, d.JobExecutions, d.Queue, d.Stats, hub)
+	grpcServer := grpc.NewServer(cfg, d.Workers, d.WorkerTokens, d.JobExecutions, d.Queue, d.Stats, hub)
 	grpcServer.WebhookEmitter = webhooks.NewEmitter(d.Runs, d.Webhooks)
 
 	heartbeat := worker.NewHeartbeatChecker(d.Workers, grpcServer.ConnMgr,

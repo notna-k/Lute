@@ -109,7 +109,7 @@ func (h *HeartbeatChecker) handleMiss(ctx context.Context, workerID string) {
 	}
 
 	if newRetry >= h.maxRetries {
-		if err := h.workerRepo.UpdateStatus(ctx, wid, "dead"); err != nil {
+		if err := h.workerRepo.MarkDead(ctx, wid); err != nil {
 			slog.Error("heartbeat: mark dead", "worker_id", workerID, "err", err)
 			return
 		}

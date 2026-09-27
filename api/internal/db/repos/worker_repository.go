@@ -2,12 +2,12 @@ package repos
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/lute/api/internal/db/enums"
 	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
-	"github.com/lute/api/internal/db/types"
 	"gorm.io/gorm"
 )
 
@@ -71,9 +71,24 @@ func workerLabelsMatch(labels, filter map[string]string) bool {
 	return true
 }
 
-func (r *WorkerRepository) Update(ctx context.Context, uid id.ID, w *models.Worker) error {
-	w.ID = uid
-	return mapErr(r.q(ctx).Save(w).Error)
+func (r *WorkerRepository) UpdateFields(ctx context.Context, uid id.ID, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	fields["updated_at"] = time.Now().UTC().UnixMilli()
+	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", uid.Hex()).Updates(fields).Error)
+}
+
+func (r *WorkerRepository) UpdateLabels(ctx context.Context, uid id.ID, labels map[string]string) error {
+	return r.UpdateFields(ctx, uid, map[string]any{"labels": jsonText(labels)})
+}
+
+// MarkDead fails a worker that stopped answering pings, unless it has moved on meanwhile
+// (a worker being deleted stays "deleting").
+func (r *WorkerRepository) MarkDead(ctx context.Context, uid id.ID) error {
+	return mapErr(r.q(ctx).Model(&models.Worker{}).
+		Where("id = ? AND status IN ?", uid.Hex(), []enums.WorkerStatus{enums.WorkerRegistered, enums.WorkerAlive}).
+		Updates(map[string]any{"status": enums.WorkerDead, "updated_at": time.Now().UTC().UnixMilli()}).Error)
 }
 
 func (r *WorkerRepository) Delete(ctx context.Context, uid id.ID) error {
@@ -88,20 +103,6 @@ func (r *WorkerRepository) UpdateStatus(ctx context.Context, uid id.ID, status e
 	}).Error)
 }
 
-func (r *WorkerRepository) FindByAgentID(ctx context.Context, agentID string) (*models.Worker, error) {
-	_ = agentID
-	return nil, ErrNotFound
-}
-
-func (r *WorkerRepository) GetByUserIDAndIP(ctx context.Context, userID id.ID, ip string) ([]*models.Worker, error) {
-	if ip == "" {
-		return nil, nil
-	}
-	var out []*models.Worker
-	err := r.q(ctx).Where("user_id = ? AND agent_ip = ?", userID.Hex(), ip).Find(&out).Error
-	return out, err
-}
-
 func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID id.ID) error {
 	nowMs := time.Now().UTC().UnixMilli()
 	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
@@ -110,23 +111,29 @@ func (r *WorkerRepository) UpdateLastSeen(ctx context.Context, workerID id.ID) e
 	}).Error)
 }
 
-func (r *WorkerRepository) UpdateMetrics(ctx context.Context, workerID id.ID, metrics map[string]interface{}) error {
+func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, version string, protocol int32, engine *models.Engine, peerIP string) error {
 	var w models.Worker
-	if err := r.q(ctx).Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
+	if err := r.q(ctx).Select("metadata").Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
 		return mapErr(err)
 	}
-	w.Metrics = metrics
-	return mapErr(r.q(ctx).Save(&w).Error)
-}
-
-func (r *WorkerRepository) UpdateAgentInfo(ctx context.Context, workerID id.ID, ipAddress, version string) error {
+	if w.Metadata == nil {
+		w.Metadata = map[string]any{}
+	}
+	if peerIP != "" {
+		w.Metadata["ip"] = peerIP
+	}
 	nowMs := time.Now().UTC().UnixMilli()
-	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(map[string]interface{}{
-		"agent_ip":      ipAddress,
+	updates := map[string]any{
 		"agent_version": version,
+		"protocol":      protocol,
+		"metadata":      jsonText(w.Metadata),
 		"last_seen":     nowMs,
 		"updated_at":    nowMs,
-	}).Error)
+	}
+	if engine != nil {
+		updates["engine"] = jsonText(engine)
+	}
+	return mapErr(r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(updates).Error)
 }
 
 func (r *WorkerRepository) ListByStatus(ctx context.Context, status enums.WorkerStatus) ([]*models.Worker, error) {
@@ -151,19 +158,28 @@ func (r *WorkerRepository) UpdateStatusAndLastSeen(ctx context.Context, workerID
 	return nil
 }
 
+// UpdateHeartbeat marks a worker alive after a pong. Only a registered or alive worker
+// becomes alive: a heartbeat racing a delete must not undo "deleting".
 func (r *WorkerRepository) UpdateHeartbeat(ctx context.Context, workerID id.ID, metrics map[string]interface{}) error {
-	var w models.Worker
-	if err := r.q(ctx).Where("id = ?", workerID.Hex()).First(&w).Error; err != nil {
-		return mapErr(err)
+	nowMs := time.Now().UTC().UnixMilli()
+	updates := map[string]any{
+		"status": gorm.Expr("CASE WHEN status IN (?, ?) THEN ? ELSE status END",
+			enums.WorkerRegistered, enums.WorkerAlive, enums.WorkerAlive),
+		"heartbeat_retry": 0,
+		"last_seen":       nowMs,
+		"updated_at":      nowMs,
 	}
-	w.Status = enums.WorkerAlive
-	w.HeartbeatRetry = 0
-	ls := types.NewMilliTime(time.Now())
-	w.LastSeen = &ls
 	if len(metrics) > 0 {
-		w.Metrics = metrics
+		updates["metrics"] = jsonText(metrics)
 	}
-	return mapErr(r.q(ctx).Save(&w).Error)
+	res := r.q(ctx).Model(&models.Worker{}).Where("id = ?", workerID.Hex()).Updates(updates)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *WorkerRepository) IncrementHeartbeatRetry(ctx context.Context, workerID id.ID) (int, error) {
@@ -225,4 +241,11 @@ func (r *WorkerRepository) AggregateCountsByUserID(ctx context.Context) ([]Count
 		})
 	}
 	return out, nil
+}
+
+// jsonText encodes a value for a serializer:json column written through a map update,
+// which bypasses the model's serializer.
+func jsonText(v any) string {
+	raw, _ := json.Marshal(v)
+	return string(raw)
 }

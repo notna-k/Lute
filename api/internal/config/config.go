@@ -10,18 +10,18 @@ import (
 )
 
 type Config struct {
-	LogLevel     slog.Level
-	Server       ServerConfig
-	Database     DatabaseConfig
-	GRPC         GRPCConfig
-	Heartbeat    HeartbeatConfig
-	WebSocket    WebSocketConfig
-	Auth         AuthConfig
-	WorkerBinary WorkerBinaryConfig
-	Metrics      MetricsConfig
-	JobDefs      JobDefsConfig
-	Queue        QueueConfig
-	Webhooks     WebhooksConfig
+	LogLevel  slog.Level
+	Server    ServerConfig
+	Database  DatabaseConfig
+	GRPC      GRPCConfig
+	Heartbeat HeartbeatConfig
+	WebSocket WebSocketConfig
+	Auth      AuthConfig
+	Workers   WorkersConfig
+	Metrics   MetricsConfig
+	JobDefs   JobDefsConfig
+	Queue     QueueConfig
+	Webhooks  WebhooksConfig
 }
 
 // QueueConfig tunes the queue sweep; see queue.Timings for LeaseGrace and ReclaimAfter.
@@ -51,8 +51,14 @@ type HeartbeatConfig struct {
 	MaxRetries    int
 }
 
-type WorkerBinaryConfig struct {
-	Dir string
+type WorkersConfig struct {
+	// BootstrapToken is seeded as a registration token, so a dev stack enrols a worker with no clicks.
+	BootstrapToken string
+	// PublicGRPCAddr is the address agents dial, shown in the Add Worker command. Empty
+	// derives it from the host the panel is served on and GRPC_PORT.
+	PublicGRPCAddr string
+	// Image is what the Add Worker command runs; empty picks the tag matching core's version.
+	Image string
 }
 
 type ServerConfig struct {
@@ -144,8 +150,10 @@ func Load() (*Config, error) {
 			AdminEmail:    getEnv("ADMIN_EMAIL", ""),
 			AdminPassword: getEnv("ADMIN_PASSWORD", ""),
 		},
-		WorkerBinary: WorkerBinaryConfig{
-			Dir: getEnv("WORKER_BINARY_DIR", "/opt/lute/worker-binaries"),
+		Workers: WorkersConfig{
+			BootstrapToken: getEnv("WORKER_BOOTSTRAP_TOKEN", ""),
+			PublicGRPCAddr: getEnv("WORKER_GRPC_ADDR", ""),
+			Image:          getEnv("WORKER_IMAGE", ""),
 		},
 		Metrics: MetricsConfig{
 			SnapshotInterval: getDurationEnv("METRICS_SNAPSHOT_INTERVAL", 5*time.Minute),

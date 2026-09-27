@@ -2,17 +2,6 @@ package worker
 
 import "github.com/gin-gonic/gin"
 
-// MountBootstrap registers the unauthenticated /workers/bootstrap routes a new host uses
-// to install the agent and register. They live on the public API only.
-func MountBootstrap(parent *gin.RouterGroup, h *WorkerHandler) {
-	boot := parent.Group("/workers/bootstrap")
-	boot.GET("/install.sh", h.InstallScript)
-	boot.GET("/version", h.GetVersion)
-	boot.GET("/download/:os/:arch", h.DownloadBinary)
-	boot.GET("/download", h.DownloadAutoDetect)
-	boot.POST("/register", h.RegisterFromWorker)
-}
-
 // MountJWT registers worker management for the panel, behind authedMW.
 func MountJWT(parent *gin.RouterGroup, h *WorkerHandler, authedMW gin.HandlerFunc) {
 	mountManagement(parent.Group("/workers", authedMW), h)
@@ -24,12 +13,13 @@ func MountAPIKey(parent *gin.RouterGroup, h *WorkerHandler) {
 }
 
 func mountManagement(g *gin.RouterGroup, h *WorkerHandler) {
-	g.POST("/claim-code", h.CreateClaimCode)
 	g.GET("/connected", h.ListConnectedWorkers)
-	g.GET("/bootstrap/binaries", h.ListBinaries)
-	g.POST("/bootstrap/binaries/refresh", h.RefreshBinaries)
+	g.GET("/install", h.InstallInfo)
 
-	g.POST("", h.CreateWorker)
+	g.GET("/tokens", h.ListTokens)
+	g.POST("/tokens", h.CreateToken)
+	g.DELETE("/tokens/:tokenId", h.RevokeToken)
+
 	g.GET("", h.ListUserWorkers)
 	g.GET("/command-results/:commandId", h.GetCommandResult)
 	g.POST("/:id/commands", h.SendCommand)

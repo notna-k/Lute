@@ -1,7 +1,8 @@
-# Lute dev stack — three separate containers:
+# Lute dev stack — four separate containers:
 #   postgres  durable state + job queue
 #   core      stateless Go API (HTTP + WebSocket + gRPC), no embedded UI
 #   admin     decoupled SPA (nginx), proxies /api to core
+#   worker    the build agent, running jobs as sibling containers
 services:
   postgres:
     image: postgres:17-alpine
@@ -25,8 +26,8 @@ services:
       context: ../..
       dockerfile: api/Dockerfile
       args:
-        - WORKER_VERSION=${WORKER_VERSION:-0.1.0}
-        - BUILD_TIME=${BUILD_TIME:-unknown}
+        - CORE_VERSION=${CORE_VERSION:-0.2.0}
+        - WORKER_VERSION=${WORKER_VERSION:-0.2.0}
     container_name: lute-core
     depends_on:
       postgres:
@@ -65,8 +66,11 @@ services:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      # Worker binaries
-      WORKER_BINARY_DIR: /opt/lute/worker-binaries
+      # Workers: the token the compose worker enrols with, and what the Add Worker
+      # dialog tells an operator to run.
+      WORKER_BOOTSTRAP_TOKEN: ${WORKER_BOOTSTRAP_TOKEN:-lute_rt_dev_bootstrap_token}
+      WORKER_GRPC_ADDR: ${WORKER_GRPC_ADDR:-}
+      WORKER_IMAGE: ${WORKER_IMAGE:-}
       # Metrics / heartbeat
       METRICS_SNAPSHOT_INTERVAL: ${METRICS_SNAPSHOT_INTERVAL:-5s}
       HEARTBEAT_CHECK_INTERVAL: ${HEARTBEAT_CHECK_INTERVAL:-5s}
@@ -99,9 +103,35 @@ services:
       timeout: 10s
       retries: 3
 
+  # Dev and CI run rootful Docker, hence LUTE_ALLOW_ROOTFUL; a real host runs the same
+  # image on rootless Docker (docs/worker.md).
+  worker:
+    build:
+      context: ../..
+      dockerfile: worker/Dockerfile
+      args:
+        - WORKER_VERSION=${WORKER_VERSION:-0.2.0}
+    container_name: lute-worker
+    depends_on:
+      - core
+    restart: unless-stopped
+    stop_grace_period: 30m
+    environment:
+      LUTE_SERVER: core:50051
+      LUTE_TOKEN: ${WORKER_BOOTSTRAP_TOKEN:-lute_rt_dev_bootstrap_token}
+      LUTE_NAME: dev-worker
+      LUTE_QUEUES: default,build,deploy,batch
+      LUTE_ALLOW_ROOTFUL: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - worker_data:/var/lib/lute-worker
+    networks:
+      - lute-network
+
 networks:
   lute-network:
     driver: bridge
 
 volumes:
   postgres_data:
+  worker_data:

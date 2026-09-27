@@ -1,4 +1,5 @@
-// Package runner runs "container" jobs in Docker.
+// Package runner runs "container" jobs as sibling containers on the agent's engine. Each
+// job gets its own network and workspace volume, so no host path is shared with the agent.
 package runner
 
 import (
@@ -6,12 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
+
+	"github.com/lute/worker/internal/datadir"
+	"github.com/lute/worker/internal/joblog"
 )
 
 // Spec is the JSON payload of a "container" job (mirrors proto ContainerJobSpec).
@@ -22,51 +24,76 @@ type Spec struct {
 	Command          string            `json:"command"`
 }
 
+// Labels on every container, volume and network a job creates, so the reaper finds them.
 const (
-	workspaceMount    = "/workspace"
-	commandScriptName = "_user_command.sh"
+	LabelWorker = "lute.worker"
+	LabelJob    = "lute.job"
 )
 
-// Run clones the optional repository into a temp workspace and runs spec.Command in a container.
-// Container stdout goes only to the job log in logDir; system events also go to the default logger.
-func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32) error {
+const (
+	workspaceMount = "/workspace"
+	scriptPath     = "/lute/cmd.sh"
+	cleanupTimeout = 30 * time.Second
+)
+
+// Limits apply to every job container; zero leaves a resource unlimited.
+type Limits struct {
+	Memory   int64
+	NanoCPUs int64
+	Pids     int64
+}
+
+type Runner struct {
+	Docker   client.APIClient
+	Data     *datadir.Dir
+	WorkerID string
+	GitImage string
+	Limits   Limits
+}
+
+// Run executes one job. Its output goes to jobs/<id>/log, and jobs/<id>/meta.json records
+// what ran and how it ended.
+func (r *Runner) Run(ctx context.Context, jobID string, spec *Spec, timeoutSec int32) (err error) {
 	if spec == nil {
 		return errors.New("spec is nil")
 	}
 	if spec.Runtime == "" {
 		return errors.New("runtime (Docker image) is required")
 	}
+	repo := strings.TrimSpace(spec.SourceRepository)
+	if err := validateGitHubRepo(repo); err != nil {
+		return fmt.Errorf("invalid source_repository: %w", err)
+	}
 
-	jobLogger, closeLog, err := openJobLog(logDir, jobID)
+	if _, err := r.Data.JobDir(jobID); err != nil {
+		return fmt.Errorf("job dir: %w", err)
+	}
+	logPath, err := joblog.Path(r.Data.Root, jobID)
+	if err != nil {
+		return err
+	}
+	jobLogger, closeLog, err := openJobLog(logPath)
 	if err != nil {
 		return fmt.Errorf("job log: %w", err)
 	}
 	defer closeLog()
 
-	dir, err := os.MkdirTemp("", "lute-job-*")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
+	meta := &datadir.Meta{
+		JobID:      jobID,
+		WorkerID:   r.WorkerID,
+		Image:      spec.Runtime,
+		Repository: repo,
+		StartedAt:  time.Now().UTC(),
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
-	logSystem(jobLogger, slog.LevelInfo, "temp dir", slog.String("path", dir))
-
-	repo := strings.TrimSpace(spec.SourceRepository)
-	if repo != "" {
-		if err := validateGitHubRepo(repo); err != nil {
-			return fmt.Errorf("invalid source_repository: %w", err)
+	r.writeMeta(meta)
+	defer func() {
+		finished := time.Now().UTC()
+		meta.FinishedAt = &finished
+		if err != nil {
+			meta.Error = err.Error()
 		}
-		if err := cloneRepo(ctx, dir, repo); err != nil {
-			return fmt.Errorf("clone: %w", err)
-		}
-		logSystem(jobLogger, slog.LevelInfo, "clone ok")
-	} else {
-		logSystem(jobLogger, slog.LevelInfo, "no source repository; empty workspace")
-	}
-
-	scriptPath := filepath.Join(dir, commandScriptName)
-	if err := os.WriteFile(scriptPath, []byte(spec.Command), 0700); err != nil {
-		return fmt.Errorf("write command script: %w", err)
-	}
+		r.writeMeta(meta)
+	}()
 
 	runCtx := ctx
 	if timeoutSec > 0 {
@@ -75,20 +102,44 @@ func Run(ctx context.Context, jobID, logDir string, spec *Spec, timeoutSec int32
 		defer cancel()
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("docker client: %w", err)
+	j := &job{Runner: r, id: jobID, log: jobLogger}
+	defer j.cleanup()
+	if err := j.prepare(runCtx); err != nil {
+		return err
 	}
-	defer func() { _ = cli.Close() }()
+	if repo != "" {
+		commit, err := j.clone(runCtx, repo)
+		if err != nil {
+			return fmt.Errorf("clone: %w", err)
+		}
+		meta.Commit = commit
+	} else {
+		logSystem(jobLogger, slog.LevelInfo, "no source repository; empty workspace")
+	}
 
-	exitCode, err := runContainer(runCtx, cli, dir, spec, jobLogger)
+	digest, err := j.pull(runCtx, spec.Runtime, true)
 	if err != nil {
 		return err
 	}
+	meta.ImageDigest = digest
+
+	exitCode, err := j.runCommand(runCtx, spec)
+	if err != nil {
+		return err
+	}
+	meta.ExitCode = &exitCode
 	if exitCode != 0 {
 		return fmt.Errorf("container exited with code %d", exitCode)
 	}
-
 	logSystem(jobLogger, slog.LevelInfo, "job finished successfully")
 	return nil
 }
+
+func (r *Runner) writeMeta(m *datadir.Meta) {
+	if err := r.Data.WriteMeta(m); err != nil {
+		slog.Warn("write job meta", "job_id", m.JobID, "err", err)
+	}
+}
+
+// LogFile is the job's log path relative to the data dir, as reported to core.
+func LogFile(jobID string) string { return joblog.FileName(jobID) }

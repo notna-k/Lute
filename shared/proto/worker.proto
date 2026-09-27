@@ -4,17 +4,50 @@ package worker;
 
 option go_package = "github.com/lute/proto;worker";
 
+// Register enrols a new agent with a registration token and returns its identity.
+// Connect authenticates with gRPC metadata "authorization: Bearer <worker_id>.<secret>".
 service WorkerService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Connect(stream WorkerMessage) returns (stream ServerMessage);
 }
 
-message WorkerMessage {
+message RegisterRequest {
+  string token = 1;
+  string name = 2;
+  string version = 3;
+  int32 protocol = 4;
+  EngineInfo engine = 5;
+  repeated string queues = 6;
+  map<string, string> labels = 7;
+}
+
+message RegisterResponse {
   string worker_id = 1;
+  string secret = 2;
+}
+
+// EngineInfo describes the container engine the agent runs jobs on.
+message EngineInfo {
+  string kind = 1;     // "docker"
+  string version = 2;
+  bool rootless = 3;
+  bool memory_limit = 4;
+  bool cpu_limit = 5;
+  bool pids_limit = 6;
+  string os = 7;
+  string arch = 8;
+  int32 cpus = 9;
+  string hostname = 10;
+}
+
+message WorkerMessage {
+  reserved 1; // worker_id: the bearer credential identifies the worker
   oneof payload {
     HeartbeatPong    heartbeat_pong = 2;
     JobResult        result         = 3;
     WorkerRegistration register     = 4;
     JobLogResponse   job_log_response = 5;
+    WorkerStatus     status         = 6;
   }
 }
 
@@ -71,10 +104,22 @@ message HeartbeatPong {
   int64 timestamp = 3;
 }
 
+// WorkerRegistration is the first message on every Connect stream.
 message WorkerRegistration {
   repeated string queues = 1;
   int32 concurrency = 2;
-  map<string, string> labels = 3; // reserved for future worker self-registration; populated server-side from DB
+  reserved 3;
+  string version = 4;
+  int32 protocol = 5;
+  EngineInfo engine = 6;
+  repeated string running_jobs = 7; // still running from an earlier stream; they count against capacity
+  bool draining = 8;                 // already draining: core assigns nothing on this stream
+}
+
+// WorkerStatus reports a change in the agent's lifecycle.
+message WorkerStatus {
+  bool draining = 1; // stopped taking jobs (SIGTERM or a DrainSignal)
+  bool drained = 2;  // no job left running after a DrainSignal; core may forget the worker
 }
 
 message JobAssignment {
@@ -103,8 +148,8 @@ message JobResult {
   string execution_log_file  = 6;
 }
 
-// DrainSignal asks a worker to stop picking up new jobs. If `shutdown` is true,
-// the worker also exits its process after in-flight jobs complete.
+// DrainSignal tells a worker it was deleted: it stops taking jobs, finishes the running
+// ones, reports WorkerStatus{drained}, and then stops for good.
 message DrainSignal {
   bool shutdown = 1;
 }

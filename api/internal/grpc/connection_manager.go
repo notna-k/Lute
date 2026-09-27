@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -32,7 +33,7 @@ type pingResult struct {
 
 type JobResultCallback func(workerID string, result *pb.JobResult)
 
-type WorkerRegistrationCallback func(workerID string, reg *pb.WorkerRegistration)
+type WorkerStatusCallback func(conn *WorkerConnection, st *pb.WorkerStatus)
 
 // WorkerConnection is the bidirectional stream of one connected worker.
 type WorkerConnection struct {
@@ -53,6 +54,11 @@ type WorkerConnection struct {
 
 	mu       sync.Mutex
 	draining bool
+	// running holds the jobs counted in ActiveJobs, so only a result for one of them frees a slot.
+	running map[string]struct{}
+
+	closeOnce sync.Once
+	closed    chan struct{}
 }
 
 func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
@@ -65,7 +71,61 @@ func newWorkerConnection(workerID string, stream pb.WorkerService_ConnectServer)
 		drainCh:     make(chan *pb.DrainSignal, 1),
 		logReqCh:    make(chan *pb.JobLogRequest, 32),
 		logWaiters:  make(map[string]chan jobLogResult),
+		closed:      make(chan struct{}),
+		running:     make(map[string]struct{}),
 	}
+}
+
+// adoptRunning counts jobs an agent still runs from an earlier stream against this one.
+func (wc *WorkerConnection) adoptRunning(jobIDs []string) {
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
+	for _, id := range jobIDs {
+		if _, ok := wc.running[id]; !ok {
+			wc.running[id] = struct{}{}
+			wc.ActiveJobs++
+		}
+	}
+}
+
+// release frees the slot of a job this connection counted; results for others change nothing.
+func (wc *WorkerConnection) release(jobID string) {
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
+	if _, ok := wc.running[jobID]; ok {
+		delete(wc.running, jobID)
+		wc.ActiveJobs--
+	}
+}
+
+func (wc *WorkerConnection) setCapacity(queues []string, concurrency int32) {
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
+	wc.Queues = queues
+	if concurrency > 0 {
+		wc.Concurrency = concurrency
+	}
+}
+
+// flushAssignments sends every queued assignment; false means the stream broke.
+func (wc *WorkerConnection) flushAssignments() bool {
+	for {
+		select {
+		case a := <-wc.jobCh:
+			if err := wc.stream.Send(&pb.ServerMessage{Payload: &pb.ServerMessage_Assign{Assign: a}}); err != nil {
+				wc.release(a.JobId)
+				slog.Warn("send job to worker", "worker_id", wc.WorkerID, "err", err)
+				return false
+			}
+		default:
+			return true
+		}
+	}
+}
+
+// Close ends Run, and with it the worker's stream.
+func (wc *WorkerConnection) Close() {
+	wc.closeOnce.Do(func() { close(wc.closed) })
 }
 
 func (wc *WorkerConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, error) {
@@ -83,44 +143,38 @@ func (wc *WorkerConnection) Ping(timeout time.Duration) (*pb.HeartbeatPong, erro
 	}
 }
 
-// AssignJob reserves capacity and queues the assignment for the Run loop.
+// AssignJob reserves capacity and queues the assignment for the Run loop. Both happen
+// under the lock that Shutdown takes to mark draining, so an assignment is either queued
+// before the drain (and flushed ahead of the DrainSignal) or refused.
 func (wc *WorkerConnection) AssignJob(assignment *pb.JobAssignment) bool {
 	wc.mu.Lock()
+	defer wc.mu.Unlock()
 	if wc.draining || wc.ActiveJobs >= wc.Concurrency {
-		wc.mu.Unlock()
 		return false
 	}
-	wc.ActiveJobs++
-	wc.mu.Unlock()
-
 	select {
 	case wc.jobCh <- assignment:
+		wc.ActiveJobs++
+		wc.running[assignment.JobId] = struct{}{}
 		return true
 	default:
-		wc.mu.Lock()
-		wc.ActiveJobs--
-		wc.mu.Unlock()
 		return false
 	}
 }
 
-func (wc *WorkerConnection) Drain() {
-	wc.sendDrain(&pb.DrainSignal{})
-}
-
-// Shutdown tells the worker to exit once its in-flight jobs complete.
+// Shutdown tells a deleted worker to finish its in-flight jobs, report drained, and stop.
 func (wc *WorkerConnection) Shutdown() {
-	wc.sendDrain(&pb.DrainSignal{Shutdown: true})
+	wc.markDraining()
+	select {
+	case wc.drainCh <- &pb.DrainSignal{Shutdown: true}:
+	default:
+	}
 }
 
-func (wc *WorkerConnection) sendDrain(sig *pb.DrainSignal) {
+func (wc *WorkerConnection) markDraining() {
 	wc.mu.Lock()
 	wc.draining = true
 	wc.mu.Unlock()
-	select {
-	case wc.drainCh <- sig:
-	default:
-	}
 }
 
 func (wc *WorkerConnection) IsAvailable() bool {
@@ -191,18 +245,26 @@ func (wc *WorkerConnection) failAllLogWaiters(err error) {
 }
 
 // Run pumps both directions of the stream until it closes.
-func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration WorkerRegistrationCallback) {
-	recvCh := make(chan *pb.WorkerMessage, 1)
-	recvErrCh := make(chan error, 1)
-
+func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onStatus WorkerStatusCallback) {
+	defer wc.Close() // also stops the receive goroutine
+	// One channel for messages and the terminal error keeps their order: a result sent
+	// just before the agent half-closes is handled before the EOF that follows it.
+	type received struct {
+		msg *pb.WorkerMessage
+		err error
+	}
+	recvCh := make(chan received, 1)
 	go func() {
 		for {
 			msg, err := wc.stream.Recv()
-			if err != nil {
-				recvErrCh <- err
+			select {
+			case recvCh <- received{msg, err}:
+			case <-wc.closed:
 				return
 			}
-			recvCh <- msg
+			if err != nil {
+				return
+			}
 		}
 	}()
 
@@ -214,15 +276,22 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 			wc.failAllLogWaiters(wc.stream.Context().Err())
 			return
 
-		case err := <-recvErrCh:
-			if pendingPing != nil {
-				pendingPing.resultCh <- pingResult{Err: err}
-			}
-			wc.failAllLogWaiters(err)
-			slog.Warn("worker stream recv", "worker_id", wc.WorkerID, "err", err)
+		case <-wc.closed:
+			wc.failAllLogWaiters(ErrNoConnection)
 			return
 
-		case msg := <-recvCh:
+		case r := <-recvCh:
+			if r.err != nil {
+				if pendingPing != nil {
+					pendingPing.resultCh <- pingResult{Err: r.err}
+				}
+				wc.failAllLogWaiters(r.err)
+				if !errors.Is(r.err, io.EOF) {
+					slog.Warn("worker stream recv", "worker_id", wc.WorkerID, "err", r.err)
+				}
+				return
+			}
+			msg := r.msg
 			if pong := msg.GetHeartbeatPong(); pong != nil && pendingPing != nil {
 				pendingPing.resultCh <- pingResult{Pong: pong}
 				pendingPing = nil
@@ -231,22 +300,18 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				wc.finishLogWaiter(lr.RequestId, jobLogResult{Resp: lr})
 			}
 			if result := msg.GetResult(); result != nil {
-				wc.mu.Lock()
-				wc.ActiveJobs--
-				wc.mu.Unlock()
+				wc.release(result.JobId)
 				if onJobResult != nil {
 					onJobResult(wc.WorkerID, result)
 				}
 			}
-			if reg := msg.GetRegister(); reg != nil {
-				wc.mu.Lock()
-				wc.Queues = reg.Queues
-				if reg.Concurrency > 0 {
-					wc.Concurrency = reg.Concurrency
+			if st := msg.GetStatus(); st != nil {
+				// A draining agent refuses new work; stop offering it any.
+				if st.GetDraining() || st.GetDrained() {
+					wc.markDraining()
 				}
-				wc.mu.Unlock()
-				if onRegistration != nil {
-					onRegistration(wc.WorkerID, reg)
+				if onStatus != nil {
+					onStatus(wc, st)
 				}
 			}
 
@@ -271,16 +336,16 @@ func (wc *WorkerConnection) Run(onJobResult JobResultCallback, onRegistration Wo
 				},
 			})
 			if err != nil {
-				wc.mu.Lock()
-				wc.ActiveJobs--
-				wc.mu.Unlock()
+				wc.release(assignment.JobId)
 				slog.Warn("send job to worker", "worker_id", wc.WorkerID, "err", err)
 				return
 			}
 
 		case sig := <-wc.drainCh:
-			if sig == nil {
-				sig = &pb.DrainSignal{}
+			// Assignments counted before the drain go out first, so the agent runs them
+			// instead of reporting drained with work still owed.
+			if !wc.flushAssignments() {
+				return
 			}
 			_ = wc.stream.Send(&pb.ServerMessage{
 				Payload: &pb.ServerMessage_Drain{
@@ -314,17 +379,24 @@ func NewConnectionManager() *ConnectionManager {
 	}
 }
 
-func (cm *ConnectionManager) Register(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
-	wc := newWorkerConnection(workerID, stream)
-	cm.mu.Lock()
-	cm.conns[workerID] = wc
-	cm.mu.Unlock()
-	return wc
+// NewConnection prepares a stream's connection; dispatch sees it only after Publish.
+func (cm *ConnectionManager) NewConnection(workerID string, stream pb.WorkerService_ConnectServer) *WorkerConnection {
+	return newWorkerConnection(workerID, stream)
 }
 
-func (cm *ConnectionManager) Unregister(workerID string) {
+// Publish makes wc the worker's connection, replacing any older stream.
+func (cm *ConnectionManager) Publish(wc *WorkerConnection) {
 	cm.mu.Lock()
-	delete(cm.conns, workerID)
+	cm.conns[wc.WorkerID] = wc
+	cm.mu.Unlock()
+}
+
+// Unregister drops conn unless a newer stream for the same worker has replaced it.
+func (cm *ConnectionManager) Unregister(conn *WorkerConnection) {
+	cm.mu.Lock()
+	if cm.conns[conn.WorkerID] == conn {
+		delete(cm.conns, conn.WorkerID)
+	}
 	cm.mu.Unlock()
 }
 
