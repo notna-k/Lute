@@ -5,6 +5,7 @@ export CORE_VERSION   ?= 0.2.0
 export WORKER_VERSION ?= 0.2.0
 export BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
+
 ENV_FILE ?= .env
 COMPOSE  := docker compose -f infrastructure/dev/docker-compose.yml --env-file $(ENV_FILE)
 LINT     := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
