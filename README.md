@@ -10,6 +10,8 @@ problems it has:
 - Modern SDKs instead of legacy Groovy pipelines
 - ... and many more
 
+**[Website](https://notna-k.github.io/Lute/) · [Docs](https://notna-k.github.io/Lute/docs/) · [API reference](https://notna-k.github.io/Lute/docs/api/)**
+
 > **Status: early work in progress.** Lute is a weekend project, it has no users yet and no stable
 > release. Expect breaking changes without deprecation.
 
@@ -33,7 +35,7 @@ workers ───────────────── gRPC ─────
   stream in, manage workers.
 - **worker** — a container image that runs on rootless Docker. It enrols with a registration token,
   then runs jobs as sibling containers for the queues and labels it advertises
-  ([docs/worker.md](docs/worker.md)).
+  ([Running a worker](https://notna-k.github.io/Lute/docs/workers/running/)).
 
 **Git is the source of truth for job definitions.** YAML under `infrastructure/dev/jobdefs/` is
 synced into Postgres on startup and on demand; the panel shows what drifted from Git and can export
@@ -97,6 +99,7 @@ More detail, including every environment variable, is in
 | [`worker/`](worker/README.md) | Worker agent and its image (Go module `github.com/lute/worker`) |
 | [`ui/`](ui/README.md) | Admin panel (React + Vite) |
 | [`shared/proto/`](shared/README.md) | gRPC contract shared by core and workers |
+| [`site/`](site/) | Home page and docs (Astro Starlight), published to GitHub Pages |
 | [`infrastructure/dev/`](infrastructure/dev/README.md) | Dev compose stack and example job definitions |
 
 ## Contributing

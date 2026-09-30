@@ -178,7 +178,16 @@ export default function WorkerDetail() {
               className='mb-6'
             >
               The engine cannot enforce {limitsMissing.join(', ')} limits. Delegate the cgroup v2
-              controllers to the worker&rsquo;s user (see docs/worker.md).
+              controllers to the worker&rsquo;s user (see{' '}
+              <a
+                href='https://notna-k.github.io/Lute/docs/workers/running/'
+                target='_blank'
+                rel='noreferrer'
+                className='underline'
+              >
+                Running a worker
+              </a>
+              ).
             </Alert>
           )}
           {worker.status === 'dead' && (

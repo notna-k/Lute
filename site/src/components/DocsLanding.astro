@@ -1,0 +1,213 @@
+---
+// Card grids for the docs landing page.
+const base = import.meta.env.BASE_URL;
+const u = (path: string) => `${base}${path}`;
+
+const start = [
+	{ href: u('docs/quick-start/'), title: 'Quick start', text: 'Clone, fill in .env, make dev-up: the panel, core, Postgres and one worker in a few minutes.' },
+	{ href: u('docs/how-it-works/'), title: 'How it works', text: 'Core, the panel and workers — what each one owns and how a run moves between them.' },
+	{ href: u('docs/jobs/definitions/'), title: 'Your first job', text: 'Write a job definition, commit it, sync, and trigger it from the generated run form.' },
+];
+const guides = [
+	{ href: u('docs/jobs/parameters/'), tag: 'Jobs', title: 'Parameters', text: 'Every input type — text, choice, toggle, number, date — and how values reach your command.' },
+	{ href: u('docs/jobs/git-sync/'), tag: 'Jobs', title: 'Syncing from Git', text: 'When a sync writes, what counts as drift, pruning, and exporting panel edits back to YAML.' },
+	{ href: u('docs/workers/running/'), tag: 'Workers', title: 'Running a worker', text: 'Rootless Docker host setup, registration tokens, labels and upgrading the image.' },
+	{ href: u('docs/api/webhooks/'), tag: 'API', title: 'Webhooks', text: 'Get called when a run finishes, and check the signature so you know it came from Lute.' },
+	{ href: u('docs/configuration/'), tag: 'Operations', title: 'Configuring core', text: 'Every environment variable core reads, with its default.' },
+	{ href: u('docs/api/'), tag: 'API', title: 'API overview', text: 'API keys, errors, idempotency and paging for scripts and other CI systems.' },
+];
+const reference = [
+	{ href: u('docs/api/runs/'), title: 'REST API', text: 'Runs, workers and registration tokens under /api/public/v1', kind: 'OpenAPI' },
+	{ href: u('docs/jobs/definitions/'), title: 'Job definition keys', text: 'Every YAML key and what it does', kind: 'YAML' },
+	{ href: u('docs/configuration/'), title: 'Environment variables', text: 'Core configuration', kind: '.env' },
+	{ href: u('docs/workers/running/#settings'), title: 'Worker settings', text: 'LUTE_* variables of the worker image', kind: 'env' },
+];
+---
+
+<div class="landing not-content">
+	<p class="lede">Set up the stack, write job definitions in Git, connect workers, and drive runs through the API.</p>
+	<div class="actions">
+		<a class="primary" href={u('docs/quick-start/')}>Quick start</a>
+		<a class="secondary" href={u('docs/api/')}>API reference</a>
+	</div>
+
+	<h2>Start here</h2>
+	<div class="grid">
+		{
+			start.map((c) => (
+				<a class="card" href={c.href}>
+					<span class="title">{c.title}</span>
+					<span class="text">{c.text}</span>
+				</a>
+			))
+		}
+	</div>
+
+	<h2>Guides</h2>
+	<div class="grid">
+		{
+			guides.map((c) => (
+				<a class="card" href={c.href}>
+					<span class="lute-eyebrow">{c.tag}</span>
+					<span class="title">{c.title}</span>
+					<span class="text">{c.text}</span>
+				</a>
+			))
+		}
+	</div>
+
+	<div class="split">
+		<div>
+			<h2>Reference</h2>
+			<div class="list">
+				{
+					reference.map((r) => (
+						<a href={r.href}>
+							<span>
+								<span class="title">{r.title}</span>
+								<span class="text">{r.text}</span>
+							</span>
+							<span class="kind">{r.kind}</span>
+						</a>
+					))
+				}
+			</div>
+		</div>
+		<div>
+			<h2>Get the code</h2>
+			<pre class="term"><span>$</span> git clone https://github.com/notna-k/Lute.git
+<span>$</span> docker pull ghcr.io/notna-k/lute-worker:0.2</pre>
+			<p class="note">
+				Lute has no stable release yet, and breaking changes land without deprecation. Found a gap in these docs?{' '}
+				<a href="https://github.com/notna-k/Lute/issues">Open an issue</a>.
+			</p>
+		</div>
+	</div>
+</div>
+
+<style>
+	.landing {
+		max-width: 72rem;
+	}
+	.lede {
+		font-size: 1.15rem;
+		line-height: 1.6;
+		color: var(--sl-color-gray-3);
+		max-width: 40rem;
+		margin: 0;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin-top: 1.5rem;
+	}
+	.actions a {
+		display: flex;
+		align-items: center;
+		height: 2.6rem;
+		padding: 0 1.1rem;
+		font-size: 0.9rem;
+		font-weight: 500;
+		text-decoration: none;
+	}
+	.primary {
+		background: var(--sl-color-white);
+		color: var(--sl-color-black);
+	}
+	.secondary {
+		border: 1px solid var(--sl-color-gray-5);
+		color: var(--sl-color-white);
+	}
+	h2 {
+		font-size: 1.35rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: var(--sl-color-white);
+		margin: 3rem 0 1.1rem;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		gap: 1rem;
+	}
+	.card {
+		border: 1px solid var(--sl-color-gray-5);
+		padding: 1.4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		text-decoration: none;
+		transition: border-color 0.15s;
+	}
+	.card:hover {
+		border-color: var(--sl-color-white);
+	}
+	.title {
+		font-weight: 600;
+		color: var(--sl-color-white);
+	}
+	.text {
+		font-size: 0.9rem;
+		line-height: 1.55;
+		color: var(--sl-color-gray-3);
+	}
+	.split {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+		gap: 0 3rem;
+	}
+	.list {
+		border: 1px solid var(--sl-color-gray-5);
+	}
+	.list a {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.9rem 1.2rem;
+		text-decoration: none;
+	}
+	.list a + a {
+		border-top: 1px solid var(--sl-color-gray-5);
+	}
+	.list a:hover {
+		background: var(--sl-color-gray-6);
+	}
+	.list a > span:first-child {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.list .title {
+		font-weight: 500;
+	}
+	.kind {
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-3);
+	}
+	.term {
+		margin: 0;
+		background: var(--lute-code-bg);
+		color: #edeef0;
+		border: 1px solid var(--lute-code-border);
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		line-height: 1.9;
+		padding: 1rem 1.2rem;
+		overflow-x: auto;
+	}
+	.term span {
+		color: #80848c;
+	}
+	.note a {
+		color: var(--sl-color-accent);
+	}
+	.note {
+		font-size: 0.9rem;
+		line-height: 1.6;
+		color: var(--sl-color-gray-3);
+		margin-top: 1rem;
+	}
+</style>

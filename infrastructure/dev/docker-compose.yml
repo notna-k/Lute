@@ -104,7 +104,7 @@ services:
       retries: 3
 
   # Dev and CI run rootful Docker, hence LUTE_ALLOW_ROOTFUL; a real host runs the same
-  # image on rootless Docker (docs/worker.md).
+  # image on rootless Docker (https://notna-k.github.io/Lute/docs/workers/running/).
   worker:
     build:
       context: ../..

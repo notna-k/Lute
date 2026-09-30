@@ -14,7 +14,7 @@ This directory runs the local Lute stack as **four separate containers**.
 - **worker** — the build agent image (`worker/Dockerfile`). It enrols itself with
   `WORKER_BOOTSTRAP_TOKEN`, which core seeds as a registration token, and runs jobs
   as sibling containers on the host's Docker. Dev Docker is rootful, so it sets
-  `LUTE_ALLOW_ROOTFUL=1`; real hosts run it on rootless Docker (`docs/worker.md`).
+  `LUTE_ALLOW_ROOTFUL=1`; real hosts run it on rootless Docker ([Running a worker](https://notna-k.github.io/Lute/docs/workers/running/)).
 
 ```
 browser ──▶ admin (nginx :8080) ──/api──▶ core (:8080) ──▶ postgres (:5432)

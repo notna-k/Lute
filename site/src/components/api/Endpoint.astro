@@ -1,0 +1,141 @@
+---
+import { md, samplesFor, type Field, type Operation } from '../../lib/openapi';
+import ExampleBlock from './ExampleBlock.astro';
+import Fields from './Fields.astro';
+
+interface Props {
+	op: Operation;
+}
+
+const { op } = Astro.props;
+const asFields = (where: 'path' | 'query'): Field[] =>
+	op.params
+		.filter((p) => p.in === where)
+		.map((p) => ({ name: p.name, type: p.type, required: p.required, description: p.description, children: [] }));
+const pathFields = asFields('path');
+const queryFields = asFields('query');
+---
+
+<section class="endpoint not-content" aria-labelledby={op.id}>
+	<h2 id={op.id}>{op.summary}</h2>
+	<div class="line">
+		<span class={`lute-m-${op.method.toLowerCase()}`}>{op.method}</span>
+		<span>/api/public/v1{op.path}</span>
+	</div>
+	{op.description && <div class="prose" set:html={md(op.description)} />}
+
+	{
+		pathFields.length > 0 && (
+			<div class="group">
+				<div class="lute-eyebrow">Path</div>
+				<Fields fields={pathFields} />
+			</div>
+		)
+	}
+	{
+		queryFields.length > 0 && (
+			<div class="group">
+				<div class="lute-eyebrow">Query</div>
+				<Fields fields={queryFields} />
+			</div>
+		)
+	}
+	{
+		op.body && (
+			<div class="group">
+				<div class="lute-eyebrow">Body</div>
+				<Fields fields={op.body.fields} />
+			</div>
+		)
+	}
+
+	<div class="group">
+		<div class="lute-eyebrow">Responses</div>
+		<ul class="responses">
+			{
+				op.responses.map((r) => (
+					<li>
+						<span class:list={['code', r.status.startsWith('2') ? 'lute-m-get' : 'lute-m-delete']}>{r.status}</span>
+						<span set:html={md(r.description)} />
+					</li>
+				))
+			}
+		</ul>
+	</div>
+
+	<ExampleBlock samples={samplesFor(op)} responses={op.responses} />
+</section>
+
+<style>
+	.endpoint {
+		margin-top: 3.5rem;
+		padding-top: 0.5rem;
+		border-top: 2px solid var(--sl-color-white);
+	}
+	h2 {
+		margin: 0.9rem 0 0.4rem;
+		font-size: 1.5rem;
+		font-weight: 600;
+		letter-spacing: -0.015em;
+		color: var(--sl-color-white);
+		scroll-margin-top: calc(var(--sl-nav-height) + 1rem);
+	}
+	.line {
+		font-family: var(--sl-font-mono);
+		font-size: 0.875rem;
+		display: flex;
+		gap: 0.6rem;
+		color: var(--sl-color-white);
+		overflow-x: auto;
+	}
+	.line span:first-child {
+		font-weight: 500;
+	}
+	.prose {
+		margin-top: 1rem;
+		color: var(--sl-color-gray-2);
+		line-height: 1.7;
+	}
+	.prose :global(p + p) {
+		margin-top: 0.75rem;
+	}
+	.group {
+		margin-top: 1.5rem;
+	}
+	.group .lute-eyebrow {
+		padding-bottom: 0.4rem;
+	}
+	.responses {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		border: 1px solid var(--sl-color-gray-5);
+	}
+	.responses li {
+		display: flex;
+		gap: 1rem;
+		padding: 0.6rem 0.9rem;
+		font-size: 0.9rem;
+		color: var(--sl-color-gray-2);
+	}
+	.responses li + li {
+		border-top: 1px solid var(--sl-color-gray-5);
+	}
+	.responses :global(p) {
+		margin: 0;
+	}
+	.code {
+		font-family: var(--sl-font-mono);
+		width: 2.2rem;
+		flex-shrink: 0;
+	}
+	:global(.prose code),
+	.responses :global(code),
+	.endpoint :global(.desc code) {
+		font-family: var(--sl-font-mono);
+		font-size: 0.85em;
+		background: var(--sl-color-gray-6);
+		border: 1px solid var(--sl-color-gray-5);
+		padding: 0.05rem 0.3rem;
+	}
+</style>

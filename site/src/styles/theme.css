@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+/* The panel's Graphite palette: near-black, square corners, one green accent. */
+:root {
+	--sl-font: 'Geist', ui-sans-serif, system-ui, sans-serif;
+	--sl-font-mono: 'Geist Mono', ui-monospace, monospace;
+
+	--sl-color-accent-low: #0f2a1c;
+	--sl-color-accent: #3dd68c;
+	--sl-color-accent-high: #b8f2d3;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #e4e5e8;
+	--sl-color-gray-2: #c9cbd0;
+	--sl-color-gray-3: #9a9ea6;
+	--sl-color-gray-4: #5d6169;
+	--sl-color-gray-5: #25272c;
+	--sl-color-gray-6: #131417;
+	--sl-color-black: #0c0d0f;
+
+	/* Asides use the blue scale; keep them in the accent family. */
+	--sl-color-blue-low: #0f2a1c;
+	--sl-color-blue: #3dd68c;
+	--sl-color-blue-high: #b8f2d3;
+
+	--lute-code-bg: #0f1012;
+	--lute-code-border: #25272c;
+	--lute-get: #3dd68c;
+	--lute-post: #7aa7ff;
+	--lute-put: #e5a83b;
+	--lute-delete: #f07a6f;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #d6eddf;
+	--sl-color-accent: #187448;
+	--sl-color-accent-high: #0f4a2c;
+	--sl-color-white: #0f1012;
+	--sl-color-gray-1: #1f2125;
+	--sl-color-gray-2: #2a2c31;
+	--sl-color-gray-3: #585c64;
+	--sl-color-gray-4: #93969e;
+	--sl-color-gray-5: #dddde1;
+	--sl-color-gray-6: #f6f6f7;
+	--sl-color-gray-7: #fafafb;
+	--sl-color-black: #ffffff;
+
+	--sl-color-blue-low: #e6f3ec;
+	--sl-color-blue: #187448;
+	--sl-color-blue-high: #0f4a2c;
+
+	--lute-code-border: #0f1012;
+	--lute-get: #187448;
+	--lute-post: #1d55b0;
+	--lute-put: #8c5c06;
+	--lute-delete: #b02e26;
+}
+
+*,
+*::before,
+*::after {
+	border-radius: 0 !important;
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1#_top {
+	letter-spacing: -0.02em;
+	font-weight: 600;
+}
+
+.lute-eyebrow {
+	font-family: var(--sl-font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--sl-color-gray-3);
+}
+
+.lute-m-get { color: var(--lute-get); }
+.lute-m-post { color: var(--lute-post); }
+.lute-m-put,
+.lute-m-patch { color: var(--lute-put); }
+.lute-m-delete { color: var(--lute-delete); }
+
+.site-title {
+	color: var(--sl-color-white);
+}
+
+/* Current page: a rule and a tint, not a filled block. */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+	background: var(--sl-color-accent-low);
+	color: var(--sl-color-white);
+	box-shadow: inset 2px 0 0 var(--sl-color-accent);
+	font-weight: 500;
+}

@@ -2,7 +2,7 @@
 
 Go module `github.com/lute/worker`: the `lute-worker` agent that runs jobs for the Lute core.
 It ships as a container image and runs jobs as sibling containers on the host's (rootless)
-Docker. Host setup, running and updating: [`docs/worker.md`](../docs/worker.md).
+Docker. Host setup, running and updating: [Running a worker](https://notna-k.github.io/Lute/docs/workers/running/).
 
 ## Layout
 

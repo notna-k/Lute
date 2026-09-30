@@ -1,4 +1,7 @@
-# Running a Lute worker
+---
+title: Running a worker
+description: Put the lute-worker image on a build machine with rootless Docker.
+---
 
 A worker is the `lute-worker` image running on a Linux host with **rootless Docker**. It dials
 core over gRPC, runs each job as a sibling container on the same engine, and keeps its identity
