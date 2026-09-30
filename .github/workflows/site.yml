@@ -1,26 +1,23 @@
 name: Site
 
-# Builds the home page and docs (site/) on every PR that touches them, and publishes to
-# GitHub Pages from master. The API reference is generated from api/openapi.yaml.
+# Publishes the home page and docs (site/) to GitHub Pages when master changes them.
+# The API reference is generated from api/openapi.yaml.
 on:
   push:
     branches: [master]
-    paths: &paths
+    paths:
       - site/**
       - api/openapi.yaml
       - docs/media/**
       - .github/workflows/site.yml
-  pull_request:
-    branches: [master]
-    paths: *paths
-  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Queue deploys rather than cancel one halfway through.
 concurrency:
-  group: site-${{ github.ref }}
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -43,13 +40,11 @@ jobs:
       - name: Build
         run: npm run build
       - uses: actions/upload-pages-artifact@v5
-        if: github.event_name != 'pull_request'
         with:
           path: site/dist
 
   deploy:
     name: Deploy
-    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
