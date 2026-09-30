@@ -1,0 +1,696 @@
+---
+import { Image } from 'astro:assets';
+import jobs from '../../../docs/media/jobs.png';
+import definition from '../../../docs/media/job-definition.png';
+import workers from '../../../docs/media/workers-engines.png';
+
+const base = import.meta.env.BASE_URL;
+const repo = 'https://github.com/notna-k/Lute';
+const docs = (path = '') => `${base}docs/${path}`;
+const title = 'Lute — CI that lives in your repo';
+const description =
+	'Lute is a self-hosted CI server. Jobs are YAML in your Git repo, run forms come from typed parameters, and a worker is one rootless Docker container.';
+
+const features = [
+	{ title: 'Configuration as code', text: 'Job definitions are YAML in Git. Core syncs them on startup and on demand, and the panel flags anything that drifted.', icon: 'branch' },
+	{ title: 'Forms, not plugins', text: 'Declare typed parameters — select, toggle, date, number — and the run form renders itself. Nothing to install.', icon: 'form' },
+	{ title: 'Stateless core', text: 'Everything durable — data and the job queue — lives in Postgres. Restart or scale core out whenever you like.', icon: 'db' },
+	{ title: 'Rootless workers', text: "A worker is a container on rootless Docker. Jobs run as sibling containers, so an escape gets one user's rights, not root's.", icon: 'shield' },
+	{ title: 'Live builds', text: 'Status changes reach the panel over WebSocket as they happen. Logs stay on the worker and core reads them over gRPC.', icon: 'lines' },
+	{ title: 'A real API', text: 'Trigger, list, retry and cancel runs with an API key. Idempotency keys and signed webhooks included.', icon: 'code' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+		/>
+	</head>
+	<body>
+		<header class="nav">
+			<nav class="wrap row">
+				<a href={base} class="brand"><span class="mark">L</span>Lute</a>
+				<div class="links">
+					<a href={docs()}>Docs</a>
+					<a href={docs('api/')}>API</a>
+					<a class="ghost small" href={repo}>
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"></path></svg>
+						Star on GitHub
+					</a>
+				</div>
+			</nav>
+		</header>
+
+		<main>
+			<section class="hero wrap">
+				<div class="badge mono"><i></i>v0.2 · early work in progress · MIT</div>
+				<h1>CI that lives in your repo.</h1>
+				<p>{description}</p>
+				<div class="ctas">
+					<a class="primary" href={docs()}>
+						Read the docs
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+					</a>
+					<a class="ghost" href={repo}>
+						<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="9" r="2.5"></circle><path d="M6 8.5v7M18 11.5c0 4-6 3-10.5 5.5"></path></svg>
+						<span class="mono">github.com/notna-k/Lute</span>
+					</a>
+				</div>
+			</section>
+
+			<section class="wrap shot-wrap">
+				<div class="shot crop-wide"><Image src={jobs} alt="The Lute panel listing job definitions synced from Git" widths={[800, 1440, 2400]} sizes="(max-width: 1248px) 100vw, 1200px" loading="eager" /></div>
+			</section>
+
+			<section class="band">
+				<div class="wrap stack">
+					<div class="head">
+						<span class="eyebrow mono">Features</span>
+						<h2>Small core, no plugins, everything in Git.</h2>
+					</div>
+					<div class="features">
+						{
+							features.map((f) => (
+								<div class="feature">
+									<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										{f.icon === 'branch' && <><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="9" r="2.5" /><path d="M6 8.5v7M18 11.5c0 4-6 3-10.5 5.5" /></>}
+										{f.icon === 'form' && <><rect x="3" y="4" width="18" height="16" /><path d="M7 9h6M7 13h10M7 17h4" /></>}
+										{f.icon === 'db' && <><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></>}
+										{f.icon === 'shield' && <><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z" /><path d="M9 12l2 2 4-4" /></>}
+										{f.icon === 'lines' && <><path d="M4 6h16M4 12h10M4 18h13" /><circle cx="19" cy="12" r="1.5" /></>}
+										{f.icon === 'code' && <path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16" />}
+									</svg>
+									<h3>{f.title}</h3>
+									<p>{f.text}</p>
+								</div>
+							))
+						}
+					</div>
+				</div>
+			</section>
+
+			<section class="band">
+				<div class="wrap split">
+					<div class="copy">
+						<span class="eyebrow mono">Git is the source of truth</span>
+						<h2>Commit a file. Get a job with a run form.</h2>
+						<p>A job declares its queue, labels, runtime image, command and parameters. Each parameter becomes an input and an environment variable for your command.</p>
+						<p>Edits made in the panel stay until the file changes in Git, and export back to YAML so you can commit them.</p>
+						<a class="more" href={docs('jobs/definitions/')}>Job definition reference →</a>
+					</div>
+					<div class="term mono wide">
+						<div class="term-head">jobs/web-release.yaml</div>
+						<pre><span class="k">name:</span> web-release
+<span class="k">description:</span> Builds and ships the marketing site.
+<span class="k">queue:</span> deploy
+<span class="k">labels:</span>
+  <span class="k">region:</span> eu
+<span class="k">runtime:</span> node:25-alpine
+<span class="k">command:</span> <span class="s">./scripts/ship.sh</span>
+<span class="k">parameters:</span>
+  - <span class="k">name:</span> environment
+    <span class="k">type:</span> <span class="p">select</span>
+    <span class="k">required:</span> <span class="p">true</span>
+    <span class="k">options:</span>
+      - {'{'} <span class="k">value:</span> staging, <span class="k">tone:</span> warning {'}'}
+      - {'{'} <span class="k">value:</span> prod, <span class="k">tone:</span> danger {'}'}
+  - <span class="k">name:</span> dry_run
+    <span class="k">type:</span> <span class="p">bool</span>
+    <span class="k">default:</span> <span class="p">true</span></pre>
+					</div>
+				</div>
+				<div class="wrap shot-wrap">
+					<div class="shot"><Image src={definition} alt="The job definition editor showing typed parameters next to the generated YAML" widths={[800, 1440, 1920]} sizes="(max-width: 1248px) 100vw, 1200px" /></div>
+				</div>
+			</section>
+
+			<section class="band">
+				<div class="wrap split reverse">
+					<div class="media">
+						<div class="term mono">
+							<div class="term-head">ci@build-01</div>
+							<pre><span class="c">$</span> docker run -d --name lute-worker --restart unless-stopped \
+    -v "$XDG_RUNTIME_DIR/docker.sock:/var/run/docker.sock" \
+    -v "$HOME/.local/share/lute-worker:/var/lib/lute-worker" \
+    -e LUTE_SERVER=<span class="s">lute.example.com:50051</span> \
+    -e LUTE_TOKEN=<span class="p">lute_rt_...</span> \
+    ghcr.io/notna-k/lute-worker:0.2</pre>
+						</div>
+						<div class="shot small crop-workers"><Image src={workers} alt="The workers page listing three live workers with their labels and versions" widths={[720, 1440]} sizes="(max-width: 1248px) 100vw, 640px" /></div>
+					</div>
+					<div class="copy">
+						<span class="eyebrow mono">Workers</span>
+						<h2>One command per build machine.</h2>
+						<p><b>Add worker</b> in the panel hands you a registration token and this exact command. The worker enrols, advertises its queues and labels, and waits for work.</p>
+						<ul>
+							<li>Labels decide which jobs land where</li>
+							<li>Outdated agents are flagged by version</li>
+							<li>Image published to ghcr.io for amd64 and arm64</li>
+						</ul>
+						<a class="more" href={docs('workers/running/')}>Running a worker →</a>
+					</div>
+				</div>
+			</section>
+
+			<section class="band">
+				<div class="wrap stack">
+					<div class="head">
+						<span class="eyebrow mono">How it works</span>
+						<h2>Three pieces, each doing one thing.</h2>
+					</div>
+					<div class="arch-scroll">
+						<div class="arch mono" role="img" aria-label="The browser talks to the admin panel, which proxies /api to core; core keeps everything in Postgres; workers connect to core over gRPC.">
+							<div class="box">browser<small>you</small></div>
+							<div class="wire"><span>https</span></div>
+							<div class="box">admin<small>nginx · React SPA</small></div>
+							<div class="wire"><span>/api · ws</span></div>
+							<div class="box core">core<small>Go · HTTP + WS + gRPC</small></div>
+							<div class="wire"><span>sql</span></div>
+							<div class="box">postgres<small>data + job queue</small></div>
+							<div class="down"><i></i><span>gRPC :50051</span></div>
+							<div class="box workers">workers ×N<small>rootless Docker · job containers</small></div>
+						</div>
+					</div>
+					<a class="more" href={docs('how-it-works/')}>How it works →</a>
+				</div>
+			</section>
+
+			<section class="band">
+				<div class="wrap outro">
+					<h2>Used in production by nobody. Yet.</h2>
+					<p>Lute is a weekend project with no stable release, so expect breaking changes. Issues, ideas and pull requests are welcome.</p>
+					<div class="ctas">
+						<a class="primary" href={repo}>View on GitHub</a>
+						<a class="ghost" href={docs()}>Browse the docs</a>
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<footer>
+			<div class="wrap foot">
+				<div class="foot-brand">
+					<a href={base} class="brand"><span class="mark">L</span>Lute</a>
+					<span>MIT © Anton Mahdysyuk</span>
+				</div>
+				<div class="cols">
+					<div>
+						<span class="eyebrow mono">Docs</span>
+						<a href={docs('quick-start/')}>Quick start</a>
+						<a href={docs('how-it-works/')}>How it works</a>
+						<a href={docs('api/')}>API reference</a>
+					</div>
+					<div>
+						<span class="eyebrow mono">Project</span>
+						<a href={repo}>GitHub</a>
+						<a href={`${repo}/blob/master/CONTRIBUTING.md`}>Contributing</a>
+						<a href={`${repo}/pkgs/container/lute-worker`}>Worker image</a>
+					</div>
+				</div>
+			</div>
+		</footer>
+	</body>
+</html>
+
+<style is:global>
+	:root {
+		--bg: #0c0d0f;
+		--surface: #131417;
+		--line: #1e2024;
+		--line-strong: #25272c;
+		--fg: #edeef0;
+		--muted: #9a9ea6;
+		--subtle: #80848c;
+		--accent: #3dd68c;
+		color-scheme: dark;
+	}
+	* {
+		box-sizing: border-box;
+	}
+	body {
+		margin: 0;
+		background: var(--bg);
+		color: var(--fg);
+		font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+		-webkit-font-smoothing: antialiased;
+	}
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+	.mono {
+		font-family: 'Geist Mono', ui-monospace, monospace;
+	}
+	.wrap {
+		max-width: 1248px;
+		margin: 0 auto;
+		padding: 0 24px;
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+	}
+	.nav {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		background: rgba(12, 13, 15, 0.86);
+		backdrop-filter: blur(8px);
+		border-bottom: 1px solid var(--line);
+	}
+	.nav nav {
+		height: 60px;
+	}
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 600;
+	}
+	.mark {
+		width: 26px;
+		height: 26px;
+		background: var(--fg);
+		color: var(--bg);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 14px;
+		font-weight: 700;
+	}
+	.links {
+		display: flex;
+		align-items: center;
+		gap: 20px;
+		font-size: 14px;
+	}
+	.links > a:not(.ghost) {
+		color: var(--muted);
+		padding: 12px 4px;
+	}
+	.links > a:hover {
+		color: var(--fg);
+	}
+	.primary,
+	.ghost {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		height: 46px;
+		padding: 0 20px;
+		font-size: 15px;
+		font-weight: 500;
+	}
+	.primary {
+		background: var(--accent);
+		color: #06140c;
+		font-weight: 600;
+	}
+	.primary:hover {
+		filter: brightness(1.08);
+	}
+	.ghost {
+		border: 1px solid #2a2c31;
+	}
+	.ghost:hover {
+		background: #17181b;
+		border-color: #3a3d44;
+	}
+	.ghost.small {
+		height: 36px;
+		padding: 0 12px;
+		font-size: 13px;
+	}
+	.hero {
+		padding-top: 112px;
+		padding-bottom: 64px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 28px;
+	}
+	.badge {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 12px;
+		color: var(--muted);
+		border: 1px solid var(--line-strong);
+		padding: 6px 12px;
+	}
+	.badge i {
+		width: 7px;
+		height: 7px;
+		background: #e5a83b;
+	}
+	h1 {
+		margin: 0;
+		font-size: clamp(40px, 7vw, 76px);
+		line-height: 1.02;
+		letter-spacing: -0.035em;
+		font-weight: 600;
+		max-width: 940px;
+	}
+	.hero > p {
+		margin: 0;
+		font-size: 19px;
+		line-height: 1.55;
+		color: var(--muted);
+		max-width: 660px;
+	}
+	.ctas {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 12px;
+	}
+	.ctas .mono {
+		font-size: 14px;
+	}
+	.shot-wrap {
+		padding-bottom: 96px;
+	}
+	.shot {
+		border: 1px solid var(--line-strong);
+		background: #111214;
+		padding: 10px;
+	}
+	.shot img {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+	/* These screenshots are mostly empty below their rows; show the top. */
+	.crop-wide img {
+		aspect-ratio: 32 / 11;
+		object-fit: cover;
+		object-position: top;
+	}
+	.crop-workers img {
+		aspect-ratio: 16 / 5;
+		object-fit: cover;
+		object-position: top;
+	}
+	.band {
+		border-top: 1px solid var(--line);
+	}
+	.stack {
+		padding-top: 96px;
+		padding-bottom: 96px;
+		display: flex;
+		flex-direction: column;
+		gap: 48px;
+	}
+	.head {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		max-width: 640px;
+	}
+	.eyebrow {
+		font-size: 12px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+	h2 {
+		margin: 0;
+		font-size: 40px;
+		line-height: 1.1;
+		letter-spacing: -0.025em;
+		font-weight: 600;
+	}
+	.features {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		gap: 1px;
+		background: var(--line);
+		border: 1px solid var(--line);
+	}
+	.feature {
+		background: var(--bg);
+		padding: 32px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.feature h3 {
+		margin: 0;
+		font-size: 17px;
+		font-weight: 600;
+	}
+	.feature p {
+		margin: 0;
+		font-size: 15px;
+		line-height: 1.6;
+		color: var(--muted);
+	}
+	.split {
+		padding-top: 96px;
+		padding-bottom: 96px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 56px;
+		align-items: center;
+	}
+	.split.reverse {
+		flex-wrap: wrap-reverse;
+	}
+	.copy {
+		flex: 1 1 360px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	.copy p {
+		margin: 0;
+		font-size: 17px;
+		line-height: 1.6;
+		color: var(--muted);
+	}
+	.copy b {
+		color: var(--fg);
+		font-weight: 500;
+	}
+	.copy ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		font-size: 15px;
+		color: #c9cbd0;
+	}
+	.copy li::before {
+		content: '';
+		display: inline-block;
+		width: 6px;
+		height: 6px;
+		background: var(--accent);
+		margin-right: 10px;
+		vertical-align: middle;
+	}
+	.more {
+		color: var(--accent);
+		font-size: 15px;
+		padding: 8px 0;
+		align-self: flex-start;
+	}
+	.more:hover {
+		text-decoration: underline;
+	}
+	.media {
+		flex: 1 1 520px;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	.term {
+		background: var(--surface);
+		border: 1px solid var(--line-strong);
+		min-width: 0;
+	}
+	.term.wide {
+		flex: 1 1 480px;
+	}
+	.term-head {
+		padding: 10px 16px;
+		border-bottom: 1px solid var(--line-strong);
+		color: var(--subtle);
+		font-size: 12px;
+	}
+	.term pre {
+		margin: 0;
+		padding: 16px;
+		font-family: inherit;
+		font-size: 13.5px;
+		line-height: 1.75;
+		overflow-x: auto;
+	}
+	.k {
+		color: var(--muted);
+	}
+	.s {
+		color: #7ee2b0;
+	}
+	.c {
+		color: #6f737c;
+	}
+	.p {
+		color: #e5a83b;
+	}
+	.shot.small {
+		padding: 8px;
+	}
+	.arch-scroll {
+		overflow-x: auto;
+	}
+	.arch {
+		min-width: 860px;
+		display: grid;
+		grid-template-columns: 1fr 64px 1fr 64px 1.3fr 64px 1fr;
+		grid-template-rows: auto 72px auto;
+		align-items: center;
+		font-size: 13px;
+	}
+	.arch .box {
+		border: 1px solid var(--line-strong);
+		padding: 18px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.arch small {
+		color: var(--subtle);
+		font-size: 13px;
+	}
+	.arch .core {
+		border-color: var(--accent);
+		background: #0f1a14;
+	}
+	.arch .core small {
+		color: var(--muted);
+	}
+	.wire {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		color: #6f737c;
+		font-size: 11px;
+	}
+	.wire::after {
+		content: '';
+		width: 100%;
+		height: 1px;
+		background: #3a3d44;
+	}
+	.down {
+		grid-column: 5;
+		grid-row: 2;
+		height: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 10px;
+		color: #6f737c;
+		font-size: 11px;
+	}
+	.down i {
+		width: 1px;
+		height: 100%;
+		background: #3a3d44;
+	}
+	.arch .workers {
+		grid-column: 5;
+		grid-row: 3;
+	}
+	.outro {
+		padding-top: 96px;
+		padding-bottom: 96px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 20px;
+	}
+	.outro p {
+		margin: 0;
+		font-size: 17px;
+		line-height: 1.6;
+		color: var(--muted);
+		max-width: 560px;
+	}
+	footer {
+		border-top: 1px solid var(--line);
+		background: #09090b;
+	}
+	.foot {
+		padding-top: 48px;
+		padding-bottom: 48px;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 32px;
+		font-size: 14px;
+	}
+	.foot-brand {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		color: var(--subtle);
+	}
+	.foot-brand .brand {
+		color: var(--fg);
+	}
+	.cols {
+		display: flex;
+		gap: 56px;
+		flex-wrap: wrap;
+	}
+	.cols > div {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.cols .eyebrow {
+		font-size: 11px;
+		color: var(--subtle);
+	}
+	.cols a {
+		color: #c9cbd0;
+	}
+	.cols a:hover {
+		color: #fff;
+	}
+	@media (max-width: 640px) {
+		.hero {
+			padding-top: 72px;
+		}
+		h2 {
+			font-size: 32px;
+		}
+		.links > a:not(.ghost) {
+			display: none;
+		}
+		.feature {
+			padding: 24px;
+		}
+	}
+</style>

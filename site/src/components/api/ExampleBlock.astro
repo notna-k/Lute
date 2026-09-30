@@ -1,0 +1,185 @@
+---
+// One dark block: request samples on top, response examples below, each behind tabs.
+// The chosen language is shared by every block on the page and remembered.
+import { Code } from 'astro:components';
+import type { Response, Sample } from '../../lib/openapi';
+
+interface Props {
+	samples: Sample[];
+	responses: Response[];
+}
+
+const { samples, responses } = Astro.props;
+const withBody = responses.filter((r) => r.example !== undefined);
+const first = withBody[0]?.status;
+const tone = (s: string) => (s.startsWith('2') ? 'ok' : 'err');
+---
+
+<div class="example not-content">
+	<div class="bar">
+		<div role="tablist" aria-label="Request sample language">
+			{
+				samples.map((s, i) => (
+					<button type="button" role="tab" data-lang={s.lang} aria-selected={i === 0 ? 'true' : 'false'}>
+						{s.label}
+					</button>
+				))
+			}
+		</div>
+		<button type="button" class="copy" aria-label="Copy request sample">copy</button>
+	</div>
+	{
+		samples.map((s, i) => (
+			<div class="pane" data-lang-pane={s.lang} hidden={i !== 0}>
+				<Code code={s.code} lang={s.lang} theme="github-dark-dimmed" />
+			</div>
+		))
+	}
+	{
+		withBody.length > 0 && (
+			<>
+				<div class="bar sub">
+					<span class="label">Response</span>
+					<div role="tablist" aria-label="Response status">
+						{withBody.map((r) => (
+							<button type="button" role="tab" data-status={r.status} aria-selected={r.status === first ? 'true' : 'false'}>
+								<span class:list={['dot', tone(r.status)]} />
+								{r.status}
+							</button>
+						))}
+					</div>
+				</div>
+				{withBody.map((r) => (
+					<div class="pane" data-status-pane={r.status} hidden={r.status !== first}>
+						<Code code={JSON.stringify(r.example, null, 2)} lang="json" theme="github-dark-dimmed" />
+					</div>
+				))}
+			</>
+		)
+	}
+</div>
+
+<script>
+	const KEY = 'lute-sample-lang';
+
+	function showLang(lang: string) {
+		document.querySelectorAll<HTMLElement>('.example').forEach((block) => {
+			if (!block.querySelector(`[data-lang-pane="${lang}"]`)) return;
+			block.querySelectorAll<HTMLElement>('[data-lang]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.lang === lang)));
+			block.querySelectorAll<HTMLElement>('[data-lang-pane]').forEach((p) => (p.hidden = p.dataset.langPane !== lang));
+		});
+	}
+
+	document.querySelectorAll<HTMLElement>('.example').forEach((block) => {
+		block.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((b) =>
+			b.addEventListener('click', () => {
+				showLang(b.dataset.lang!);
+				try {
+					localStorage.setItem(KEY, b.dataset.lang!);
+				} catch {}
+			}),
+		);
+		block.querySelectorAll<HTMLButtonElement>('[data-status]').forEach((b) =>
+			b.addEventListener('click', () => {
+				block.querySelectorAll<HTMLElement>('[data-status]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+				block.querySelectorAll<HTMLElement>('[data-status-pane]').forEach((p) => (p.hidden = p.dataset.statusPane !== b.dataset.status));
+			}),
+		);
+		block.querySelector<HTMLButtonElement>('.copy')?.addEventListener('click', (e) => {
+			const pane = block.querySelector<HTMLElement>('[data-lang-pane]:not([hidden]) pre');
+			if (!pane) return;
+			navigator.clipboard.writeText(pane.innerText);
+			const btn = e.currentTarget as HTMLButtonElement;
+			btn.textContent = 'copied';
+			setTimeout(() => (btn.textContent = 'copy'), 1200);
+		});
+	});
+
+	try {
+		const saved = localStorage.getItem(KEY);
+		if (saved) showLang(saved);
+	} catch {}
+</script>
+
+<style>
+	.example {
+		border: 1px solid var(--lute-code-border);
+		background: var(--lute-code-bg);
+		color: #edeef0;
+		margin-top: 1.25rem;
+	}
+	.bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: 1px solid #25272c;
+		padding: 0 0.5rem 0 0.25rem;
+	}
+	.bar.sub {
+		justify-content: flex-start;
+		gap: 0.25rem;
+		border-top: 1px solid #25272c;
+		background: #131417;
+	}
+	[role='tablist'] {
+		display: flex;
+		overflow-x: auto;
+	}
+	button {
+		background: none;
+		border: 0;
+		font: inherit;
+		font-family: var(--sl-font-mono);
+		font-size: 0.78rem;
+		color: #80848c;
+		cursor: pointer;
+		padding: 0.75rem 0.75rem 0.6rem;
+		border-bottom: 2px solid transparent;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		white-space: nowrap;
+	}
+	button:hover {
+		color: #edeef0;
+	}
+	[data-lang][aria-selected='true'] {
+		color: #edeef0;
+		border-bottom-color: #3dd68c;
+	}
+	[data-status][aria-selected='true'] {
+		color: #edeef0;
+		border-bottom-color: #edeef0;
+	}
+	.copy {
+		color: #9a9ea6;
+		border: 0;
+	}
+	.label {
+		font-family: var(--sl-font-mono);
+		font-size: 0.7rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #80848c;
+		padding: 0 0.5rem;
+	}
+	.dot {
+		width: 6px;
+		height: 6px;
+		display: inline-block;
+	}
+	.dot.ok {
+		background: #3dd68c;
+	}
+	.dot.err {
+		background: #f07a6f;
+	}
+	.pane :global(pre) {
+		margin: 0;
+		padding: 1rem 1.1rem;
+		background: transparent !important;
+		font-size: 0.8rem;
+		line-height: 1.7;
+		overflow-x: auto;
+	}
+</style>

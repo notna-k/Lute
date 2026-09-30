@@ -1,0 +1,79 @@
+---
+import { md, type Field } from '../../lib/openapi';
+
+interface Props {
+	fields: Field[];
+	nested?: boolean;
+}
+
+const { fields, nested = false } = Astro.props;
+---
+
+<ul class:list={['fields', { nested }]}>
+	{
+		fields.map((f) => (
+			<li>
+				<div class="head">
+					<span class="name">{f.name}</span>
+					<span class="type">{f.type}</span>
+					{f.required && <span class="req">required</span>}
+				</div>
+				{f.description && <div class="desc" set:html={md(f.description)} />}
+				{f.children.length > 0 && <Astro.self fields={f.children} nested />}
+			</li>
+		))
+	}
+</ul>
+
+<style>
+	.fields {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		border-bottom: 1px solid var(--sl-color-gray-5);
+	}
+	.fields.nested {
+		margin: 0.6rem 0 0.2rem;
+		padding-left: 1rem;
+		border-left: 1px solid var(--sl-color-gray-5);
+		border-bottom: 0;
+	}
+	li {
+		padding: 0.85rem 0;
+		border-top: 1px solid var(--sl-color-gray-5);
+	}
+	.nested li {
+		padding: 0.55rem 0;
+	}
+	.nested li:first-child {
+		border-top: 0;
+	}
+	.head {
+		font-family: var(--sl-font-mono);
+		font-size: 0.84rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.6rem;
+		align-items: baseline;
+	}
+	.name {
+		color: var(--sl-color-white);
+		font-weight: 500;
+	}
+	.type {
+		color: var(--sl-color-gray-3);
+	}
+	.req {
+		color: var(--lute-delete);
+		font-size: 0.75rem;
+	}
+	.desc {
+		margin-top: 0.3rem;
+		color: var(--sl-color-gray-2);
+		font-size: 0.9rem;
+		line-height: 1.6;
+	}
+	.desc :global(p) {
+		margin: 0;
+	}
+</style>

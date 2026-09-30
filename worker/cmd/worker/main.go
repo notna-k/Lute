@@ -135,7 +135,7 @@ func run(args []string) int {
 	}
 	if missing := eng.Missing(); len(missing) > 0 {
 		if cfg.LimitsConfigured() {
-			return fail(exitConfig, "job limits are configured but the engine cannot enforce %s limits; delegate cgroup v2 controllers to the user (see docs/worker.md)", strings.Join(missing, ", "))
+			return fail(exitConfig, "job limits are configured but the engine cannot enforce %s limits; delegate cgroup v2 controllers to the user (see https://notna-k.github.io/Lute/docs/workers/running/)", strings.Join(missing, ", "))
 		}
 		slog.Warn("The engine cannot enforce some resource limits; jobs run without them", "missing", missing)
 	}

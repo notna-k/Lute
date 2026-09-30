@@ -1,0 +1,932 @@
+openapi: 3.1.0
+info:
+  title: Lute public API
+  version: "1"
+  description: |
+    The API that API keys reach: create and follow runs, and manage workers and their
+    registration tokens. The panel's own API under `/api/v1` is internal and not covered here.
+  license:
+    name: MIT
+    url: https://github.com/notna-k/Lute/blob/master/LICENSE
+
+servers:
+  - url: https://lute.example.com/api/public/v1
+    description: Your Lute core
+
+security:
+  - apiKey: []
+
+tags:
+  - name: runs
+    x-object: Run
+    x-displayName: Runs
+    description: |
+      A run is one job on a queue: what to execute, where, and how it went. Create runs from
+      scripts or other CI systems, then poll them or wait for a webhook.
+  - name: workers
+    x-object: Worker
+    x-displayName: Workers
+    description: |
+      The machines runs are dispatched to. A worker registers itself with a registration token;
+      these endpoints read and manage it afterwards.
+  - name: commands
+    x-object: Command
+    x-displayName: Worker commands
+    description: |
+      One-off commands executed by a worker's agent, outside the job queue. Queue one, then poll
+      its result.
+  - name: tokens
+    x-object: RegistrationToken
+    x-displayName: Registration tokens
+    description: |
+      Tokens a new worker presents once, on its first start. Revoking a token stops new
+      registrations; workers that already registered keep working.
+
+paths:
+  /runs:
+    post:
+      tags: [runs]
+      operationId: createRun
+      summary: Create a run
+      description: |
+        Puts a job on a queue. The first worker that serves the queue and has every label in
+        `selector` leases it. Answers `201` with the new run, or `200` with the existing one when
+        `idempotency_key` was used before.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRunRequest" }
+            example:
+              queue: deploy
+              type: container
+              payload:
+                runtime: node:25-alpine
+                command: ./scripts/ship.sh
+                request_params: { ENVIRONMENT: staging }
+              selector: { region: eu }
+              idempotency_key: release-2026-09-30
+              webhook: { url: https://ci.example.com/hooks/lute }
+      responses:
+        "201":
+          description: Run created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedRun" }
+              example:
+                id: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+                queue: deploy
+                type: container
+                status: pending
+                attempts: 0
+                max_retries: 0
+                timeout_sec: 0
+                idempotency_key: release-2026-09-30
+                webhook_url: https://ci.example.com/hooks/lute
+                webhook_events: [run.completed, run.failed]
+                enqueued_at: "2026-09-30T09:14:02Z"
+                webhook_secret: 9c1e4f0b7a2d…
+        "200":
+          description: A run with this `idempotency_key` already exists; it is returned unchanged.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    get:
+      tags: [runs]
+      operationId: listRuns
+      summary: List runs
+      description: Runs started by the API key's owner, filtered and paged.
+      parameters:
+        - { name: queue, in: query, schema: { type: string }, description: Only runs on this queue. }
+        - { name: type, in: query, schema: { type: string }, description: Only runs of this type. }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: Runs to skip. }
+        - { name: limit, in: query, schema: { type: integer, default: 50 }, description: Runs to return. }
+      responses:
+        "200":
+          description: A page of runs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunList" }
+              example:
+                runs:
+                  - id: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+                    queue: deploy
+                    type: container
+                    status: done
+                    attempts: 1
+                    max_retries: 0
+                    timeout_sec: 0
+                    worker_id: 66f9e0a1c4b2d3e4f5a6b7c8
+                    enqueued_at: "2026-09-30T09:14:02Z"
+                    started_at: "2026-09-30T09:14:03Z"
+                    finished_at: "2026-09-30T09:15:41Z"
+                    elapsed_ms: 98214
+                total: 1
+                offset: 0
+                limit: 50
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /runs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      tags: [runs]
+      operationId: getRun
+      summary: Get a run
+      description: The run's current state.
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [runs]
+      operationId: cancelRun
+      summary: Cancel a run
+      description: |
+        Cancels a run that no worker has taken yet. It ends with status `dead` and error
+        `cancelled`. A run that already started answers `409`.
+      responses:
+        "200":
+          description: The cancelled run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /runs/{id}/retry:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    post:
+      tags: [runs]
+      operationId: retryRun
+      summary: Retry a run
+      description: Queues the run again from its first attempt, with the same payload.
+      responses:
+        "200":
+          description: The run, queued again.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /runs/{id}/logs:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      tags: [runs]
+      operationId: getRunLogs
+      summary: Read a run's log
+      description: |
+        A page of the log. Logs stay on the worker that ran the job, so core asks that worker for
+        them: an offline worker answers `503`.
+      parameters:
+        - name: direction
+          in: query
+          schema: { type: string, enum: [tail, head], default: tail }
+          description: "`tail` pages back from the end, `head` forward from the start."
+        - name: limit
+          in: query
+          schema: { type: integer, default: 200, maximum: 500 }
+          description: Lines per page.
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: "`next_cursor` of the previous page."
+      responses:
+        "200":
+          description: A page of log lines.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LogPage" }
+              example:
+                lines: ["> ship@1.0.0 build", "vite v7 building for production...", "✓ built in 4.12s"]
+                direction: tail
+                has_more: true
+                file_size: 48213
+                next_cursor: "46980"
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503":
+          description: The worker that holds the log is offline.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /workers:
+    get:
+      tags: [workers]
+      operationId: listWorkers
+      summary: List workers
+      description: Your workers, optionally only those with the given labels.
+      parameters:
+        - name: label
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string } }
+          description: "`key:value`; repeat it to require several labels."
+      responses:
+        "200":
+          description: The workers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Worker" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /workers/connected:
+    get:
+      tags: [workers]
+      operationId: listConnectedWorkers
+      summary: List connected workers
+      description: Workers with a live connection to this core, and how busy they are.
+      responses:
+        "200":
+          description: The connected workers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workers, count]
+                properties:
+                  workers:
+                    type: array
+                    items: { $ref: "#/components/schemas/ConnectedWorker" }
+                  count: { type: integer }
+              example:
+                workers:
+                  - worker_id: 66f9e0a1c4b2d3e4f5a6b7c8
+                    queues: [default, deploy]
+                    concurrency: 4
+                    active_jobs: 1
+                    draining: false
+                count: 1
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /workers/install:
+    get:
+      tags: [workers]
+      operationId: getInstallInfo
+      summary: Get install details
+      description: The gRPC address and image a new worker's `docker run` needs.
+      responses:
+        "200":
+          description: Install details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [server, image]
+                properties:
+                  server: { type: string, description: "core's gRPC address, `host:port`." }
+                  image: { type: string, description: Worker image to run. }
+              example:
+                server: lute.example.com:50051
+                image: ghcr.io/notna-k/lute-worker:0.2
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /workers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/WorkerID"
+    get:
+      tags: [workers]
+      operationId: getWorker
+      summary: Get a worker
+      responses:
+        "200":
+          description: The worker.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Worker" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [workers]
+      operationId: updateWorker
+      summary: Update a worker
+      description: Renames or re-describes a worker. Fields left out stay as they are.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 1–63 letters, digits, `.`, `_` or `-`, starting with a letter or digit. Unique across Lute.
+                description: { type: string }
+            example:
+              name: ci-rootless-03
+              description: Build farm, rack B
+      responses:
+        "200":
+          description: The updated worker.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Worker" }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [workers]
+      operationId: deleteWorker
+      summary: Delete a worker
+      description: |
+        A connected worker finishes its running jobs, then core removes it and the agent stops its
+        own container (`202`). A worker that is not connected is removed at once (`200`).
+      responses:
+        "200":
+          description: Removed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteResult" }
+              example: { status: deleted }
+        "202":
+          description: Draining; removed once its running jobs finish.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteResult" }
+              example:
+                status: deleting
+                message: The worker finishes its running jobs, then stops.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /workers/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/WorkerID"
+    get:
+      tags: [workers]
+      operationId: getWorkerStatus
+      summary: Get live status
+      description: A lighter read than the full worker, for polling.
+      responses:
+        "200":
+          description: Live status. Version, last seen and metrics appear once the agent has reported.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [worker_id, name, status]
+                properties:
+                  worker_id: { type: string }
+                  name: { type: string }
+                  status: { $ref: "#/components/schemas/WorkerStatus" }
+                  agent_version: { type: string }
+                  last_seen: { type: string, format: date-time }
+                  metrics: { type: object, additionalProperties: true }
+              example:
+                worker_id: 66f9e0a1c4b2d3e4f5a6b7c8
+                name: ci-rootless-01
+                status: alive
+                agent_version: 0.2.0
+                last_seen: "2026-09-30T09:15:40.412Z"
+                metrics: { cpu_load: 0.42, mem_usage_mb: 12.4, disk_used_gb: 31.2, disk_total_gb: 98.0 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /workers/{id}/labels:
+    parameters:
+      - $ref: "#/components/parameters/WorkerID"
+    get:
+      tags: [workers]
+      operationId: getWorkerLabels
+      summary: Get labels
+      responses:
+        "200":
+          description: The worker's labels.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Labels" }
+              example: { labels: { arch: amd64, os: linux } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [workers]
+      operationId: setWorkerLabels
+      summary: Set labels
+      description: |
+        Replaces the worker's labels. Runs waiting for a `selector` this worker now matches are
+        dispatched right away.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Labels" }
+            example: { labels: { arch: amd64, os: linux, region: eu } }
+      responses:
+        "200":
+          description: The updated worker.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Worker" }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /workers/{id}/re-enable:
+    parameters:
+      - $ref: "#/components/parameters/WorkerID"
+    post:
+      tags: [workers]
+      operationId: reEnableWorker
+      summary: Re-enable a worker
+      description: Moves a `dead` worker back to `pending` so its agent may connect again.
+      responses:
+        "200":
+          description: The worker, now pending.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Worker" }
+        "400":
+          description: The worker is not dead.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /workers/{id}/commands:
+    parameters:
+      - $ref: "#/components/parameters/WorkerID"
+    post:
+      tags: [commands]
+      operationId: sendCommand
+      summary: Send a command
+      description: Queues a command for the worker's agent. The worker must have connected at least once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command: { type: string }
+                args: { type: array, items: { type: string } }
+                env: { type: object, additionalProperties: { type: string } }
+            example:
+              command: df
+              args: ["-h", "/var/lib/lute-worker"]
+      responses:
+        "201":
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [command_id, status, message]
+                properties:
+                  command_id: { type: string }
+                  status: { $ref: "#/components/schemas/CommandStatus" }
+                  message: { type: string }
+              example:
+                command_id: 66fa2b0c1d2e3f4a5b6c7d8e
+                status: pending
+                message: Command queued for worker
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      tags: [commands]
+      operationId: listCommands
+      summary: List commands
+      description: The worker's 50 most recent commands.
+      responses:
+        "200":
+          description: The commands.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [commands, count]
+                properties:
+                  commands:
+                    type: array
+                    items: { $ref: "#/components/schemas/Command" }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /workers/command-results/{commandId}:
+    parameters:
+      - name: commandId
+        in: path
+        required: true
+        schema: { type: string }
+        description: "`command_id` from Send a command."
+        example: 66fa2b0c1d2e3f4a5b6c7d8e
+    get:
+      tags: [commands]
+      operationId: getCommandResult
+      summary: Get a command's result
+      responses:
+        "200":
+          description: The command, with its output once it finished.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Command" }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /workers/tokens:
+    get:
+      tags: [tokens]
+      operationId: listTokens
+      summary: List tokens
+      responses:
+        "200":
+          description: Every registration token, newest first and revoked ones included. Tokens are shared by all operators.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    items: { $ref: "#/components/schemas/RegistrationToken" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [tokens]
+      operationId: createToken
+      summary: Create a token
+      description: The plaintext `token` is in this response only; core keeps a hash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, description: What the token is for. }
+            example: { name: build-farm }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedToken" }
+              example:
+                id: 66fa2c7d8e9f0a1b2c3d4e5f
+                created_at: "2026-09-30T09:20:11.052Z"
+                updated_at: "2026-09-30T09:20:11.052Z"
+                name: build-farm
+                prefix: lute_rt_K3M9QX
+                created_by: 66f1a2b3c4d5e6f7a8b9c0d1
+                token: lute_rt_K3M9QX…
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /workers/tokens/{tokenId}:
+    parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema: { type: string }
+        description: The token's `id`.
+        example: 66fa2c7d8e9f0a1b2c3d4e5f
+    delete:
+      tags: [tokens]
+      operationId: revokeToken
+      summary: Revoke a token
+      description: Stops new registrations with it. Workers that already registered keep working.
+      responses:
+        "204": { description: Revoked. }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: "An API key from Settings → API keys, sent as `Authorization: Bearer <key>`."
+
+  parameters:
+    RunID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: The run's `id`.
+      example: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+    WorkerID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: The worker's `id`.
+      example: 66f9e0a1c4b2d3e4f5a6b7c8
+
+  responses:
+    Invalid:
+      description: The request is invalid. `error.fields` names each bad input when there is one.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              code: validation_failed
+              message: webhook.url is required when webhook is provided
+              fields: { webhook.url: required }
+    Unauthorized:
+      description: Missing or unknown API key.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: unauthorized, message: invalid API key }
+    NotFound:
+      description: Not found, or not yours.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: not_found, message: run not found }
+    Conflict:
+      description: The request conflicts with the current state.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: conflict, message: "can only cancel pending jobs, status is running" }
+
+  schemas:
+    CreateRunRequest:
+      type: object
+      required: [queue, type]
+      properties:
+        queue: { type: string, description: Only workers serving this queue pick the run up. }
+        type:
+          type: string
+          enum: [container, noop]
+          description: "`container` runs an image; `noop` succeeds without doing anything."
+        payload: { $ref: "#/components/schemas/ContainerPayload" }
+        selector:
+          type: object
+          additionalProperties: { type: string }
+          description: Worker labels the run needs.
+        timeout_sec: { type: integer, description: Stop the job after this many seconds. }
+        max_retries: { type: integer, description: How many times to try again after a failure. }
+        delay_ms: { type: integer, description: Hold the run back this long before a worker can take it. }
+        priority: { type: number, description: Ordering within the queue. }
+        idempotency_key: { type: string, description: Send it again and you get the first run back instead of a second one. }
+        webhook: { $ref: "#/components/schemas/Webhook" }
+
+    ContainerPayload:
+      type: object
+      description: Input for the `container` handler.
+      properties:
+        runtime: { type: string, description: "Image to run, e.g. `node:25-alpine`." }
+        command: { type: string, description: Shell command inside it. }
+        request_params:
+          type: object
+          additionalProperties: { type: string }
+          description: Environment variables, name → value.
+        source_repository: { type: string, description: Git URL checked out into the workspace. }
+
+    Webhook:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+        secret: { type: string, description: "Signing secret. Left out, one is generated and returned once as `webhook_secret`." }
+        events:
+          type: array
+          items: { type: string, enum: [run.started, run.completed, run.failed] }
+          description: Defaults to `run.completed` and `run.failed`.
+
+    Run:
+      type: object
+      required: [id, queue, type, status, attempts, max_retries, timeout_sec, enqueued_at]
+      properties:
+        id: { type: string, format: uuid }
+        queue: { type: string }
+        type: { type: string }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        priority: { type: number }
+        attempts: { type: integer }
+        max_retries: { type: integer }
+        timeout_sec: { type: integer }
+        error: { type: string, description: "Last failure, if any." }
+        worker_id: { type: string, description: Set once a worker leased the run. }
+        idempotency_key: { type: string }
+        webhook_url: { type: string }
+        webhook_events: { type: array, items: { type: string } }
+        enqueued_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        elapsed_ms: { type: integer }
+      example:
+        id: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+        queue: deploy
+        type: container
+        status: running
+        attempts: 1
+        max_retries: 2
+        timeout_sec: 900
+        worker_id: 66f9e0a1c4b2d3e4f5a6b7c8
+        idempotency_key: release-2026-09-30
+        webhook_url: https://ci.example.com/hooks/lute
+        webhook_events: [run.completed, run.failed]
+        enqueued_at: "2026-09-30T09:14:02Z"
+        started_at: "2026-09-30T09:14:03Z"
+
+    CreatedRun:
+      allOf:
+        - $ref: "#/components/schemas/Run"
+        - type: object
+          properties:
+            webhook_secret: { type: string, description: "The generated webhook secret, returned once." }
+
+    RunStatus:
+      type: string
+      enum: [pending, running, done, failed, dead, unknown]
+      description: |
+        `pending` until a worker takes it, then `running`. `done` and `failed` are final; `dead`
+        means it ran out of retries or was cancelled.
+
+    RunList:
+      type: object
+      required: [runs, total, offset, limit]
+      properties:
+        runs: { type: array, items: { $ref: "#/components/schemas/Run" } }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+
+    LogPage:
+      type: object
+      required: [lines, direction, has_more, file_size]
+      properties:
+        lines: { type: array, items: { type: string } }
+        direction: { type: string, enum: [tail, head] }
+        has_more: { type: boolean }
+        file_size: { type: integer, description: Bytes. }
+        next_cursor: { type: string, description: Pass as `cursor` for the next page. }
+        error: { type: string, description: A problem the worker hit reading the file; the page is still valid. }
+
+    WorkerStatus:
+      type: string
+      enum: [pending, registered, alive, dead, deleting]
+
+    Worker:
+      type: object
+      required: [id, name, status, created_at, updated_at]
+      properties:
+        id: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        name: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/WorkerStatus" }
+        agent_version: { type: string }
+        protocol: { type: integer }
+        engine: { $ref: "#/components/schemas/Engine" }
+        last_seen: { type: string, format: date-time }
+        metrics: { type: object, additionalProperties: true }
+        labels: { type: object, additionalProperties: { type: string } }
+        metadata: { type: object, additionalProperties: true }
+        outdated: { type: boolean, description: The agent is older than core; pull the image. }
+      example:
+        id: 66f9e0a1c4b2d3e4f5a6b7c8
+        created_at: "2026-09-12T18:02:44.120Z"
+        updated_at: "2026-09-30T09:15:40.412Z"
+        name: ci-rootless-01
+        description: ""
+        status: alive
+        agent_version: 0.2.0
+        protocol: 2
+        engine: { kind: docker, version: "28.4.0", rootless: true, memory_limit: true, cpu_limit: true, pids_limit: true }
+        last_seen: "2026-09-30T09:15:40.412Z"
+        labels: { arch: amd64, os: linux }
+
+    Engine:
+      type: object
+      description: The container engine the worker runs jobs on, as the agent reported it.
+      properties:
+        kind: { type: string }
+        version: { type: string }
+        rootless: { type: boolean }
+        memory_limit: { type: boolean }
+        cpu_limit: { type: boolean }
+        pids_limit: { type: boolean }
+
+    ConnectedWorker:
+      type: object
+      required: [worker_id, queues, concurrency, active_jobs, draining]
+      properties:
+        worker_id: { type: string }
+        queues: { type: array, items: { type: string } }
+        concurrency: { type: integer }
+        active_jobs: { type: integer }
+        draining: { type: boolean }
+
+    Labels:
+      type: object
+      required: [labels]
+      properties:
+        labels:
+          type: object
+          additionalProperties: { type: string, maxLength: 255 }
+          description: Up to 32. Keys are 1–63 letters, digits, `_`, `-` or `.`.
+
+    DeleteResult:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [deleted, deleting] }
+        message: { type: string }
+
+    CommandStatus:
+      type: string
+      enum: [pending, running, completed, failed]
+
+    Command:
+      type: object
+      required: [id, worker_id, command, status, exit_code]
+      properties:
+        id: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        worker_id: { type: string }
+        command: { type: string }
+        args: { type: array, items: { type: string } }
+        env: { type: object, additionalProperties: { type: string } }
+        status: { $ref: "#/components/schemas/CommandStatus" }
+        output: { type: string }
+        exit_code: { type: integer }
+        error: { type: string }
+      example:
+        id: 66fa2b0c1d2e3f4a5b6c7d8e
+        created_at: "2026-09-30T09:18:02.310Z"
+        updated_at: "2026-09-30T09:18:02.940Z"
+        worker_id: 66f9e0a1c4b2d3e4f5a6b7c8
+        command: df
+        args: ["-h", "/var/lib/lute-worker"]
+        status: completed
+        output: "Filesystem  Size  Used Avail Use% Mounted on\n/dev/sda1   98G   31G   62G  34% /var/lib/lute-worker\n"
+        exit_code: 0
+
+    RegistrationToken:
+      type: object
+      required: [id, name, prefix, created_by]
+      properties:
+        id: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        name: { type: string }
+        prefix: { type: string, description: "The start of the token, for telling tokens apart." }
+        created_by: { type: string }
+        last_used_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+      example:
+        id: 66fa2c7d8e9f0a1b2c3d4e5f
+        created_at: "2026-09-30T09:20:11.052Z"
+        updated_at: "2026-09-30T09:31:48.600Z"
+        name: build-farm
+        prefix: lute_rt_K3M9QX
+        created_by: 66f1a2b3c4d5e6f7a8b9c0d1
+        last_used_at: "2026-09-30T09:31:48.600Z"
+
+    CreatedToken:
+      allOf:
+        - $ref: "#/components/schemas/RegistrationToken"
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, description: The plaintext token. Shown once. }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [bad_request, validation_failed, unauthorized, forbidden, not_found, conflict, unavailable, internal]
+            message: { type: string }
+            fields:
+              type: object
+              additionalProperties: { type: string }
+              description: Per-input messages, for `validation_failed`.

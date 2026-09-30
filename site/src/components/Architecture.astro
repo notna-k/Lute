@@ -1,0 +1,87 @@
+---
+// browser → admin → core → postgres, with workers dialling core over gRPC.
+---
+
+<figure class="arch not-content" aria-label="Architecture: the browser talks to the admin panel, which proxies /api to core; core stores everything in Postgres; workers connect to core over gRPC on port 50051.">
+	<div class="grid">
+		<div class="box">browser</div>
+		<div class="wire"><span>https</span></div>
+		<div class="box">admin<small>nginx · React</small></div>
+		<div class="wire"><span>/api · ws</span></div>
+		<div class="box core">core<small>HTTP · WS · gRPC</small></div>
+		<div class="wire"><span>sql</span></div>
+		<div class="box">postgres<small>data + job queue</small></div>
+		<div class="down"><i></i><span>gRPC :50051</span></div>
+		<div class="box workers">workers<small>rootless Docker</small></div>
+	</div>
+</figure>
+
+<style>
+	.arch {
+		margin: 1.5rem 0;
+		border: 1px solid var(--sl-color-gray-5);
+		background: var(--sl-color-gray-6);
+		padding: 1.75rem 1.25rem;
+		overflow-x: auto;
+	}
+	.grid {
+		min-width: 42rem;
+		display: grid;
+		grid-template-columns: 1fr 4rem 1fr 4rem 1.2fr 3rem 1fr;
+		grid-template-rows: auto 3.5rem auto;
+		align-items: center;
+		font-family: var(--sl-font-mono);
+		font-size: 0.78rem;
+	}
+	.box {
+		border: 1px solid var(--sl-color-gray-4);
+		background: var(--sl-color-black);
+		color: var(--sl-color-white);
+		padding: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.box small {
+		color: var(--sl-color-gray-3);
+		font-size: 0.72rem;
+	}
+	.core {
+		border: 1.5px solid var(--sl-color-accent);
+		background: var(--sl-color-accent-low);
+	}
+	.wire {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		color: var(--sl-color-gray-3);
+		font-size: 0.68rem;
+		white-space: nowrap;
+	}
+	.wire::after {
+		content: '';
+		width: 100%;
+		height: 1px;
+		background: var(--sl-color-gray-4);
+	}
+	.down {
+		grid-column: 5;
+		grid-row: 2;
+		height: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 0.5rem;
+		color: var(--sl-color-gray-3);
+		font-size: 0.68rem;
+	}
+	.down i {
+		width: 1px;
+		height: 100%;
+		background: var(--sl-color-gray-4);
+	}
+	.workers {
+		grid-column: 5;
+		grid-row: 3;
+	}
+</style>

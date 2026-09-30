@@ -197,7 +197,15 @@ export function AddWorkerDialog({ open, onClose }: AddWorkerDialogProps) {
 
         <p className='text-sm text-fg-muted'>
           Paste it into a shell as the unprivileged user that owns rootless Docker. Host setup is in{' '}
-          <code className='font-mono text-[12px]'>docs/worker.md</code>.
+          <a
+            href='https://notna-k.github.io/Lute/docs/workers/running/'
+            target='_blank'
+            rel='noreferrer'
+            className='underline'
+          >
+            Running a worker
+          </a>
+          .
         </p>
       </div>
     </Dialog>

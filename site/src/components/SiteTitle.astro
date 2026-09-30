@@ -1,0 +1,75 @@
+---
+// Starlight's site title plus the Guides / API reference tabs from the design.
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+
+const base = import.meta.env.BASE_URL;
+const path = Astro.url.pathname;
+const inApi = path.startsWith(`${base}docs/api/`);
+const tabs = [
+	{ label: 'Guides', href: `${base}docs/`, active: !inApi },
+	{ label: 'API reference', href: `${base}docs/api/`, active: inApi },
+];
+---
+
+<div class="lute-title">
+	<Default />
+	<span class="docs">docs</span>
+	<nav aria-label="Sections" class="tabs">
+		{
+			tabs.map((t) => (
+				<a href={t.href} aria-current={t.active ? 'page' : undefined}>
+					{t.label}
+				</a>
+			))
+		}
+	</nav>
+</div>
+
+<style>
+	.lute-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		height: 100%;
+	}
+	.lute-title :global(.site-title) {
+		font-size: 1rem;
+		font-weight: 600;
+		gap: 0.6rem;
+	}
+	.lute-title :global(.site-title img) {
+		height: 1.5rem;
+		width: 1.5rem;
+	}
+	.docs {
+		color: var(--sl-color-gray-3);
+		font-size: 1rem;
+	}
+	.tabs {
+		display: none;
+		gap: 1.4rem;
+		margin-inline-start: 1.5rem;
+		align-self: stretch;
+	}
+	.tabs a {
+		display: flex;
+		align-items: center;
+		color: var(--sl-color-gray-3);
+		font-size: 0.875rem;
+		text-decoration: none;
+		border-bottom: 2px solid transparent;
+		padding-top: 2px;
+	}
+	.tabs a:hover {
+		color: var(--sl-color-white);
+	}
+	.tabs a[aria-current='page'] {
+		color: var(--sl-color-white);
+		border-bottom-color: var(--sl-color-white);
+	}
+	@media (min-width: 72rem) {
+		.tabs {
+			display: flex;
+		}
+	}
+</style>

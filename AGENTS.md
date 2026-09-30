@@ -19,6 +19,10 @@ Chrome plugin is available to check and test the UI.
 
 - **Git is the source of truth for job definitions.** YAML in `infrastructure/dev/jobdefs/` (one or more `---` documents per file) is synced into Postgres on startup and via "Sync from Git". A sync writes a definition only when its file changed, so panel edits stand until then; definitions missing from Git are kept unless *Prune* is on in Settings. Anything that differs from Git is flagged in the panel, and its YAML can be exported to commit it.
 - **New DB model** → register it in `migrate.RegisteredModels()` (`api/internal/db/migrate/migrate.go`), or its table is never created.
+- **Public API change** (`/api/public/v1`) → update `api/openapi.yaml`. The docs site renders its API
+  reference from it, and `TestOpenAPIMatchesPublicRoutes` fails when the spec and the mounted routes differ.
+- **Docs** live in `site/` (Astro Starlight), published to GitHub Pages from `master`. Change them with
+  the behaviour they describe.
 - **gRPC contract** → edit `shared/proto/worker.proto` and run `shared/proto/generate.sh`; never hand-edit `*.pb.go`.
 - Config comes from the repo-root `.env` (template: `.env.example`).
 
@@ -30,6 +34,7 @@ make worker-build                     # host (linux/amd64) worker binary
 make worker-image                     # the worker image, linux/amd64 only
 make go-lint                          # golangci-lint for api + worker
 cd ui && npm run dev                  # UI dev server on :3000
+cd site && npm run dev                # home page + docs on :4321/Lute/
 ```
 
 The worker ships only as an image; CI builds arm64 when it publishes, so locally stay on `worker-build`, `worker-build-linux` or `worker-image`. `make api-build` runs `npm ci` + a full UI build; avoid it unless needed.
@@ -41,7 +46,7 @@ Run what's relevant to the files touched:
 1. `go build ./...` in `api/` and/or `worker/`
 2. `go vet ./...` / `make go-lint`
 3. `go test ./...` in the affected module
-4. UI: `./node_modules/.bin/tsc --noEmit` in `ui/`
+4. UI: `./node_modules/.bin/tsc --noEmit` in `ui/`; site: `npm run check && npm run build` in `site/`
 5. If told to, explore the UI through the Chrome connector to verify behaviour end to end. Supply screenshots or video recording to the PR.
 
 ## Tests

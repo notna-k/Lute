@@ -1,0 +1,130 @@
+---
+// A resource's landing page: what it is, its endpoints, and the object they return.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { Code } from 'astro:components';
+import { annotatedObject, md, objectSchema, opPath, operationsFor, tags, type Tag } from '../../../../lib/openapi';
+
+export function getStaticPaths() {
+	return tags.map((tag) => ({ params: { tag: tag.name }, props: { tag } }));
+}
+
+const { tag } = Astro.props as { tag: Tag };
+const ops = operationsFor(tag.name);
+const object = tag.object ? objectSchema(tag.object) : undefined;
+const objectName = tag.object?.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+const base = import.meta.env.BASE_URL;
+
+const headings = [
+	{ depth: 2, slug: 'endpoints', text: 'Endpoints' },
+	...(object ? [{ depth: 2, slug: 'object', text: `The ${objectName} object` }] : []),
+];
+---
+
+<StarlightPage frontmatter={{ title: tag.title, description: tag.description.split('\n')[0], editUrl: false }} headings={headings}>
+	<div class="not-content">
+		<div class="prose" set:html={md(tag.description)} />
+
+		<h2 id="endpoints">Endpoints</h2>
+		<div class="index">
+			{
+				ops.map((op) => (
+					<a href={`${base}${opPath(op)}`}>
+						<span class={`lute-pill lute-pill-${op.method.toLowerCase()}`}>{op.method}</span>
+						<span class="p">/api/public/v1{op.path}</span>
+						<span class="s">{op.summary}</span>
+					</a>
+				))
+			}
+		</div>
+
+		{
+			object && (
+				<>
+					<h2 id="object">The {objectName} object</h2>
+					<p class="lead">
+						Endpoints of this resource return {objectName}s in this shape. Fields with no value are left out.
+					</p>
+					<div class="block">
+						<Code code={annotatedObject(object)} lang="jsonc" theme="github-dark-dimmed" />
+					</div>
+				</>
+			)
+		}
+	</div>
+</StarlightPage>
+
+<style>
+	.prose {
+		color: var(--sl-color-gray-2);
+		font-size: 1.05rem;
+		line-height: 1.7;
+	}
+	.prose :global(p + p) {
+		margin-top: 0.75rem;
+	}
+	.prose :global(code) {
+		font-family: var(--sl-font-mono);
+		font-size: 0.85em;
+		background: var(--sl-color-gray-6);
+		border: 1px solid var(--sl-color-gray-5);
+		padding: 0.05rem 0.3rem;
+	}
+	h2 {
+		font-size: 1.4rem;
+		font-weight: 600;
+		letter-spacing: -0.015em;
+		color: var(--sl-color-white);
+		margin: 2.5rem 0 1rem;
+		scroll-margin-top: calc(var(--sl-nav-height) + 1rem);
+	}
+	.index {
+		border: 1px solid var(--sl-color-gray-5);
+	}
+	.index a {
+		display: grid;
+		grid-template-columns: 4.25rem minmax(0, 1fr) auto;
+		gap: 1rem;
+		align-items: center;
+		padding: 0.7rem 1rem;
+		color: var(--sl-color-gray-2);
+		text-decoration: none;
+		font-size: 0.9rem;
+	}
+	.index a + a {
+		border-top: 1px solid var(--sl-color-gray-5);
+	}
+	.index a:hover {
+		background: var(--sl-color-gray-6);
+		color: var(--sl-color-white);
+	}
+	.p {
+		font-family: var(--sl-font-mono);
+		font-size: 0.8rem;
+		color: var(--sl-color-white);
+		overflow-wrap: anywhere;
+	}
+	@media (max-width: 40rem) {
+		.index a {
+			grid-template-columns: 4.25rem minmax(0, 1fr);
+		}
+		.s {
+			display: none;
+		}
+	}
+	.lead {
+		color: var(--sl-color-gray-2);
+		margin: 0 0 1rem;
+	}
+	.block {
+		background: var(--lute-code-bg);
+		border: 1px solid var(--lute-code-border);
+	}
+	.block :global(pre) {
+		margin: 0;
+		padding: 1rem 1.1rem;
+		background: transparent !important;
+		font-size: 0.8rem;
+		line-height: 1.75;
+		overflow-x: auto;
+	}
+</style>

@@ -1,0 +1,265 @@
+---
+// One endpoint per page: what it does and what it takes on the left, a sticky request and
+// response panel on the right.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import ExampleBlock from '../../../../components/api/ExampleBlock.astro';
+import Fields from '../../../../components/api/Fields.astro';
+import { md, operationsFor, samplesFor, tags, type Field, type Operation } from '../../../../lib/openapi';
+
+export function getStaticPaths() {
+	return tags.flatMap((tag) =>
+		operationsFor(tag.name).map((op) => ({ params: { tag: tag.name, op: op.slug }, props: { op } })),
+	);
+}
+
+const { op } = Astro.props as { op: Operation };
+const base = import.meta.env.BASE_URL;
+const fullPath = `/api/public/v1${op.path}`;
+const asFields = (where: 'path' | 'query'): Field[] =>
+	op.params
+		.filter((p) => p.in === where)
+		.map((p) => ({ name: p.name, type: p.type, required: p.required, description: p.description, children: [] }));
+const pathFields = asFields('path');
+const queryFields = asFields('query');
+const ok = (status: string) => status.startsWith('2');
+---
+
+<StarlightPage
+	frontmatter={{
+		title: op.summary,
+		description: op.description.split('\n')[0] || `${op.method} ${fullPath}`,
+		tableOfContents: false,
+		editUrl: false,
+	}}
+>
+	<div class="api-op not-content">
+		<div class="main">
+			<div class="line">
+				<span class={`lute-pill lute-pill-${op.method.toLowerCase()}`}>{op.method}</span>
+				<code>{fullPath}</code>
+			</div>
+
+			{op.description && <div class="prose" set:html={md(op.description)} />}
+
+			<section>
+				<h2>Authorization</h2>
+				<p class="auth">
+					<code>Authorization: Bearer &lt;API key&gt;</code>
+					<a href={`${base}docs/api/#authentication`}>Getting a key</a>
+				</p>
+			</section>
+
+			{
+				pathFields.length > 0 && (
+					<section>
+						<h2>Path parameters</h2>
+						<Fields fields={pathFields} />
+					</section>
+				)
+			}
+			{
+				queryFields.length > 0 && (
+					<section>
+						<h2>Query parameters</h2>
+						<Fields fields={queryFields} />
+					</section>
+				)
+			}
+			{
+				op.body && (
+					<section>
+						<h2>
+							Request body <span class="ct">application/json</span>
+						</h2>
+						<Fields fields={op.body.fields} />
+					</section>
+				)
+			}
+
+			<section>
+				<h2>Responses</h2>
+				<div class="responses">
+					{
+						op.responses.map((r) =>
+							r.fields.length > 0 && ok(r.status) ? (
+								<details open={r === op.responses[0]}>
+									<summary>
+										<span class:list={['code', ok(r.status) ? 'ok' : 'err']}>{r.status}</span>
+										<span set:html={md(r.description)} />
+									</summary>
+									<div class="schema">
+										<Fields fields={r.fields} />
+									</div>
+								</details>
+							) : (
+								<div class="row">
+									<span class:list={['code', ok(r.status) ? 'ok' : 'err']}>{r.status}</span>
+									<span set:html={md(r.description)} />
+								</div>
+							),
+						)
+					}
+				</div>
+			</section>
+		</div>
+
+		<aside class="panel" aria-label="Example request and response">
+			<ExampleBlock samples={samplesFor(op)} responses={op.responses} />
+		</aside>
+	</div>
+</StarlightPage>
+
+<style>
+	/* Endpoint pages need room for two columns; nothing else on them uses the TOC column. */
+	:global(:root:has(.api-op)) {
+		--sl-content-width: 78rem;
+	}
+	.api-op {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 31rem);
+		gap: 2.75rem;
+		align-items: start;
+	}
+	.line {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		border: 1px solid var(--sl-color-gray-5);
+		background: var(--sl-color-gray-6);
+		padding: 0.6rem 0.8rem;
+		overflow-x: auto;
+	}
+	.line code {
+		font-family: var(--sl-font-mono);
+		font-size: 0.875rem;
+		color: var(--sl-color-white);
+		white-space: nowrap;
+	}
+	.prose {
+		margin-top: 1.25rem;
+		color: var(--sl-color-gray-2);
+		line-height: 1.7;
+	}
+	.prose :global(p + p) {
+		margin-top: 0.75rem;
+	}
+	section {
+		margin-top: 2.25rem;
+	}
+	h2 {
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--sl-color-white);
+		margin: 0 0 0.5rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--sl-color-gray-5);
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+	}
+	.ct {
+		font-family: var(--sl-font-mono);
+		font-size: 0.75rem;
+		font-weight: 400;
+		color: var(--sl-color-gray-3);
+	}
+	section :global(.fields) {
+		border-bottom: 0;
+	}
+	section :global(.fields > li:first-child) {
+		border-top: 0;
+	}
+	.auth {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+		align-items: center;
+		margin: 0.75rem 0 0;
+		font-size: 0.9rem;
+	}
+	.auth a {
+		color: var(--sl-color-accent);
+	}
+	.api-op :global(code) {
+		font-family: var(--sl-font-mono);
+	}
+	.prose :global(code),
+	.auth code,
+	.responses :global(code),
+	.api-op :global(.desc code) {
+		font-size: 0.85em;
+		background: var(--sl-color-gray-6);
+		border: 1px solid var(--sl-color-gray-5);
+		padding: 0.05rem 0.3rem;
+	}
+	.responses {
+		border: 1px solid var(--sl-color-gray-5);
+		margin-top: 0.75rem;
+	}
+	.responses > * + * {
+		border-top: 1px solid var(--sl-color-gray-5);
+	}
+	.row,
+	summary {
+		display: flex;
+		gap: 1rem;
+		padding: 0.65rem 0.9rem;
+		font-size: 0.9rem;
+		color: var(--sl-color-gray-2);
+	}
+	summary {
+		cursor: pointer;
+		list-style: none;
+	}
+	summary::-webkit-details-marker {
+		display: none;
+	}
+	summary::after {
+		content: '+';
+		margin-left: auto;
+		font-family: var(--sl-font-mono);
+		color: var(--sl-color-gray-3);
+	}
+	details[open] summary::after {
+		content: '−';
+	}
+	summary:hover {
+		background: var(--sl-color-gray-6);
+	}
+	.responses :global(p) {
+		margin: 0;
+	}
+	.code {
+		font-family: var(--sl-font-mono);
+		width: 2.2rem;
+		flex-shrink: 0;
+	}
+	.code.ok {
+		color: var(--lute-get);
+	}
+	.code.err {
+		color: var(--lute-delete);
+	}
+	.schema {
+		padding: 0 0.9rem 0.4rem 1.2rem;
+		border-top: 1px dashed var(--sl-color-gray-5);
+	}
+	.panel {
+		position: sticky;
+		top: calc(var(--sl-nav-height) + 1.5rem);
+		max-height: calc(100vh - var(--sl-nav-height) - 3rem);
+		overflow-y: auto;
+	}
+	.panel :global(.example) {
+		margin-top: 0;
+	}
+	@media (max-width: 72rem) {
+		.api-op {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.panel {
+			position: static;
+			max-height: none;
+		}
+	}
+</style>

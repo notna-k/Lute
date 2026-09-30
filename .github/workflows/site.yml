@@ -1,0 +1,58 @@
+name: Site
+
+# Publishes the home page and docs (site/) to GitHub Pages when master changes them.
+# The API reference is generated from api/openapi.yaml.
+on:
+  push:
+    branches: [master]
+    paths:
+      - site/**
+      - api/openapi.yaml
+      - docs/media/**
+      - .github/workflows/site.yml
+
+permissions:
+  contents: read
+
+# Queue deploys rather than cancel one halfway through.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npm run check
+      - name: Build
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

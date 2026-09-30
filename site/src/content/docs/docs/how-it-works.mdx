@@ -1,0 +1,45 @@
+---
+title: How it works
+description: The three pieces of Lute and what happens between clicking Run and reading the log.
+---
+
+import Architecture from '../../../components/Architecture.astro';
+
+Lute is three pieces, each doing one thing. This page walks through what each one owns and what
+happens between clicking **Run** and reading the log.
+
+## The three pieces
+
+<Architecture />
+
+**core** is a stateless Go backend. It serves REST and WebSocket to the panel and gRPC to workers.
+Everything durable — domain data _and_ the job queue — lives in Postgres, so core can be restarted
+or scaled out freely.
+
+**admin** is the React panel, served by nginx. You trigger jobs there, watch builds come in, and
+manage workers.
+
+**worker** is a container image that runs on rootless Docker. It enrols with a registration token,
+then runs jobs as sibling containers for the queues and labels it advertises.
+
+## Life of a run
+
+1. You submit the run form, or a script calls [`POST /api/public/v1/runs`](../api/runs/create-run/).
+2. Core writes the run to the queue in Postgres with status `pending`.
+3. A worker that serves the queue and has every label the run asks for leases it over gRPC.
+4. The worker starts the job's `runtime` image as a sibling container. Each parameter reaches the
+   command as an environment variable.
+5. Status changes reach the panel over WebSocket. The log stays on the worker; core reads it over
+   gRPC when you open the build. A webhook fires at the end if you asked for one.
+
+## Git is the source of truth
+
+Job definitions are YAML files, one or more `---` documents per file. Core syncs them into Postgres
+on startup and when you press **Sync from Git**.
+
+:::note[Panel edits stick until the file changes]
+A sync writes a definition only when its file changed, so edits made in the panel stay until then.
+Definitions missing from Git are kept unless **Prune** is on in Settings.
+:::
+
+More in [Syncing from Git](../jobs/git-sync/).
