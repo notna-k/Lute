@@ -45,10 +45,14 @@ export interface Response {
 	status: string;
 	description: string;
 	example?: Json;
+	fields: Field[];
 }
 
 export interface Operation {
 	id: string;
+	/** URL segment of the endpoint's page: createRun → create-run. */
+	slug: string;
+	tag: string;
 	method: string;
 	path: string;
 	summary: string;
@@ -106,7 +110,7 @@ export function fieldsOf(schema: Obj | undefined): Field[] {
 		type: typeOf(s),
 		required: required.includes(name),
 		description: s.description ?? '',
-		children: s.type === 'object' || s.properties ? fieldsOf(s) : [],
+		children: fieldsOf(s.type === 'array' ? s.items : s),
 	}));
 }
 
@@ -160,6 +164,8 @@ export function operationsFor(tag: string): Operation[] {
 			const media = op.requestBody?.content?.['application/json'];
 			ops.push({
 				id: op.operationId,
+				slug: op.operationId.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase(),
+				tag,
 				method: method.toUpperCase(),
 				path,
 				summary: op.summary,
@@ -169,7 +175,13 @@ export function operationsFor(tag: string): Operation[] {
 				responses: responseOrder(path, method).map((status) => {
 					const r: Obj = op.responses[status];
 					const m = r.content?.['application/json'];
-					return { status, description: r.description ?? '', example: m ? (m.example ?? exampleOf(m.schema)) : undefined };
+					const schema = m?.schema?.type === 'array' ? m.schema.items : m?.schema;
+					return {
+						status,
+						description: r.description ?? '',
+						example: m ? (m.example ?? exampleOf(m.schema)) : undefined,
+						fields: fieldsOf(schema),
+					};
 				}),
 			});
 		}
@@ -287,3 +299,6 @@ export function md(s: string): string {
 		.map((p) => `<p>${p.replace(/\n/g, ' ').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}</p>`)
 		.join('');
 }
+
+/** Where an endpoint's page lives, relative to the site base. */
+export const opPath = (op: Operation) => `docs/api/${op.tag}/${op.slug}/`;

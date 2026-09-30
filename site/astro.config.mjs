@@ -19,6 +19,8 @@ export default defineConfig({
 			editLink: { baseUrl: `${repo}/edit/master/site/` },
 			customCss: ['./src/styles/theme.css'],
 			components: { SiteTitle: './src/components/SiteTitle.astro' },
+			// Swaps in the API sidebar under /docs/api/.
+			routeMiddleware: './src/routeData.ts',
 			expressiveCode: {
 				themes: ['github-dark-dimmed', 'github-light'],
 				styleOverrides: { borderRadius: '0', codeFontFamily: "'Geist Mono', ui-monospace, monospace" },
@@ -38,17 +40,8 @@ export default defineConfig({
 				},
 				{ label: 'Workers', items: [{ slug: 'docs/workers/running' }] },
 				{ label: 'Operations', items: [{ slug: 'docs/configuration' }] },
-				{
-					label: 'API',
-					items: [
-						{ slug: 'docs/api' },
-						{ slug: 'docs/api/webhooks' },
-						{ label: 'Runs', link: '/docs/api/runs/' },
-						{ label: 'Workers', link: '/docs/api/workers/' },
-						{ label: 'Worker commands', link: '/docs/api/commands/' },
-						{ label: 'Registration tokens', link: '/docs/api/tokens/' },
-					],
-				},
+				// The API reference has its own sidebar (src/routeData.ts).
+				{ label: 'API', items: [{ label: 'API reference', link: '/docs/api/' }] },
 			],
 		}),
 	],

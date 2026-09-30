@@ -3,7 +3,7 @@ title: Webhooks
 description: Get told when a run starts, completes or fails, and check that the call came from Lute.
 ---
 
-Pass a `webhook` when you [create a run](../runs/#createRun) and core calls your URL as the run
+Pass a `webhook` when you [create a run](../runs/create-run/) and core calls your URL as the run
 moves along:
 
 ```json

@@ -63,7 +63,7 @@ first run with `200` instead of creating another, so a retried request never sta
 ## Paging
 
 List endpoints take `offset` and `limit` and answer with `total`, `offset` and `limit` next to the
-items. Logs page with a cursor instead; see [Read a run's log](../api/runs/#getRunLogs).
+items. Logs page with a cursor instead; see [Read a run's log](../api/runs/get-run-logs/).
 
 ## Conventions
 

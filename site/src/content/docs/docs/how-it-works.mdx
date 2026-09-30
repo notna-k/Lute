@@ -24,7 +24,7 @@ then runs jobs as sibling containers for the queues and labels it advertises.
 
 ## Life of a run
 
-1. You submit the run form, or a script calls [`POST /api/public/v1/runs`](../api/runs/#createRun).
+1. You submit the run form, or a script calls [`POST /api/public/v1/runs`](../api/runs/create-run/).
 2. Core writes the run to the queue in Postgres with status `pending`.
 3. A worker that serves the queue and has every label the run asks for leases it over gRPC.
 4. The worker starts the job's `runtime` image as a sibling container. Each parameter reaches the

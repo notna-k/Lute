@@ -77,6 +77,64 @@ h1#_top {
 	color: var(--sl-color-gray-3);
 }
 
+/* Method pills: on endpoint pages and, via .lute-badge, in the API sidebar. */
+:root {
+	--lute-get-bg: #0f2a1c;
+	--lute-post-bg: #16243d;
+	--lute-put-bg: #2e2412;
+	--lute-delete-bg: #33181a;
+}
+:root[data-theme='light'] {
+	--lute-get-bg: #e3f1e9;
+	--lute-post-bg: #e6edfa;
+	--lute-put-bg: #f8eeda;
+	--lute-delete-bg: #fbe7e5;
+}
+.lute-pill,
+.sidebar-content .lute-badge {
+	display: inline-flex;
+	justify-content: center;
+	align-items: center;
+	font-family: var(--sl-font-mono);
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	border: 0;
+	flex-shrink: 0;
+}
+.lute-pill {
+	min-width: 3.75rem;
+	padding: 0.2rem 0.45rem;
+	font-size: 0.72rem;
+}
+.lute-pill-get,
+.lute-badge-get { color: var(--lute-get); background: var(--lute-get-bg); }
+.lute-pill-post,
+.lute-badge-post { color: var(--lute-post); background: var(--lute-post-bg); }
+.lute-pill-put,
+.lute-pill-patch,
+.lute-badge-put,
+.lute-badge-patch { color: var(--lute-put); background: var(--lute-put-bg); }
+.lute-pill-delete,
+.lute-badge-delete { color: var(--lute-delete); background: var(--lute-delete-bg); }
+
+/* In the sidebar the method goes before the label, in a fixed-width column. */
+.sidebar-content a:has(.lute-badge) {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+}
+.sidebar-content a .lute-badge {
+	order: -1;
+	width: 3.1rem;
+	margin: 0 !important;
+	padding: 0.1rem 0;
+	font-size: 0.62rem;
+	line-height: 1.3;
+}
+.sidebar-content a:has(.lute-badge) > span:first-child {
+	font-size: 0.875rem;
+}
+
 .lute-m-get { color: var(--lute-get); }
 .lute-m-post { color: var(--lute-post); }
 .lute-m-put,
