@@ -1,0 +1,60 @@
+# The Lute server: Postgres, core and the panel. Workers run on other machines (../worker).
+#
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d
+#
+# Put a TLS-terminating proxy in front of the panel (port 8080) and of core's gRPC
+# port (50051) when they are reachable from networks you do not trust.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lute
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lute
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lute -d lute"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core:
+    image: ghcr.io/notna-k/lute-core:0.2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "50051:50051" # gRPC for workers
+    environment:
+      GIN_MODE: release
+      POSTGRES_DSN: postgres://lute:${POSTGRES_PASSWORD}@postgres:5432/lute?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      # The address people open the panel at. The API refuses browser requests from
+      # any other origin.
+      CORS_ALLOWED_ORIGINS: ${LUTE_URL:?set LUTE_URL in .env}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      JOB_DEFS_DIR: /etc/lute/jobdefs
+      # What the panel's "Add worker" command tells workers to dial.
+      WORKER_GRPC_ADDR: ${WORKER_GRPC_ADDR:-}
+    volumes:
+      - ${JOB_DEFS_PATH:-./jobdefs}:/etc/lute/jobdefs:ro
+
+  # The panel, built from the repository. It proxies /api to the `core` service.
+  admin:
+    build:
+      context: https://github.com/notna-k/Lute.git#master
+      dockerfile: ui/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - core
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres_data:

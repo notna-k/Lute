@@ -1,14 +1,17 @@
 ---
 title: Quick start
-description: Run the whole stack locally with Docker Compose.
+description: Try Lute on one machine with Docker Compose.
 ---
 
-You need Docker with Docker Compose. Go 1.26+ and Node 25 are only needed to build outside Docker.
+You need Docker with Docker Compose. The repository's
+[`examples/`](https://github.com/notna-k/Lute/tree/master/examples) directory has ready-to-run
+setups; this page uses the quickstart one, which runs everything on one machine.
 
 ## Start the stack
 
 ```bash
-git clone https://github.com/notna-k/Lute.git && cd Lute
+git clone https://github.com/notna-k/Lute.git
+cd Lute/examples/quickstart
 cp .env.example .env
 ```
 
@@ -25,33 +28,34 @@ ADMIN_PASSWORD=change-me-on-first-login
 Then start it:
 
 ```bash
-make dev-up
+docker compose up -d
 ```
 
-That builds and starts four containers: Postgres, core, the panel and one worker.
+That starts four containers: Postgres, core, the panel and one worker. The panel is built from the
+repository on the first start, which takes a few minutes.
 
 | What | Where |
 |---|---|
 | Panel | http://localhost:8080 — sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` |
-| Core API | http://localhost:8081, health at `/api/health` |
 | gRPC for workers | `localhost:50051` |
 
 ## Run your first job
 
-The stack syncs the example job definitions in `infrastructure/dev/jobdefs/`. Open **Jobs** in the
-panel, pick `web-release`, and press **Run**. The form comes from the job's
-[parameters](../jobs/parameters/); the build log appears as the worker runs it.
+The stack syncs the job definitions in `examples/quickstart/jobdefs/`. Open **Jobs** in the panel,
+pick `hello`, and press **Run**. The form comes from the job's [parameters](../jobs/parameters/);
+the build log appears as the worker runs it.
 
-To add your own, drop a YAML file next to the examples and press **Sync from Git**. See
+To add your own, drop a YAML file next to `hello.yaml` and press **Sync from Git**. See
 [Job definitions](../jobs/definitions/) for the format.
 
 ## Day to day
 
 ```bash
-make dev-logs    # follow every container's logs
-make dev-down    # stop
-make dev-clean   # stop and wipe Postgres and the worker's identity
+docker compose logs -f    # follow every container's logs
+docker compose down       # stop
+docker compose down -v    # stop and delete the data
 ```
 
-The bundled worker enrols itself with `WORKER_BOOTSTRAP_TOKEN`. To add a real build machine, see
-[Running a worker](../workers/running/).
+The bundled worker runs jobs on this machine's Docker. For a real install, run the
+[`server`](https://github.com/notna-k/Lute/tree/master/examples/server) example on one machine and
+[add workers](../workers/running/) on your build machines.

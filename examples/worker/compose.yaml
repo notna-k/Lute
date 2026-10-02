@@ -1,0 +1,22 @@
+# A Lute worker on a build machine with rootless Docker. Run it as the rootless Docker
+# user, from a real login session (ssh, or `machinectl shell user@`).
+#
+#   cp .env.example .env    # then set LUTE_SERVER and LUTE_TOKEN
+#   docker compose up -d
+services:
+  worker:
+    image: ghcr.io/notna-k/lute-worker:0.2
+    restart: unless-stopped
+    # Stopping waits for running jobs; keep this at least LUTE_DRAIN_TIMEOUT (30m).
+    stop_grace_period: 30m
+    environment:
+      LUTE_SERVER: ${LUTE_SERVER:?set LUTE_SERVER in .env}
+      # Needed on the first start only; the identity is kept in the data dir.
+      LUTE_TOKEN: ${LUTE_TOKEN:-}
+      LUTE_TLS: ${LUTE_TLS:-0}
+      LUTE_NAME: ${LUTE_NAME:-}
+      LUTE_QUEUES: ${LUTE_QUEUES:-default}
+      LUTE_LABELS: ${LUTE_LABELS:-}
+    volumes:
+      - ${XDG_RUNTIME_DIR:?run as the rootless Docker user}/docker.sock:/var/run/docker.sock
+      - ${HOME}/.local/share/lute-worker:/var/lib/lute-worker
