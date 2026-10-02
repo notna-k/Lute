@@ -4,10 +4,9 @@
 
 This is a project, aimed to create a good jenkins alternative, with configuration as code, pipelines that are good, no legacy weight.
 
-For a development and testing, compile binaries only for linux amd64. The machine I am working on is not very powerful.
-
+For a development and testing, compile binaries only for linux amd64.
 By default, I want the code, setups, etc to be as simple and elegant as possible.
-This is a sole PET project I do on weekends for my CV.
+
 If, doing something, you find something to improve - I am open to it, go ahead and propose.
 
 The project doesn't have real users yet, so you don't have to worry about backwards compatibility.
