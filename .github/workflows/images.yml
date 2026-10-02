@@ -28,6 +28,7 @@ jobs:
           filters: |
             core:
               - api/**
+              - ui/**
               - shared/proto/**
               - Makefile
             worker:
