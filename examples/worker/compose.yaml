@@ -1,7 +1,7 @@
 # A Lute worker on a build machine with rootless Docker. Run it as the rootless Docker
 # user, from a real login session (ssh, or `machinectl shell user@`).
 #
-#   cp example.env .env     # then set LUTE_SERVER and LUTE_TOKEN
+#   cp .env.example .env    # then set LUTE_SERVER and LUTE_TOKEN
 #   docker compose up -d
 services:
   worker:

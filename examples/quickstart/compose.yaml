@@ -1,7 +1,7 @@
 # Lute on one machine: Postgres, core, the panel and one worker.
 # For trying Lute out. For a real setup see ../server and ../worker.
 #
-#   cp example.env .env     # then set JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+#   cp .env.example .env    # then set JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 #   docker compose up -d
 #
 # Panel: http://localhost:8080

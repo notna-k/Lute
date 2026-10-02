@@ -1,6 +1,6 @@
 # The Lute server: Postgres, core and the panel. Workers run on other machines (../worker).
 #
-#   cp example.env .env     # then fill it in
+#   cp .env.example .env    # then fill it in
 #   docker compose up -d
 #
 # Put a TLS-terminating proxy in front of the panel (port 8080) and of core's gRPC

@@ -1,7 +1,7 @@
 # Docker examples
 
 Ready-to-run Docker Compose setups. Each directory stands alone: copy it anywhere, fill in its
-`example.env` as `.env`, and run `docker compose up -d`.
+`.env.example` as `.env`, and run `docker compose up -d`.
 
 | Example | What it runs | Use it to |
 |---|---|---|
@@ -16,7 +16,7 @@ panel is built from this repository on the first `docker compose up`, which take
 
 ```bash
 cd examples/quickstart
-cp example.env .env      # set JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+cp .env.example .env     # set JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 docker compose up -d
 ```
 
@@ -33,7 +33,7 @@ fine on your laptop; on a shared machine use the server and worker examples inst
 
 ```bash
 cd examples/server
-cp example.env .env      # secrets, the panel's URL, where job definitions live
+cp .env.example .env     # secrets, the panel's URL, where job definitions live
 docker compose up -d
 ```
 
@@ -55,7 +55,7 @@ as that user:
 
 ```bash
 cd examples/worker
-cp example.env .env      # LUTE_SERVER, and LUTE_TOKEN from Workers → Add worker
+cp .env.example .env     # LUTE_SERVER, and LUTE_TOKEN from Workers → Add worker
 docker compose up -d
 ```
 

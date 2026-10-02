@@ -84,7 +84,7 @@ To try it, take the quickstart:
 ```bash
 git clone https://github.com/notna-k/Lute.git
 cd Lute/examples/quickstart
-cp example.env .env      # set JWT_SECRET (>= 32 bytes), ADMIN_EMAIL, ADMIN_PASSWORD
+cp .env.example .env     # set JWT_SECRET (>= 32 bytes), ADMIN_EMAIL, ADMIN_PASSWORD
 docker compose up -d
 ```
 

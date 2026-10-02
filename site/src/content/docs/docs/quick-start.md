@@ -12,7 +12,7 @@ setups; this page uses the quickstart one, which runs everything on one machine.
 ```bash
 git clone https://github.com/notna-k/Lute.git
 cd Lute/examples/quickstart
-cp example.env .env
+cp .env.example .env
 ```
 
 Set three values in `.env`:
