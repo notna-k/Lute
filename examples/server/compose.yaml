@@ -1,4 +1,4 @@
-# The Lute server: Postgres, core and the panel. Workers run on other machines (../worker).
+# The Lute server: Postgres and core, which serves the panel. Workers run on other machines (../worker).
 #
 #   cp .env.example .env    # then fill it in
 #   docker compose up -d
@@ -28,6 +28,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
+      - "8080:8080"   # the panel and the API
       - "50051:50051" # gRPC for workers
     environment:
       GIN_MODE: release
@@ -44,17 +45,6 @@ services:
       WORKER_GRPC_ADDR: ${WORKER_GRPC_ADDR:-}
     volumes:
       - ${JOB_DEFS_PATH:-./jobdefs}:/etc/lute/jobdefs:ro
-
-  # The panel, built from the repository. It proxies /api to the `core` service.
-  admin:
-    build:
-      context: https://github.com/notna-k/Lute.git#master
-      dockerfile: ui/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - core
-    ports:
-      - "8080:80"
 
 volumes:
   postgres_data:

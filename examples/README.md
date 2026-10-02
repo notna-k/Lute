@@ -5,12 +5,13 @@ Ready-to-run Docker Compose setups. Each directory stands alone: copy it anywher
 
 | Example | What it runs | Use it to |
 |---|---|---|
-| [`quickstart/`](quickstart/) | Postgres, core, the panel and one worker on one machine | try Lute out |
-| [`server/`](server/) | Postgres, core and the panel | run Lute for real |
+| [`quickstart/`](quickstart/) | Postgres, core and one worker on one machine | try Lute out |
+| [`server/`](server/) | Postgres and core | run Lute for real |
 | [`worker/`](worker/) | one worker on rootless Docker | add a build machine |
 
-Core and the worker come from `ghcr.io/notna-k/lute-core` and `ghcr.io/notna-k/lute-worker`. The
-panel is built from this repository on the first `docker compose up`, which takes a few minutes.
+The images come from the GitHub Container Registry: `ghcr.io/notna-k/lute-core`, which also serves
+the panel, and `ghcr.io/notna-k/lute-worker`. The quickstart follows `latest`; the server and worker
+examples pin a release, so an update is a deliberate tag bump.
 
 ## quickstart
 
@@ -41,7 +42,7 @@ docker compose up -d
   rejects browser requests from any other origin.
 - `JOB_DEFS_PATH` is the directory of job definitions. Point it at a checkout of your jobs
   repository; after a `git pull`, press **Sync from Git** in the panel.
-- The panel listens on port 8080 and core's gRPC, for workers, on 50051. Neither speaks TLS, so
+- Core serves the panel and the API on port 8080, and gRPC for workers on 50051. Neither speaks TLS, so
   put a TLS-terminating proxy in front of both. If you serve the panel over plain HTTP anyway, set
   `AUTH_COOKIE_SECURE=false` or sign-in does not stick.
 

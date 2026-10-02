@@ -1,8 +1,10 @@
-# Lute on one machine: Postgres, core, the panel and one worker.
-# For trying Lute out. For a real setup see ../server and ../worker.
+# Lute on one machine: Postgres, core (which serves the panel) and one worker.
+# For trying Lute out, on the latest images. For a real setup see ../server and ../worker.
 #
 #   cp .env.example .env    # then set JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
 #   docker compose up -d
+#
+# Job definitions are read from ./jobdefs.
 #
 # Panel: http://localhost:8080
 services:
@@ -21,11 +23,12 @@ services:
       retries: 10
 
   core:
-    image: ghcr.io/notna-k/lute-core:0.2
+    image: ghcr.io/notna-k/lute-core:latest
     depends_on:
       postgres:
         condition: service_healthy
     ports:
+      - "8080:8080"   # the panel and the API
       - "50051:50051" # gRPC, for workers on other machines
     environment:
       GIN_MODE: release
@@ -40,18 +43,8 @@ services:
     volumes:
       - ./jobdefs:/etc/lute/jobdefs:ro
 
-  # The panel, built from the repository. It proxies /api to the `core` service.
-  admin:
-    build:
-      context: https://github.com/notna-k/Lute.git#master
-      dockerfile: ui/Dockerfile
-    depends_on:
-      - core
-    ports:
-      - "8080:80"
-
   worker:
-    image: ghcr.io/notna-k/lute-worker:0.2
+    image: ghcr.io/notna-k/lute-worker:latest
     depends_on:
       - core
     restart: unless-stopped

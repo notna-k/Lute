@@ -1,5 +1,14 @@
 # syntax=docker/dockerfile:1
 
+# The panel, embedded into core. Static output, so it builds on the host platform.
+FROM --platform=$BUILDPLATFORM node:25-alpine AS ui
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY ui .
+# Empty VITE_API_URL: the panel calls /api on the origin that served it.
+RUN VITE_API_URL= npm run build
+
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 WORKDIR /src
 
@@ -9,6 +18,7 @@ RUN --mount=type=cache,target=/go/pkg/mod cd api && go mod download
 
 COPY shared/proto shared/proto
 COPY api api
+COPY --from=ui /ui/dist api/internal/ui/web
 ARG CORE_VERSION=dev
 ARG WORKER_VERSION=dev
 ARG TARGETOS

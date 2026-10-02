@@ -3,19 +3,21 @@ title: Quick start
 description: Try Lute on one machine with Docker Compose.
 ---
 
-You need Docker with Docker Compose. The repository's
-[`examples/`](https://github.com/notna-k/Lute/tree/master/examples) directory has ready-to-run
-setups; this page uses the quickstart one, which runs everything on one machine.
+You need Docker with Docker Compose. The quickstart runs everything on one machine from the latest
+images on the GitHub Container Registry. It is one of the ready-to-run setups in the repository's
+[`examples/`](https://github.com/notna-k/Lute/tree/master/examples) directory.
 
 ## Start the stack
 
+Download the Compose file and the example job into a new directory:
+
 ```bash
-git clone https://github.com/notna-k/Lute.git
-cd Lute/examples/quickstart
-cp .env.example .env
+mkdir -p lute/jobdefs && cd lute
+base=https://raw.githubusercontent.com/notna-k/Lute/master/examples/quickstart
+curl -fsSL -O "$base/compose.yaml" -o jobdefs/hello.yaml "$base/jobdefs/hello.yaml"
 ```
 
-Set three values in `.env`:
+Create `.env` next to it with three values:
 
 ```bash
 # JWT signing key, at least 32 bytes:  openssl rand -base64 48
@@ -31,8 +33,7 @@ Then start it:
 docker compose up -d
 ```
 
-That starts four containers: Postgres, core, the panel and one worker. The panel is built from the
-repository on the first start, which takes a few minutes.
+That starts three containers: Postgres, core, which serves the panel, and one worker.
 
 | What | Where |
 |---|---|
@@ -41,7 +42,7 @@ repository on the first start, which takes a few minutes.
 
 ## Run your first job
 
-The stack syncs the job definitions in `examples/quickstart/jobdefs/`. Open **Jobs** in the panel,
+The stack syncs the job definitions in `jobdefs/`. Open **Jobs** in the panel,
 pick `hello`, and press **Run**. The form comes from the job's [parameters](../jobs/parameters/);
 the build log appears as the worker runs it.
 
