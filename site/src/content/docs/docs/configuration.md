@@ -3,8 +3,9 @@ title: Configuring core
 description: Every environment variable core reads, with its default.
 ---
 
-Core is configured with environment variables. With the Compose stack they come from the repo-root
-`.env` (template: `.env.example`). Durations use Go syntax: `90s`, `15m`, `720h`.
+Core is configured with environment variables. The
+[Compose examples](https://github.com/notna-k/Lute/tree/master/examples) set them in `compose.yaml`
+and read secrets from `.env`. Durations use Go syntax: `90s`, `15m`, `720h`.
 
 Workers have their own settings; see [Running a worker](../workers/running/#settings).
 

@@ -1,0 +1,10 @@
+name: hello
+description: Greets someone from an Alpine container.
+runtime: alpine:3
+command: echo "Hello, $WHO!" && uname -a
+parameters:
+  - name: who
+    type: string
+    label: Who to greet
+    env: WHO
+    default: world
