@@ -1,0 +1,72 @@
+# Lute on one machine: Postgres, core, the panel and one worker.
+# For trying Lute out. For a real setup see ../server and ../worker.
+#
+#   cp .env.example .env    # then set JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+#   docker compose up -d
+#
+# Panel: http://localhost:8080
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lute
+      POSTGRES_PASSWORD: lute
+      POSTGRES_DB: lute
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lute -d lute"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core:
+    image: ghcr.io/notna-k/lute-core:0.2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "50051:50051" # gRPC, for workers on other machines
+    environment:
+      GIN_MODE: release
+      POSTGRES_DSN: postgres://lute:lute@postgres:5432/lute?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      CORS_ALLOWED_ORIGINS: http://localhost:8080
+      JOB_DEFS_DIR: /etc/lute/jobdefs
+      # Seeded as a registration token, so the worker below enrols on its own.
+      WORKER_BOOTSTRAP_TOKEN: ${WORKER_TOKEN:-lute_rt_quickstart}
+    volumes:
+      - ./jobdefs:/etc/lute/jobdefs:ro
+
+  # The panel, built from the repository. It proxies /api to the `core` service.
+  admin:
+    build:
+      context: https://github.com/notna-k/Lute.git#master
+      dockerfile: ui/Dockerfile
+    depends_on:
+      - core
+    ports:
+      - "8080:80"
+
+  worker:
+    image: ghcr.io/notna-k/lute-worker:0.2
+    depends_on:
+      - core
+    restart: unless-stopped
+    stop_grace_period: 30m
+    environment:
+      LUTE_SERVER: core:50051
+      LUTE_TOKEN: ${WORKER_TOKEN:-lute_rt_quickstart}
+      LUTE_NAME: quickstart-worker
+      # Most desktop Docker installs are rootful. A real build machine runs rootless
+      # Docker instead; see ../worker.
+      LUTE_ALLOW_ROOTFUL: "1"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      - worker_data:/var/lib/lute-worker
+
+volumes:
+  postgres_data:
+  worker_data:

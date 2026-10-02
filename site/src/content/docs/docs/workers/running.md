@@ -52,6 +52,9 @@ docker run -d --name lute-worker --restart unless-stopped \
   ghcr.io/notna-k/lute-worker:0.2
 ```
 
+To run it with Docker Compose instead, use the
+[`worker` example](https://github.com/notna-k/Lute/tree/master/examples/worker).
+
 Docker creates the data dir if it is missing; rootless Docker makes it owned by `ci`. On its
 first start the worker registers with the token and writes `state.json` into the data
 dir. After that the token is not needed: restarts, reboots and image updates keep the same

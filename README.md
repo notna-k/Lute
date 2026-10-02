@@ -31,13 +31,12 @@ workers ───────────────── gRPC ─────
 - **core** — stateless Go backend. REST + WebSocket for the panel, gRPC for workers. Everything
   durable (domain data *and* the job queue) lives in Postgres, so core can be restarted or scaled
   out freely.
-- **admin** — React/TypeScript panel (Vite, Tailwind, TanStack Query). Trigger jobs, watch builds
-  stream in, manage workers.
+- **admin** — the web panel. Trigger jobs, watch builds stream in, manage workers.
 - **worker** — a container image that runs on rootless Docker. It enrols with a registration token,
   then runs jobs as sibling containers for the queues and labels it advertises
   ([Running a worker](https://notna-k.github.io/Lute/docs/workers/running/)).
 
-**Git is the source of truth for job definitions.** YAML under `infrastructure/dev/jobdefs/` is
+**Git is the source of truth for job definitions.** A directory of YAML from your repository is
 synced into Postgres on startup and on demand; the panel shows what drifted from Git and can export
 the current state back as YAML to commit.
 
@@ -72,40 +71,38 @@ parameters:
 
 ## Quick start
 
-Requirements: Docker + Docker Compose, Go 1.26+ and Node 25.x if you want to build outside Docker.
+All you need is Docker with Docker Compose. [`examples/`](examples/) has ready-to-run setups:
+
+| Example | What it runs |
+|---|---|
+| [`quickstart/`](examples/quickstart/) | Everything on one machine, to try Lute out |
+| [`server/`](examples/server/) | Postgres, core and the panel, for a real install |
+| [`worker/`](examples/worker/) | A worker on a build machine with rootless Docker |
+
+To try it, take the quickstart:
 
 ```bash
-git clone https://github.com/notna-k/Lute.git && cd Lute
+git clone https://github.com/notna-k/Lute.git
+cd Lute/examples/quickstart
 cp .env.example .env     # set JWT_SECRET (>= 32 bytes), ADMIN_EMAIL, ADMIN_PASSWORD
-make dev-up              # postgres + core + admin + one worker
+docker compose up -d
 ```
 
-- Panel: http://localhost:8080 (sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`)
-- Core API: http://localhost:8081/api/health
-- gRPC for workers: `localhost:50051`
+Open http://localhost:8080, sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`, and run the `hello`
+job. Its definition is in [`examples/quickstart/jobdefs/`](examples/quickstart/jobdefs/); add your
+own YAML there and press **Sync from Git**.
 
-The stack starts a worker that enrols itself with `WORKER_BOOTSTRAP_TOKEN`. To add another host,
-*Add worker* in the panel gives you a registration token and the `docker run` command for it.
-
-`make dev-logs` tails the stack, `make dev-down` stops it, `make dev-clean` also wipes Postgres.
-More detail, including every environment variable, is in
-[`infrastructure/dev/README.md`](infrastructure/dev/README.md).
-
-## Repository layout
-
-| Path | What lives there |
-|------|------------------|
-| [`api/`](api/) | Core backend (Go module `github.com/lute/api`) |
-| [`worker/`](worker/README.md) | Worker agent and its image (Go module `github.com/lute/worker`) |
-| [`ui/`](ui/README.md) | Admin panel (React + Vite) |
-| [`shared/proto/`](shared/README.md) | gRPC contract shared by core and workers |
-| [`site/`](site/) | Home page and docs (Astro Starlight), published to GitHub Pages |
-| [`infrastructure/dev/`](infrastructure/dev/README.md) | Dev compose stack and example job definitions |
+For a real install, run [`server/`](examples/server/) on one machine and
+[`worker/`](examples/worker/) on each build machine. [`examples/README.md`](examples/README.md)
+walks through both, and the [docs](https://notna-k.github.io/Lute/docs/) cover
+[job definitions](https://notna-k.github.io/Lute/docs/jobs/definitions/),
+[workers](https://notna-k.github.io/Lute/docs/workers/running/) and
+[every setting](https://notna-k.github.io/Lute/docs/configuration/).
 
 ## Contributing
 
-Issues, ideas and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). AI-assisted
-contributions are fine; the same review bar applies either way.
+Issues, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the
+development setup and tests.
 
 ## License
 
