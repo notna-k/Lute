@@ -416,6 +416,11 @@ func (c *Client) CreateAPIKey(name string) (APIKey, error) {
 	return call[APIKey](c, http.MethodPost, "/api/v1/api-keys", map[string]string{"name": name})
 }
 
+// CreateServiceKey makes a key that acts as itself rather than as the caller.
+func (c *Client) CreateServiceKey(name string) (APIKey, error) {
+	return call[APIKey](c, http.MethodPost, "/api/v1/api-keys", map[string]string{"name": name, "scope": "service"})
+}
+
 func (c *Client) RevokeAPIKey(id string) error {
 	_, _, err := c.request(http.MethodDelete, "/api/v1/api-keys/"+id, nil)
 	return err
