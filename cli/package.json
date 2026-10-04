@@ -1,0 +1,37 @@
+{
+  "name": "@notna-k/lute-cli",
+  "version": "0.1.0",
+  "description": "The lute command: find a Lute job, run it with typed parameters, follow its log.",
+  "license": "MIT",
+  "homepage": "https://notna-k.github.io/Lute/docs/cli/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/notna-k/Lute.git",
+    "directory": "cli"
+  },
+  "type": "module",
+  "bin": {
+    "lute": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-reporter=spec 'test/**/*.test.ts'",
+    "gen:api": "openapi-typescript ../api/openapi.yaml -o src/api.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3"
+  }
+}
