@@ -30,7 +30,7 @@ Core sends a `POST` with a JSON body:
 ```json
 {
   "event": "run.completed",
-  "run_id": "3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71",
+  "run_id": "66fb1c2d3e4f5a6b7c8d9e0f",
   "queue": "deploy",
   "type": "container",
   "timestamp": 1790759741,
