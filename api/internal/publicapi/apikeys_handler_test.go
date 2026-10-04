@@ -60,7 +60,7 @@ func TestAccountKeys(t *testing.T) {
 	t.Run("Fail - nobody but its owner revokes it", func(t *testing.T) {
 		k := f.key(anton, "precious", "account")
 		wantError(t, f.panel(bob, http.MethodDelete, "/api/v1/api-keys/"+k.ID, nil), http.StatusNotFound, "not_found")
-		if rec := f.public(k.Token, http.MethodGet, "/whoami", nil); rec.Code != http.StatusOK {
+		if rec := f.public(k.Token, http.MethodGet, "/runs", nil); rec.Code != http.StatusOK {
 			t.Errorf("bob's revoke attempt broke anton's key: %d", rec.Code)
 		}
 	})
@@ -68,11 +68,11 @@ func TestAccountKeys(t *testing.T) {
 	t.Run("Fail - it stops working when its owner is removed", func(t *testing.T) {
 		carol := f.user("carol@acme.dev")
 		k := f.key(carol, "laptop", "account")
-		if rec := f.public(k.Token, http.MethodGet, "/whoami", nil); rec.Code != http.StatusOK {
+		if rec := f.public(k.Token, http.MethodGet, "/runs", nil); rec.Code != http.StatusOK {
 			t.Fatalf("the key does not work to begin with: %d", rec.Code)
 		}
 		deleteUser(t, f, carol)
-		wantError(t, f.public(k.Token, http.MethodGet, "/whoami", nil), http.StatusUnauthorized, "unauthorized")
+		wantError(t, f.public(k.Token, http.MethodGet, "/runs", nil), http.StatusUnauthorized, "unauthorized")
 	})
 
 	t.Run("Fail - an unknown scope is rejected and names the field", func(t *testing.T) {
@@ -111,14 +111,14 @@ func TestServiceKeys(t *testing.T) {
 		if rec := f.panel(bob, http.MethodDelete, "/api/v1/api-keys/"+k.ID, nil); rec.Code != http.StatusNoContent {
 			t.Fatalf("bob revokes a service key: %d %s", rec.Code, rec.Body)
 		}
-		wantError(t, f.public(k.Token, http.MethodGet, "/whoami", nil), http.StatusUnauthorized, "unauthorized")
+		wantError(t, f.public(k.Token, http.MethodGet, "/runs", nil), http.StatusUnauthorized, "unauthorized")
 	})
 
 	t.Run("Success - it keeps working when its creator is removed", func(t *testing.T) {
 		dave := f.user("dave@acme.dev")
 		k := f.key(dave, "release-bot", "service")
 		deleteUser(t, f, dave)
-		if rec := f.public(k.Token, http.MethodGet, "/whoami", nil); rec.Code != http.StatusOK {
+		if rec := f.public(k.Token, http.MethodGet, "/runs", nil); rec.Code != http.StatusOK {
 			t.Errorf("the service key died with its creator: %d %s", rec.Code, rec.Body)
 		}
 	})
