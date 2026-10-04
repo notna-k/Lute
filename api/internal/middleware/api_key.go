@@ -15,8 +15,8 @@ import (
 	"github.com/lute/api/internal/httpx"
 )
 
-// APIKeyAuthMiddleware authenticates "Bearer lute_sk_..." and sets user_id. last_used_at
-// is updated in the background.
+// APIKeyAuthMiddleware authenticates "Bearer lute_sk_..." and records the key with
+// httpx.SetKeyCaller. last_used_at is updated in the background.
 func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := extractBearer(c.GetHeader("Authorization"))
@@ -47,8 +47,7 @@ func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 			return
 		}
 
-		c.Set("user_id", k.UserID.Hex())
-		c.Set("api_key_id", k.ID.Hex())
+		httpx.SetKeyCaller(c, httpx.KeyCaller{KeyID: k.ID, Service: k.IsService(), UserID: k.UserID})
 
 		keyID := k.ID
 		go func() {
@@ -57,6 +56,21 @@ func APIKeyAuthMiddleware(keyRepo *repos.APIKeyRepository) gin.HandlerFunc {
 			_ = keyRepo.TouchUsed(bg, keyID)
 		}()
 
+		c.Next()
+	}
+}
+
+// RequireAccountKey refuses service keys, for routes that act on a user's own resources.
+func RequireAccountKey() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		k, ok := httpx.Key(c)
+		if !ok {
+			return
+		}
+		if k.Service {
+			httpx.Error(c, http.StatusForbidden, "this route needs an account key; service keys cannot use it")
+			return
+		}
 		c.Next()
 	}
 }

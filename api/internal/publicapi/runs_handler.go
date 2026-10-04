@@ -5,12 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/lute/api/internal/db/id"
 	"github.com/lute/api/internal/db/models"
 	"github.com/lute/api/internal/db/repos"
 	"github.com/lute/api/internal/httpx"
@@ -27,7 +28,7 @@ func NewRunsHandler(svc *runs.Service) *RunsHandler {
 }
 
 func (h *RunsHandler) Create(c *gin.Context) {
-	userID, ok := httpx.UserID(c)
+	key, ok := httpx.Key(c)
 	if !ok {
 		return
 	}
@@ -41,10 +42,9 @@ func (h *RunsHandler) Create(c *gin.Context) {
 		return
 	}
 
-	apiKeyID, _ := id.FromHex(c.GetString("api_key_id"))
 	run := &models.Run{
-		UserID:         userID,
-		APIKeyID:       apiKeyID,
+		UserID:         key.UserID,
+		APIKeyID:       key.KeyID,
 		Queue:          req.Queue,
 		Type:           req.Type,
 		IdempotencyKey: req.IdempotencyKey,
@@ -76,33 +76,44 @@ func (h *RunsHandler) Create(c *gin.Context) {
 		return
 	}
 	if !created {
-		c.JSON(http.StatusOK, CreateRunResponse{RunResponse: h.response(ctx, run)})
+		c.JSON(http.StatusOK, CreateRunResponse{RunResponse: runResponse(ctx, h.runs, run)})
 		return
 	}
-	c.JSON(http.StatusCreated, CreateRunResponse{RunResponse: h.response(ctx, run), WebhookSecret: generatedSecret})
+	c.JSON(http.StatusCreated, CreateRunResponse{RunResponse: runResponse(ctx, h.runs, run), WebhookSecret: generatedSecret})
 }
 
 func (h *RunsHandler) Get(c *gin.Context) {
-	run, ok := h.owned(c)
+	run, ok := h.visible(c)
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, h.response(c.Request.Context(), run))
+	c.JSON(http.StatusOK, runResponse(c.Request.Context(), h.runs, run))
 }
 
+// runStatuses are the values RunStatusSQL can produce, and so what ?status= accepts.
+var runStatuses = []string{"pending", "running", "done", "failed", "dead", "unknown"}
+
 func (h *RunsHandler) List(c *gin.Context) {
-	userID, ok := httpx.UserID(c)
+	key, ok := httpx.Key(c)
 	if !ok {
 		return
 	}
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	limit, _ := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	status := c.Query("status")
+	if status != "" && !slices.Contains(runStatuses, status) {
+		msg := "must be one of " + strings.Join(runStatuses, ", ")
+		httpx.Invalid(c, "status "+msg, map[string]string{"status": msg})
+		return
+	}
 
 	ctx := c.Request.Context()
 	list, total, err := h.runs.List(ctx, repos.RunListFilter{
-		UserID: userID,
-		Queue:  c.Query("queue"),
-		Type:   c.Query("type"),
+		Scope:   viewerOf(key),
+		Queue:   c.Query("queue"),
+		Type:    c.Query("type"),
+		JobSlug: c.Query("job"),
+		Status:  status,
 	}, offset, limit)
 	if err != nil {
 		httpx.Internal(c, err)
@@ -116,13 +127,13 @@ func (h *RunsHandler) List(c *gin.Context) {
 		Limit:  limit,
 	}
 	for i := range list {
-		resp.Runs = append(resp.Runs, h.response(ctx, &list[i]))
+		resp.Runs = append(resp.Runs, runResponse(ctx, h.runs, &list[i]))
 	}
 	c.JSON(http.StatusOK, resp)
 }
 
 func (h *RunsHandler) Retry(c *gin.Context) {
-	run, ok := h.owned(c)
+	run, ok := h.visible(c)
 	if !ok {
 		return
 	}
@@ -130,11 +141,11 @@ func (h *RunsHandler) Retry(c *gin.Context) {
 		runs.WriteError(c, err, "queue state lost for this run; create a new run")
 		return
 	}
-	c.JSON(http.StatusOK, h.response(c.Request.Context(), run))
+	c.JSON(http.StatusOK, runResponse(c.Request.Context(), h.runs, run))
 }
 
 func (h *RunsHandler) Cancel(c *gin.Context) {
-	run, ok := h.owned(c)
+	run, ok := h.visible(c)
 	if !ok {
 		return
 	}
@@ -142,11 +153,11 @@ func (h *RunsHandler) Cancel(c *gin.Context) {
 		runs.WriteError(c, err, "run has no queue state")
 		return
 	}
-	c.JSON(http.StatusOK, h.response(c.Request.Context(), run))
+	c.JSON(http.StatusOK, runResponse(c.Request.Context(), h.runs, run))
 }
 
 func (h *RunsHandler) Logs(c *gin.Context) {
-	run, ok := h.owned(c)
+	run, ok := h.visible(c)
 	if !ok {
 		return
 	}
@@ -162,23 +173,34 @@ func (h *RunsHandler) Logs(c *gin.Context) {
 	c.JSON(http.StatusOK, page)
 }
 
-// owned loads the :id run if the caller started it, or answers 404.
-func (h *RunsHandler) owned(c *gin.Context) (*models.Run, bool) {
-	userID, ok := httpx.UserID(c)
+// viewerOf is whose runs a key sees: a service key sees every run until roles exist.
+func viewerOf(k httpx.KeyCaller) runs.Viewer {
+	if k.Service {
+		return runs.Viewer{All: true}
+	}
+	return runs.UserViewer(k.UserID)
+}
+
+// visible loads the :id run, by full id or short prefix, if the caller may see it, or answers 404.
+func (h *RunsHandler) visible(c *gin.Context) (*models.Run, bool) {
+	key, ok := httpx.Key(c)
 	if !ok {
 		return nil, false
 	}
-	run, err := h.runs.Owned(c.Request.Context(), userID, c.Param("id"))
+	run, err := h.runs.Visible(c.Request.Context(), viewerOf(key), c.Param("id"))
 	if err != nil {
-		httpx.NotFoundOrInternal(c, err, "run not found")
+		runs.WriteError(c, err, "run not found")
 		return nil, false
 	}
 	return run, true
 }
 
-func (h *RunsHandler) response(ctx context.Context, run *models.Run) RunResponse {
+// runResponse derives a run's live state from its queue slot and execution record.
+func runResponse(ctx context.Context, svc *runs.Service, run *models.Run) RunResponse {
 	resp := RunResponse{
-		ID:             run.JobID,
+		ID:             run.ID.Hex(),
+		Job:            run.JobSlug,
+		Params:         run.Params,
 		Queue:          run.Queue,
 		Type:           run.Type,
 		Status:         "unknown",
@@ -186,7 +208,7 @@ func (h *RunsHandler) response(ctx context.Context, run *models.Run) RunResponse
 		WebhookURL:     run.WebhookURL,
 		WebhookEvents:  run.WebhookEvents,
 	}
-	if job, err := h.runs.Job(ctx, run.JobID); err == nil {
+	if job, err := svc.Job(ctx, run.JobID); err == nil {
 		resp.Status = job.Status
 		resp.Attempts = job.Attempts
 		resp.MaxRetries = job.MaxRetries
@@ -200,7 +222,7 @@ func (h *RunsHandler) response(ctx context.Context, run *models.Run) RunResponse
 			resp.StartedAt = time.Unix(job.StartedAt, 0).UTC()
 		}
 	}
-	if exec, err := h.runs.Execution(ctx, run.JobID); err == nil {
+	if exec, err := svc.Execution(ctx, run.JobID); err == nil {
 		resp.FinishedAt = exec.FinishedAt.UTC()
 		resp.ElapsedMs = exec.ElapsedMs
 		if exec.Success {

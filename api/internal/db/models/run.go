@@ -5,8 +5,9 @@ import "github.com/lute/api/internal/db/id"
 // Run is the user-facing record of a build; JobID links it to the queue.
 type Run struct {
 	BaseModel
-	JobID    string `json:"job_id" gorm:"uniqueIndex"`
-	UserID   id.ID  `json:"user_id" gorm:"size:24;not null"`
+	JobID string `json:"job_id" gorm:"uniqueIndex"`
+	// UserID is who started the run; empty when a service key did, and then APIKeyID owns it.
+	UserID   id.ID  `json:"user_id,omitempty" gorm:"size:24"`
 	APIKeyID id.ID  `json:"api_key_id,omitempty" gorm:"size:24"`
 	Queue    string `json:"queue"`
 	Type     string `json:"type"`

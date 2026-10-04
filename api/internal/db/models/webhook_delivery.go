@@ -10,7 +10,7 @@ type WebhookDelivery struct {
 	BaseModel
 	RunID           id.ID                       `json:"run_id" gorm:"size:24;not null"`
 	JobID           string                      `json:"job_id"`
-	UserID          id.ID                       `json:"user_id" gorm:"size:24;not null"`
+	UserID          id.ID                       `json:"user_id,omitempty" gorm:"size:24"`
 	Event           string                      `json:"event"`
 	URL             string                      `json:"url"`
 	Payload         []byte                      `json:"-"`

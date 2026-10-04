@@ -57,6 +57,11 @@ export function BuildPane({ job, build, onRerun }: BuildPaneProps) {
               ad-hoc
             </Badge>
           )}
+          {build.startedBy && (
+            <Badge size='sm' title='Started by this service key'>
+              key: {build.startedBy}
+            </Badge>
+          )}
           <span
             className='font-mono text-[11.5px] text-fg-subtle tabular-nums'
             title={timestamp(build.startedAt)}

@@ -5,10 +5,21 @@ import (
 	"github.com/lute/api/internal/db/types"
 )
 
+// Key scopes: who a key acts as and who can see it.
+const (
+	// KeyScopeAccount acts as the user who made it; only that user sees it.
+	KeyScopeAccount = "account"
+	// KeyScopeService acts as itself and belongs to the instance, so it outlives its creator.
+	KeyScopeService = "service"
+)
+
 // APIKey stores only the token's public prefix and hash.
 type APIKey struct {
 	BaseModel
-	UserID     id.ID            `json:"user_id" gorm:"size:24;not null;index:idx_api_keys_user_created,priority:1"`
+	Scope string `json:"scope" gorm:"size:16;not null;default:account"`
+	// UserID is the owner an account key acts as; empty for a service key.
+	UserID     id.ID            `json:"user_id,omitempty" gorm:"size:24;index:idx_api_keys_user_created,priority:1"`
+	CreatedBy  id.ID            `json:"created_by" gorm:"size:24"`
 	Name       string           `json:"name"`
 	Prefix     string           `json:"prefix" gorm:"uniqueIndex"`
 	Hash       string           `json:"-"`
@@ -17,3 +28,5 @@ type APIKey struct {
 }
 
 func (*APIKey) TableName() string { return "api_keys" }
+
+func (k *APIKey) IsService() bool { return k.Scope == KeyScopeService }

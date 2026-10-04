@@ -39,3 +39,19 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 	}
 	return &u, nil
 }
+
+// Emails maps each user id to its email; unknown ids are left out.
+func (r *UserRepository) Emails(ctx context.Context, ids []id.ID) (map[id.ID]string, error) {
+	out := make(map[id.ID]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []models.User
+	if err := r.q(ctx).Select("id", "email").Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, u := range rows {
+		out[u.ID] = u.Email
+	}
+	return out, nil
+}

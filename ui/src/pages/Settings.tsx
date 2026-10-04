@@ -16,6 +16,7 @@ import { useUiPreferences, type Density } from '@/contexts/UiPreferencesContext'
 import { getSettings, updateSettings } from '@/services/settingsService';
 import {
   apiKeyService,
+  type APIKeyScope,
   type APIKeySummary,
   type CreateAPIKeyResponse,
 } from '@/services/apiKeyService';
@@ -54,18 +55,111 @@ function publicApiBase(): string {
   return '/api/public/v1';
 }
 
+/** One list of API keys: the caller's own, or the instance's service keys. */
+function KeyList({ scope, title, empty }: { scope: APIKeyScope; title: string; empty: string }) {
+  const qc = useQueryClient();
+  const keysQuery = useQuery({
+    queryKey: ['api-keys', scope],
+    queryFn: () => apiKeyService.list(scope),
+  });
+  const revokeMut = useMutation({
+    mutationFn: (id: string) => apiKeyService.revoke(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['api-keys', scope] }),
+  });
+  const keys: APIKeySummary[] = keysQuery.data?.api_keys ?? [];
+
+  return (
+    <Section title={title}>
+      {keysQuery.isError && (
+        <Alert tone='danger' className='mb-3'>
+          {keysQuery.error instanceof Error ? keysQuery.error.message : 'Failed to load API keys'}
+        </Alert>
+      )}
+      {keysQuery.isLoading ? (
+        <p className='text-[12.5px] text-fg-subtle'>Loading…</p>
+      ) : keys.length === 0 ? (
+        <Card>
+          <div className='py-10'>
+            <EmptyState
+              icon={<KeyRound className='h-5 w-5' />}
+              title='No keys yet'
+              description={empty}
+            />
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {keys.length} {keys.length === 1 ? 'key' : 'keys'}
+            </CardTitle>
+          </CardHeader>
+          {keys.map((k) => {
+            const created = toEpochMs(k.created_at);
+            const used = toEpochMs(k.last_used_at);
+            return (
+              <SettingRow
+                key={k.id}
+                label={
+                  <span className='flex items-center gap-2'>
+                    {k.name}
+                    <span className='font-mono text-[11.5px] text-fg-subtle'>{k.prefix}</span>
+                    {k.revoked && <span className='text-[11.5px] text-fg-subtle'>revoked</span>}
+                  </span>
+                }
+                hint={
+                  <>
+                    Created {created ? timestamp(created) : '—'}
+                    {scope === 'service' && k.created_by_email ? ` by ${k.created_by_email}` : ''}
+                    {used ? ` · last used ${timestamp(used)}` : ' · never used'}
+                  </>
+                }
+              >
+                {!k.revoked && (
+                  <Button
+                    variant='danger'
+                    size='sm'
+                    disabled={revokeMut.isPending}
+                    // Revoking is immediate and cannot be undone.
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Revoke "${k.name}"? Anything using it stops working immediately.`,
+                        )
+                      ) {
+                        revokeMut.mutate(k.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className='h-3.5 w-3.5' /> Revoke
+                  </Button>
+                )}
+              </SettingRow>
+            );
+          })}
+        </Card>
+      )}
+      {revokeMut.isError && (
+        <Alert tone='danger' className='mt-3'>
+          {revokeMut.error instanceof Error ? revokeMut.error.message : 'Revoke failed'}
+        </Alert>
+      )}
+    </Section>
+  );
+}
+
 export default function Settings() {
   const qc = useQueryClient();
   const [name, setName] = useState('');
+  const [scope, setScope] = useState<APIKeyScope>('account');
   const [newToken, setNewToken] = useState<CreateAPIKeyResponse | null>(null);
   const { mode, setMode } = useTheme();
   const { density, setDensity, sidebarExpanded, setSidebarExpanded } = useUiPreferences();
 
-  const keysQuery = useQuery({
-    queryKey: ['api-keys'],
-    queryFn: () => apiKeyService.list(),
+  const settingsQuery = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
   });
-  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: getSettings });
 
   const settingsMut = useMutation({
     mutationFn: updateSettings,
@@ -73,20 +167,13 @@ export default function Settings() {
   });
 
   const createMut = useMutation({
-    mutationFn: (n: string) => apiKeyService.create(n),
+    mutationFn: ({ n, s }: { n: string; s: APIKeyScope }) => apiKeyService.create(n, s),
     onSuccess: (data) => {
       setNewToken(data);
       setName('');
-      void qc.invalidateQueries({ queryKey: ['api-keys'] });
+      void qc.invalidateQueries({ queryKey: ['api-keys', data.scope] });
     },
   });
-
-  const revokeMut = useMutation({
-    mutationFn: (id: string) => apiKeyService.revoke(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['api-keys'] }),
-  });
-
-  const keys: APIKeySummary[] = keysQuery.data?.api_keys ?? [];
 
   return (
     <>
@@ -192,8 +279,23 @@ export default function Settings() {
               </SettingRow>
               <SettingRow
                 label='New key'
-                hint='Name it after where it will live, so a revoke later is obvious.'
+                hint={
+                  <>
+                    An <b>account</b> key acts as you, for your laptop and scripts. A <b>service</b>{' '}
+                    key belongs to this Lute, for CI and other automation: everyone sees it, and it
+                    keeps working after you leave. Name it after where it will live.
+                  </>
+                }
               >
+                <SegmentedControl<APIKeyScope>
+                  label='Key kind'
+                  value={scope}
+                  onChange={setScope}
+                  options={[
+                    { value: 'account', label: 'Account' },
+                    { value: 'service', label: 'Service' },
+                  ]}
+                />
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -206,7 +308,7 @@ export default function Settings() {
                   variant='primary'
                   size='sm'
                   disabled={!name.trim() || createMut.isPending}
-                  onClick={() => createMut.mutate(name.trim())}
+                  onClick={() => createMut.mutate({ n: name.trim(), s: scope })}
                 >
                   <Plus className='h-3.5 w-3.5' /> Create
                 </Button>
@@ -237,83 +339,16 @@ export default function Settings() {
             )}
           </Section>
 
-          <Section title='Your API keys'>
-            {keysQuery.isError && (
-              <Alert tone='danger' className='mb-3'>
-                {keysQuery.error instanceof Error
-                  ? keysQuery.error.message
-                  : 'Failed to load API keys'}
-              </Alert>
-            )}
-            {keysQuery.isLoading ? (
-              <p className='text-[12.5px] text-fg-subtle'>Loading…</p>
-            ) : keys.length === 0 ? (
-              <Card>
-                <div className='py-10'>
-                  <EmptyState
-                    icon={<KeyRound className='h-5 w-5' />}
-                    title='No API keys yet'
-                    description='Create one above to call the public API from scripts or CI.'
-                  />
-                </div>
-              </Card>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{keys.length} keys</CardTitle>
-                </CardHeader>
-                {keys.map((k) => {
-                  const created = toEpochMs(k.created_at);
-                  const used = toEpochMs(k.last_used_at);
-                  return (
-                    <SettingRow
-                      key={k.id}
-                      label={
-                        <span className='flex items-center gap-2'>
-                          {k.name}
-                          <span className='font-mono text-[11.5px] text-fg-subtle'>{k.prefix}</span>
-                          {k.revoked && (
-                            <span className='text-[11.5px] text-fg-subtle'>revoked</span>
-                          )}
-                        </span>
-                      }
-                      hint={
-                        <>
-                          Created {created ? timestamp(created) : '—'}
-                          {used ? ` · last used ${timestamp(used)}` : ' · never used'}
-                        </>
-                      }
-                    >
-                      {!k.revoked && (
-                        <Button
-                          variant='danger'
-                          size='sm'
-                          disabled={revokeMut.isPending}
-                          // Revoking is immediate and cannot be undone.
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Revoke "${k.name}"? Anything using it stops working immediately.`,
-                              )
-                            ) {
-                              revokeMut.mutate(k.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className='h-3.5 w-3.5' /> Revoke
-                        </Button>
-                      )}
-                    </SettingRow>
-                  );
-                })}
-              </Card>
-            )}
-            {revokeMut.isError && (
-              <Alert tone='danger' className='mt-3'>
-                {revokeMut.error instanceof Error ? revokeMut.error.message : 'Revoke failed'}
-              </Alert>
-            )}
-          </Section>
+          <KeyList
+            scope='account'
+            title='Your keys'
+            empty='Create an account key above to call the API, or to sign in the lute CLI, as yourself.'
+          />
+          <KeyList
+            scope='service'
+            title='Service keys'
+            empty='Create a service key above for CI and other automation that should not depend on one person.'
+          />
         </PageBody>
       </PageScroll>
     </>

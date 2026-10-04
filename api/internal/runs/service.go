@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -44,7 +45,7 @@ type Job struct {
 // the earlier run is returned instead and created is false.
 func (s *Service) Enqueue(ctx context.Context, run *models.Run, job Job) (_ *models.Run, created bool, _ error) {
 	if run.IdempotencyKey != "" {
-		existing, err := s.runs.GetByIdempotency(ctx, run.UserID, run.IdempotencyKey)
+		existing, err := s.runs.GetByIdempotency(ctx, run.UserID, run.APIKeyID, run.IdempotencyKey)
 		if err == nil {
 			return existing, false, nil
 		}
@@ -57,7 +58,10 @@ func (s *Service) Enqueue(ctx context.Context, run *models.Run, job Job) (_ *mod
 	if err := s.runs.Create(ctx, run); err != nil {
 		return nil, false, err
 	}
-	meta := map[string]string{"user_id": run.UserID.Hex(), "run_id": run.ID.Hex()}
+	meta := map[string]string{"run_id": run.ID.Hex()}
+	if !run.UserID.IsZero() {
+		meta["user_id"] = run.UserID.Hex()
+	}
 	if run.JobSlug != "" {
 		meta["job_slug"] = run.JobSlug
 	}
@@ -115,17 +119,24 @@ func (s *Service) Execution(ctx context.Context, jobID string) (*models.JobExecu
 	return s.executions.GetByJobID(ctx, jobID)
 }
 
-// Owned returns the run behind jobID if userID started it; a foreign run reads as missing.
-func (s *Service) Owned(ctx context.Context, userID id.ID, jobID string) (*models.Run, error) {
-	run, err := s.runs.GetByJobID(ctx, jobID)
-	if err != nil {
-		return nil, err
-	}
-	if run.UserID != userID {
+// Viewer is whose runs a caller may see; see repos.RunScope.
+type Viewer = repos.RunScope
+
+// UserViewer sees userID's runs and those service keys started.
+func UserViewer(userID id.ID) Viewer { return Viewer{UserID: userID} }
+
+// Visible returns the run ref names if v may see it. ref is the run id or a prefix of at
+// least MinRefLen characters; anything else, like a foreign run, reads as missing.
+func (s *Service) Visible(ctx context.Context, v Viewer, ref string) (*models.Run, error) {
+	ref = strings.ToLower(ref)
+	if len(ref) < MinRefLen || len(ref) > 24 || strings.Trim(ref, "0123456789abcdef") != "" {
 		return nil, repos.ErrNotFound
 	}
-	return run, nil
+	return s.runs.GetByRef(ctx, v, ref)
 }
+
+// MinRefLen is the shortest run id prefix Visible accepts: the short form the panel and CLI show.
+const MinRefLen = 8
 
 func (s *Service) List(ctx context.Context, f repos.RunListFilter, offset, limit int64) ([]models.Run, int64, error) {
 	return s.runs.List(ctx, f, offset, limit)
@@ -133,8 +144,8 @@ func (s *Service) List(ctx context.Context, f repos.RunListFilter, offset, limit
 
 // History returns each slug's newest runs, newest first, and the execution records of
 // those that finished, keyed by job id.
-func (s *Service) History(ctx context.Context, userID id.ID, slugs []string, perSlug int) (map[string][]models.Run, map[string]*models.JobExecution, error) {
-	bySlug, err := s.runs.ListByJobSlugs(ctx, userID, slugs, perSlug)
+func (s *Service) History(ctx context.Context, v Viewer, slugs []string, perSlug int) (map[string][]models.Run, map[string]*models.JobExecution, error) {
+	bySlug, err := s.runs.ListByJobSlugs(ctx, v, slugs, perSlug)
 	if err != nil {
 		return nil, nil, err
 	}

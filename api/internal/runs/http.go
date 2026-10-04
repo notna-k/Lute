@@ -16,6 +16,8 @@ func WriteError(c *gin.Context, err error, notFound string) {
 	switch {
 	case errors.Is(err, repos.ErrNotFound):
 		httpx.Error(c, http.StatusNotFound, notFound)
+	case errors.Is(err, repos.ErrAmbiguous):
+		httpx.Error(c, http.StatusBadRequest, err.Error()+"; use more of its characters")
 	case errors.Is(err, ErrNoLogs):
 		httpx.Error(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, queue.ErrNotCancellable):

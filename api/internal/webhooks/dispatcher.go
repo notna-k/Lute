@@ -54,7 +54,7 @@ func (e *Emitter) Emit(ctx context.Context, jobID, event string, payload map[str
 
 	body := map[string]interface{}{
 		"event":     event,
-		"run_id":    run.JobID,
+		"run_id":    run.ID.Hex(),
 		"queue":     run.Queue,
 		"type":      run.Type,
 		"timestamp": time.Now().Unix(),

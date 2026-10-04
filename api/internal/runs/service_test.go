@@ -130,11 +130,11 @@ func TestEnqueueRecordsTheRunAndQueuesItsJob(t *testing.T) {
 		t.Errorf("dispatched = %v, want [build]", f.gw.dispatched)
 	}
 
-	owned, err := f.svc.Owned(ctx, user, run.JobID)
+	owned, err := f.svc.Visible(ctx, UserViewer(user), run.ID.Hex())
 	if err != nil || owned.ID != run.ID {
 		t.Fatalf("owner cannot load the run: %v", err)
 	}
-	if _, err := f.svc.Owned(ctx, id.New(), run.JobID); !errors.Is(err, repos.ErrNotFound) {
+	if _, err := f.svc.Visible(ctx, UserViewer(id.New()), run.ID.Hex()); !errors.Is(err, repos.ErrNotFound) {
 		t.Errorf("another user loads the run: err = %v, want ErrNotFound", err)
 	}
 }
@@ -378,7 +378,7 @@ func TestHistoryGroupsRunsBySlugWithTheirExecutions(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	bySlug, execs, err := f.svc.History(ctx, user, []string{"deploy", "lint"}, 10)
+	bySlug, execs, err := f.svc.History(ctx, UserViewer(user), []string{"deploy", "lint"}, 10)
 	if err != nil {
 		t.Fatalf("history: %v", err)
 	}
@@ -391,5 +391,59 @@ func TestHistoryGroupsRunsBySlugWithTheirExecutions(t *testing.T) {
 	}
 	if len(execs) != 1 || execs[older.JobID] == nil || !execs[older.JobID].Success {
 		t.Errorf("execs = %v, want only the finished run", execs)
+	}
+}
+
+func TestHistoryKeepsEachSlugsOwnNewestRuns(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	user := id.New()
+
+	// The quiet job's only run is the oldest; a busy job must not crowd it out.
+	quiet := &models.Run{UserID: user, JobSlug: "quiet"}
+	quiet.CreatedAt = types.NewMilliTime(time.Now().Add(-time.Hour))
+	f.enqueue(t, quiet)
+	for i := range 5 {
+		busy := &models.Run{UserID: user, JobSlug: "busy"}
+		busy.CreatedAt = types.NewMilliTime(time.Now().Add(-time.Duration(5-i) * time.Minute))
+		f.enqueue(t, busy)
+	}
+
+	bySlug, _, err := f.svc.History(ctx, UserViewer(user), []string{"busy", "quiet"}, 2)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(bySlug["busy"]) != 2 || len(bySlug["quiet"]) != 1 {
+		t.Errorf("busy has %d runs, quiet %d; want 2 and 1", len(bySlug["busy"]), len(bySlug["quiet"]))
+	}
+}
+
+func TestServiceKeyRunsAreSharedAndIdempotentPerKey(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	key := id.New()
+
+	run := f.enqueue(t, &models.Run{APIKeyID: key, IdempotencyKey: "nightly"})
+	job, err := f.svc.Job(ctx, run.JobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := job.Meta["user_id"]; ok {
+		t.Errorf("a service key's job names a user: %v", job.Meta)
+	}
+
+	again, created, err := f.svc.Enqueue(ctx, &models.Run{APIKeyID: key, IdempotencyKey: "nightly", Queue: "build", Type: "noop"}, Job{})
+	if err != nil || created || again.ID != run.ID {
+		t.Errorf("repeat with the same key: created=%v id=%v err=%v, want the first run", created, again.ID, err)
+	}
+	_, created, err = f.svc.Enqueue(ctx, &models.Run{APIKeyID: id.New(), IdempotencyKey: "nightly", Queue: "build", Type: "noop"}, Job{})
+	if err != nil || !created {
+		t.Errorf("another key's first use: created=%v err=%v, want a new run", created, err)
+	}
+
+	for name, v := range map[string]Viewer{"any user": UserViewer(id.New()), "every run": {All: true}} {
+		if _, err := f.svc.Visible(ctx, v, run.ID.Hex()[:MinRefLen]); err != nil {
+			t.Errorf("%s cannot see the service key's run: %v", name, err)
+		}
 	}
 }
