@@ -39,6 +39,10 @@ export default defineConfig({
 					items: [{ slug: 'docs/jobs/definitions' }, { slug: 'docs/jobs/parameters' }, { slug: 'docs/jobs/git-sync' }],
 				},
 				{ label: 'Workers', items: [{ slug: 'docs/workers/running' }] },
+				{
+					label: 'CLI',
+					items: [{ slug: 'docs/cli' }, { slug: 'docs/cli/commands' }, { slug: 'docs/cli/automation' }],
+				},
 				{ label: 'Operations', items: [{ slug: 'docs/configuration' }] },
 				// The API reference has its own sidebar (src/routeData.ts).
 				{ label: 'API', items: [{ label: 'API reference', link: '/docs/api/' }] },

@@ -48,11 +48,15 @@ func New(d *setup.Deps, hub *websocket.Hub, grpcServer *luteGrpc.Server) *gin.En
 		jobs.NewDLQHandler(d.Queue, grpcServer),
 		jobs.NewExecutionsHandler(d.JobExecutions),
 	)
-	jobdefs.SetupRoutes(authed, jobdefs.NewHandler(d.JobDefs, d.JobDefSyncer, d.Settings, runSvc))
-	publicapi.SetupAPIKeyRoutes(authed, publicapi.NewAPIKeysHandler(d.APIKeys))
+	jobdefs.SetupRoutes(authed, jobdefs.NewHandler(d.JobDefs, d.JobDefSyncer, d.Settings, runSvc, d.APIKeys))
+	publicapi.SetupAPIKeyRoutes(authed, publicapi.NewAPIKeysHandler(d.APIKeys, d.Users))
 	settings.SetupRoutes(authed, settings.NewHandler(d.Settings))
 
-	publicapi.SetupPublicRoutes(api.Group("/public/v1"), d.APIKeys, publicapi.NewRunsHandler(runSvc), workerHandler)
+	publicapi.SetupPublicRoutes(api.Group("/public/v1"), d.APIKeys, publicapi.Handlers{
+		Runs: publicapi.NewRunsHandler(runSvc),
+		Jobs: publicapi.NewJobsHandler(d.JobDefs, runSvc),
+		Meta: publicapi.NewMetaHandler(d.APIKeys, d.Users),
+	}, workerHandler)
 
 	ui.Register(r)
 	return r

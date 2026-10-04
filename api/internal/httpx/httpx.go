@@ -70,6 +70,35 @@ func UserID(c *gin.Context) (id.ID, bool) {
 	return uid, true
 }
 
+// KeyCaller is the API key behind a public-API request.
+type KeyCaller struct {
+	KeyID id.ID
+	// Service is set for a service key, which acts as itself; an account key acts as UserID.
+	Service bool
+	UserID  id.ID
+}
+
+const keyCallerKey = "api_key"
+
+// SetKeyCaller records the authenticated key; an account key's owner also becomes user_id.
+func SetKeyCaller(c *gin.Context, k KeyCaller) {
+	c.Set(keyCallerKey, k)
+	c.Set("api_key_id", k.KeyID.Hex())
+	if !k.Service {
+		c.Set("user_id", k.UserID.Hex())
+	}
+}
+
+// Key returns the API key the middleware authenticated, or aborts with 401.
+func Key(c *gin.Context) (KeyCaller, bool) {
+	k, ok := c.Value(keyCallerKey).(KeyCaller)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "authentication required")
+		return KeyCaller{}, false
+	}
+	return k, true
+}
+
 func codeFor(status int) string {
 	switch status {
 	case http.StatusBadRequest:

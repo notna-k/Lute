@@ -23,7 +23,11 @@ func TestOpenAPIMatchesPublicRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	wh := worker.NewWorkerHandler(&config.Config{}, nil, nil, nil, &luteGrpc.Server{})
-	SetupPublicRoutes(r.Group(publicBase), nil, NewRunsHandler(nil), wh)
+	SetupPublicRoutes(r.Group(publicBase), nil, Handlers{
+		Runs: NewRunsHandler(nil),
+		Jobs: NewJobsHandler(nil, nil),
+		Meta: NewMetaHandler(nil, nil),
+	}, wh)
 
 	var mounted []string
 	for _, rt := range r.Routes() {

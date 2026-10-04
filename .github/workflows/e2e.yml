@@ -55,6 +55,13 @@ jobs:
             worker/go.sum
             shared/proto/go.sum
 
+      # TestCLI builds cli/ and runs the real lute command under Node.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
       - name: Pull job images
         run: docker pull bash:5 && docker pull alpine:3 && docker pull alpine/git:2.52.0
 

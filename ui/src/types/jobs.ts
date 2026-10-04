@@ -85,4 +85,6 @@ export interface Build {
   params?: Record<string, string>;
   /** True when this build ran a panel-edited schema, not the committed one. */
   adHoc?: boolean;
+  /** The service key that started the build; absent when a user did. */
+  startedBy?: string;
 }

@@ -12,13 +12,15 @@ const guides = [
 	{ href: u('docs/jobs/parameters/'), tag: 'Jobs', title: 'Parameters', text: 'Every input type — text, choice, toggle, number, date — and how values reach your command.' },
 	{ href: u('docs/jobs/git-sync/'), tag: 'Jobs', title: 'Syncing from Git', text: 'When a sync writes, what counts as drift, pruning, and exporting panel edits back to YAML.' },
 	{ href: u('docs/workers/running/'), tag: 'Workers', title: 'Running a worker', text: 'Rootless Docker host setup, registration tokens, labels and upgrading the image.' },
+	{ href: u('docs/cli/'), tag: 'CLI', title: 'The lute CLI', text: 'Run a job and follow its log from a terminal, a script or CI, with an API key from the panel.' },
 	{ href: u('docs/api/webhooks/'), tag: 'API', title: 'Webhooks', text: 'Get called when a run finishes, and check the signature so you know it came from Lute.' },
 	{ href: u('docs/configuration/'), tag: 'Operations', title: 'Configuring core', text: 'Every environment variable core reads, with its default.' },
 	{ href: u('docs/api/'), tag: 'API', title: 'API overview', text: 'API keys, errors, idempotency and paging for scripts and other CI systems.' },
 ];
 const reference = [
-	{ href: u('docs/api/runs/'), title: 'REST API', text: 'Runs, workers and registration tokens under /api/public/v1', kind: 'OpenAPI' },
+	{ href: u('docs/api/runs/'), title: 'REST API', text: 'Jobs, runs, workers and registration tokens under /api/public/v1', kind: 'OpenAPI' },
 	{ href: u('docs/jobs/definitions/'), title: 'Job definition keys', text: 'Every YAML key and what it does', kind: 'YAML' },
+	{ href: u('docs/cli/commands/'), title: 'lute commands', text: 'Every command, flag and exit code', kind: 'CLI' },
 	{ href: u('docs/configuration/'), title: 'Environment variables', text: 'Core configuration', kind: '.env' },
 	{ href: u('docs/workers/running/#settings'), title: 'Worker settings', text: 'LUTE_* variables of the worker image', kind: 'env' },
 ];

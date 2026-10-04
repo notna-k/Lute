@@ -3,8 +3,9 @@ info:
   title: Lute public API
   version: "1"
   description: |
-    The API that API keys reach: create and follow runs, and manage workers and their
-    registration tokens. The panel's own API under `/api/v1` is internal and not covered here.
+    The API that API keys reach: list jobs and start them, create and follow runs, and manage
+    workers and their registration tokens. The `lute` command line is built on it. The panel's own
+    API under `/api/v1` is internal and not covered here.
   license:
     name: MIT
     url: https://github.com/notna-k/Lute/blob/master/LICENSE
@@ -17,18 +18,33 @@ security:
   - apiKey: []
 
 tags:
+  - name: identity
+    x-object: WhoAmI
+    x-displayName: Server and identity
+    description: |
+      What a client checks first: the server's version, which needs no key, and who the key it
+      holds acts as. An **account key** acts as the user who made it. A **service key** belongs to
+      the Lute instance and acts as itself, so it keeps working when its creator leaves.
+  - name: jobs
+    x-object: JobDetail
+    x-displayName: Jobs
+    description: |
+      Job definitions, synced from Git. Read a job's parameters, then start a run of it with typed
+      values; core validates them exactly as the panel's run form does.
   - name: runs
     x-object: Run
     x-displayName: Runs
     description: |
-      A run is one job on a queue: what to execute, where, and how it went. Create runs from
-      scripts or other CI systems, then poll them or wait for a webhook.
+      A run is one execution: of a job definition, or of a raw job put on a queue. Start runs from
+      scripts or other CI systems, then poll them or wait for a webhook. Every run endpoint takes
+      the run's `id` or its first 8 characters, the short form the panel and the CLI show.
   - name: workers
     x-object: Worker
     x-displayName: Workers
     description: |
       The machines runs are dispatched to. A worker registers itself with a registration token;
-      these endpoints read and manage it afterwards.
+      these endpoints read and manage it afterwards. Workers belong to a user, so these endpoints
+      need an account key: a service key gets `403`.
   - name: commands
     x-object: Command
     x-displayName: Worker commands
@@ -43,6 +59,147 @@ tags:
       registrations; workers that already registered keep working.
 
 paths:
+  /version:
+    get:
+      tags: [identity]
+      operationId: getVersion
+      summary: Get the server version
+      description: Needs no API key, so a client can check the server before it has one.
+      security: []
+      responses:
+        "200":
+          description: The server's version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Version" }
+              example: { version: 0.2.0, api_level: 1 }
+
+  /whoami:
+    get:
+      tags: [identity]
+      operationId: whoAmI
+      summary: Who am I
+      description: |
+        The key that made the request, and who it acts as. A service key acts as itself, so `user`
+        is left out. Call it to check a key before saving it.
+      responses:
+        "200":
+          description: The key, and the user an account key acts as.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WhoAmI" }
+              example:
+                key: { id: 66fb0a1b2c3d4e5f6a7b8c9d, name: laptop, prefix: lute_sk_k3m9qxab, scope: account }
+                user: { id: 66f1a2b3c4d5e6f7a8b9c0d1, email: anton@acme.dev }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /jobs:
+    get:
+      tags: [jobs]
+      operationId: listJobs
+      summary: List jobs
+      description: Every job definition, each with the newest run the key can see.
+      responses:
+        "200":
+          description: The jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/JobSummary" }
+              example:
+                jobs:
+                  - slug: web-release
+                    name: Web release
+                    description: Build and ship the web app
+                    queue: deploy
+                    runtime: node:25-alpine
+                    last_run:
+                      id: 66fb1c2d3e4f5a6b7c8d9e0f
+                      job: web-release
+                      queue: deploy
+                      type: container
+                      status: done
+                      attempts: 1
+                      max_retries: 3
+                      timeout_sec: 300
+                      enqueued_at: "2026-09-30T09:14:02Z"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /jobs/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/JobSlug"
+    get:
+      tags: [jobs]
+      operationId: getJob
+      summary: Get a job
+      description: |
+        The job and its parameter schema: types, defaults and options, which is what a client needs
+        to know what to pass. A `secret` parameter is listed, but nothing about its value is.
+      responses:
+        "200":
+          description: The job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /jobs/{slug}/runs:
+    parameters:
+      - $ref: "#/components/parameters/JobSlug"
+    post:
+      tags: [jobs]
+      operationId: startJobRun
+      summary: Start a run of a job
+      description: |
+        Runs the definition as it is, with `params` keyed by parameter name. Core validates them as
+        the panel does: a missing required value or a bad one answers `400` and names the parameter
+        in `error.fields`. Answers `201` with the new run, or `200` with the earlier one when the
+        `Idempotency-Key` was used before.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+          description: Send it again and you get the first run back instead of a second one.
+          example: release-2026-09-30
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartRunRequest" }
+            example:
+              params: { environment: staging, regions: [eu-central, us-east], dry_run: true }
+      responses:
+        "201":
+          description: Run started.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+              example:
+                id: 66fb1c2d3e4f5a6b7c8d9e0f
+                job: web-release
+                params: { ENVIRONMENT: staging, REGIONS: "eu-central,us-east", DRY_RUN: "true" }
+                queue: deploy
+                type: container
+                status: pending
+                attempts: 0
+                max_retries: 3
+                timeout_sec: 300
+                enqueued_at: "2026-09-30T09:14:02Z"
+        "200":
+          description: A run with this `Idempotency-Key` already exists; it is returned unchanged.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /runs:
     post:
       tags: [runs]
@@ -74,7 +231,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CreatedRun" }
               example:
-                id: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+                id: 66fb1c2d3e4f5a6b7c8d9e0f
                 queue: deploy
                 type: container
                 status: pending
@@ -97,8 +254,15 @@ paths:
       tags: [runs]
       operationId: listRuns
       summary: List runs
-      description: Runs started by the API key's owner, filtered and paged.
+      description: |
+        Runs the key can see, newest first, filtered and paged. An account key sees its user's runs
+        and those service keys started; a service key sees every run.
       parameters:
+        - { name: job, in: query, schema: { type: string }, description: Only runs of this job's slug. }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/RunStatus" }
+          description: Only runs in this status.
         - { name: queue, in: query, schema: { type: string }, description: Only runs on this queue. }
         - { name: type, in: query, schema: { type: string }, description: Only runs of this type. }
         - { name: offset, in: query, schema: { type: integer, default: 0 }, description: Runs to skip. }
@@ -111,7 +275,9 @@ paths:
               schema: { $ref: "#/components/schemas/RunList" }
               example:
                 runs:
-                  - id: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+                  - id: 66fb1c2d3e4f5a6b7c8d9e0f
+                    job: web-release
+                    params: { ENVIRONMENT: staging }
                     queue: deploy
                     type: container
                     status: done
@@ -126,6 +292,7 @@ paths:
                 total: 1
                 offset: 0
                 limit: 50
+        "400": { $ref: "#/components/responses/Invalid" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /runs/{id}:
@@ -135,13 +302,14 @@ paths:
       tags: [runs]
       operationId: getRun
       summary: Get a run
-      description: The run's current state.
+      description: The run's current state. A short id that matches more than one run answers `400`.
       responses:
         "200":
           description: The run.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Run" }
+        "400": { $ref: "#/components/responses/Invalid" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -624,9 +792,16 @@ components:
       name: id
       in: path
       required: true
-      schema: { type: string, format: uuid }
-      description: The run's `id`.
-      example: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+      schema: { type: string, pattern: "^[0-9a-f]{8,24}$" }
+      description: The run's `id`, or a prefix of it of at least 8 characters.
+      example: 66fb1c2d
+    JobSlug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string }
+      description: The job's `slug`.
+      example: web-release
     WorkerID:
       name: id
       in: path
@@ -647,7 +822,7 @@ components:
               message: webhook.url is required when webhook is provided
               fields: { webhook.url: required }
     Unauthorized:
-      description: Missing or unknown API key.
+      description: Missing, unknown or revoked API key.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -669,6 +844,102 @@ components:
             error: { code: conflict, message: "can only cancel pending jobs, status is running" }
 
   schemas:
+    Version:
+      type: object
+      required: [version, api_level]
+      properties:
+        version: { type: string, description: "The core release, or `dev`." }
+        api_level: { type: integer, description: Goes up when the public API changes in a way clients must know about. }
+    WhoAmI:
+      type: object
+      required: [key]
+      properties:
+        key:
+          type: object
+          required: [id, name, prefix, scope]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            prefix: { type: string, description: "The start of the key, for telling keys apart. Never the key." }
+            scope: { type: string, enum: [account, service] }
+        user:
+          type: object
+          description: Who an account key acts as. Left out for a service key.
+          required: [id, email]
+          properties:
+            id: { type: string }
+            email: { type: string }
+            display_name: { type: string }
+    JobSummary:
+      type: object
+      required: [slug, name, queue, runtime]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        queue: { type: string, description: Workers serving this queue run it. }
+        runtime: { type: string, description: The image its command runs in. }
+        last_run: { $ref: "#/components/schemas/Run" }
+    JobDetail:
+      allOf:
+        - $ref: "#/components/schemas/JobSummary"
+        - type: object
+          required: [command, parameters]
+          properties:
+            command: { type: string }
+            source_repo: { type: string, description: Git URL checked out into the workspace. }
+            parameters:
+              type: array
+              items: { $ref: "#/components/schemas/Parameter" }
+      example:
+        slug: web-release
+        name: Web release
+        description: Build and ship the web app
+        queue: deploy
+        runtime: node:25-alpine
+        command: ./scripts/ship.sh
+        parameters:
+          - name: environment
+            type: select
+            label: Environment
+            env_var: ENVIRONMENT
+            required: true
+            options:
+              - { value: staging, label: Staging }
+              - { value: prod, label: Production }
+          - { name: dry_run, type: bool, label: Dry run, env_var: DRY_RUN, required: false, default: false }
+    Parameter:
+      type: object
+      required: [name, type, env_var, required]
+      properties:
+        name: { type: string, description: The key to use in `params`. }
+        type:
+          type: string
+          enum: [string, number, bool, select, multiselect, date, datetime, secret]
+        label: { type: string }
+        env_var: { type: string, description: The environment variable the value reaches the job as. }
+        description: { type: string }
+        required: { type: boolean }
+        default: { description: Used when the value is left out. Never set for a secret. }
+        options:
+          type: array
+          description: The allowed values of a `select` or `multiselect`.
+          items:
+            type: object
+            required: [value]
+            properties:
+              value: { type: string }
+              label: { type: string }
+              hint: { type: string }
+    StartRunRequest:
+      type: object
+      properties:
+        params:
+          type: object
+          additionalProperties: true
+          description: |
+            Values keyed by parameter name. A `multiselect` takes an array; a `number` or `bool` may
+            also be a string. Left-out values take their default.
     CreateRunRequest:
       type: object
       required: [queue, type]
@@ -717,7 +988,12 @@ components:
       type: object
       required: [id, queue, type, status, attempts, max_retries, timeout_sec, enqueued_at]
       properties:
-        id: { type: string, format: uuid }
+        id: { type: string, description: "24 hex characters. The first 8 are the short form, `#66fb1c2d`." }
+        job: { type: string, description: "The job's slug, for a run started from a job." }
+        params:
+          type: object
+          additionalProperties: { type: string }
+          description: The values a job run got, keyed by env var. Secrets are never included.
         queue: { type: string }
         type: { type: string }
         status: { $ref: "#/components/schemas/RunStatus" }
@@ -735,7 +1011,7 @@ components:
         finished_at: { type: string, format: date-time }
         elapsed_ms: { type: integer }
       example:
-        id: 3f6c1d2e-8a4b-4c1f-9e7d-5b2a0c9d8e71
+        id: 66fb1c2d3e4f5a6b7c8d9e0f
         queue: deploy
         type: container
         status: running

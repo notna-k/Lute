@@ -228,6 +228,7 @@ type SettingsUpdate struct {
 type APIKey struct {
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`
+	Scope      string  `json:"scope"`
 	Prefix     string  `json:"prefix"`
 	Token      string  `json:"token,omitempty"`
 	CreatedAt  string  `json:"created_at"`
@@ -255,19 +256,21 @@ type WebhookSpec struct {
 }
 
 type Run struct {
-	ID            string   `json:"id"`
-	Queue         string   `json:"queue"`
-	Type          string   `json:"type"`
-	Status        string   `json:"status"`
-	Attempts      int      `json:"attempts"`
-	MaxRetries    int      `json:"max_retries"`
-	TimeoutSec    int      `json:"timeout_sec"`
-	Error         string   `json:"error,omitempty"`
-	WorkerID      string   `json:"worker_id,omitempty"`
-	WebhookURL    string   `json:"webhook_url,omitempty"`
-	WebhookEvents []string `json:"webhook_events,omitempty"`
-	ElapsedMs     int64    `json:"elapsed_ms,omitempty"`
-	WebhookSecret string   `json:"webhook_secret,omitempty"`
+	ID            string            `json:"id"`
+	Job           string            `json:"job,omitempty"`
+	Params        map[string]string `json:"params,omitempty"`
+	Queue         string            `json:"queue"`
+	Type          string            `json:"type"`
+	Status        string            `json:"status"`
+	Attempts      int               `json:"attempts"`
+	MaxRetries    int               `json:"max_retries"`
+	TimeoutSec    int               `json:"timeout_sec"`
+	Error         string            `json:"error,omitempty"`
+	WorkerID      string            `json:"worker_id,omitempty"`
+	WebhookURL    string            `json:"webhook_url,omitempty"`
+	WebhookEvents []string          `json:"webhook_events,omitempty"`
+	ElapsedMs     int64             `json:"elapsed_ms,omitempty"`
+	WebhookSecret string            `json:"webhook_secret,omitempty"`
 }
 
 // ContainerSpec is the "container" job payload shared by core and the worker.

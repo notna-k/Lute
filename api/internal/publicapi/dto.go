@@ -26,23 +26,27 @@ type WebhookConfig struct {
 }
 
 type RunResponse struct {
-	ID             string    `json:"id"`
-	Queue          string    `json:"queue"`
-	Type           string    `json:"type"`
-	Status         string    `json:"status"`
-	Priority       float64   `json:"priority,omitempty"`
-	Attempts       int       `json:"attempts"`
-	MaxRetries     int       `json:"max_retries"`
-	TimeoutSec     int       `json:"timeout_sec"`
-	Error          string    `json:"error,omitempty"`
-	WorkerID       string    `json:"worker_id,omitempty"`
-	IdempotencyKey string    `json:"idempotency_key,omitempty"`
-	WebhookURL     string    `json:"webhook_url,omitempty"`
-	WebhookEvents  []string  `json:"webhook_events,omitempty"`
-	EnqueuedAt     time.Time `json:"enqueued_at"`
-	StartedAt      time.Time `json:"started_at,omitempty"`
-	FinishedAt     time.Time `json:"finished_at,omitempty"`
-	ElapsedMs      int64     `json:"elapsed_ms,omitempty"`
+	ID string `json:"id"`
+	// Job is the definition the run was started from; empty for a raw run.
+	Job string `json:"job,omitempty"`
+	// Params are the values it ran with, keyed by env var. Never holds secrets.
+	Params         map[string]string `json:"params,omitempty"`
+	Queue          string            `json:"queue"`
+	Type           string            `json:"type"`
+	Status         string            `json:"status"`
+	Priority       float64           `json:"priority,omitempty"`
+	Attempts       int               `json:"attempts"`
+	MaxRetries     int               `json:"max_retries"`
+	TimeoutSec     int               `json:"timeout_sec"`
+	Error          string            `json:"error,omitempty"`
+	WorkerID       string            `json:"worker_id,omitempty"`
+	IdempotencyKey string            `json:"idempotency_key,omitempty"`
+	WebhookURL     string            `json:"webhook_url,omitempty"`
+	WebhookEvents  []string          `json:"webhook_events,omitempty"`
+	EnqueuedAt     time.Time         `json:"enqueued_at"`
+	StartedAt      time.Time         `json:"started_at,omitempty"`
+	FinishedAt     time.Time         `json:"finished_at,omitempty"`
+	ElapsedMs      int64             `json:"elapsed_ms,omitempty"`
 }
 
 type CreateRunResponse struct {

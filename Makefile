@@ -1,4 +1,4 @@
-.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-linux worker-image go-format-check go-test go-lint e2e e2e-image e2e-vet ui-build api-build
+.PHONY: dev-up dev-down dev-clean dev-logs worker-build worker-build-linux worker-image go-format-check go-test go-lint e2e e2e-image e2e-vet ui-build api-build cli-build cli-test
 
 export DOCKER_BUILDKIT := 1
 export CORE_VERSION   ?= 0.2.0
@@ -75,3 +75,10 @@ ui-build:
 
 api-build: ui-build
 	cd api && CGO_ENABLED=0 go build -ldflags '-s -w -X github.com/lute/api/internal/version.Core=$(CORE_VERSION) -X github.com/lute/api/internal/version.Worker=$(WORKER_VERSION)' -o ../bin/api ./cmd/api
+
+# The lute command: cli/dist/main.js. npm i -g ./cli installs it from here.
+cli-build:
+	cd cli && npm ci --ignore-scripts && npm run build
+
+cli-test:
+	cd cli && npm ci --ignore-scripts && npm run typecheck && npm test

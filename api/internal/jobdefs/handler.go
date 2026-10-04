@@ -18,10 +18,12 @@ type Handler struct {
 	syncer   *Syncer
 	settings *repos.SettingRepository
 	runs     *runs.Service
+	keys     *repos.APIKeyRepository
 }
 
-func NewHandler(defs *repos.JobDefinitionRepository, syncer *Syncer, settings *repos.SettingRepository, svc *runs.Service) *Handler {
-	return &Handler{defs: defs, syncer: syncer, settings: settings, runs: svc}
+func NewHandler(defs *repos.JobDefinitionRepository, syncer *Syncer, settings *repos.SettingRepository,
+	svc *runs.Service, keys *repos.APIKeyRepository) *Handler {
+	return &Handler{defs: defs, syncer: syncer, settings: settings, runs: svc, keys: keys}
 }
 
 // JSON keys below match ui/src/types/jobs.ts.
@@ -132,7 +134,7 @@ func (h *Handler) List(c *gin.Context) {
 	for i := range defs {
 		slugs = append(slugs, defs[i].Slug)
 	}
-	runsBySlug, execs, err := h.runs.History(ctx, userID, slugs, 100)
+	runsBySlug, execs, err := h.runs.History(ctx, runs.UserViewer(userID), slugs, 100)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
@@ -158,7 +160,7 @@ func (h *Handler) Get(c *gin.Context) {
 		httpx.NotFoundOrInternal(c, err, "job not found")
 		return
 	}
-	bySlug, execs, err := h.runs.History(ctx, userID, []string{def.Slug}, 100)
+	bySlug, execs, err := h.runs.History(ctx, runs.UserViewer(userID), []string{def.Slug}, 100)
 	if err != nil {
 		httpx.Internal(c, err)
 		return

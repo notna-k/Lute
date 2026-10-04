@@ -29,6 +29,8 @@ type buildDTO struct {
 	Params map[string]string `json:"params,omitempty"`
 	// AdHoc marks a build that ran a panel-edited schema instead of the one in Git.
 	AdHoc bool `json:"adHoc,omitempty"`
+	// StartedBy names the service key that started the build; empty when a user did.
+	StartedBy string `json:"startedBy,omitempty"`
 }
 
 // containerSpec's field names match the proto ContainerJobSpec the worker decodes.
@@ -46,15 +48,24 @@ func (h *Handler) Builds(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
-	bySlug, execs, err := h.runs.History(ctx, userID, []string{slug}, 20)
+	bySlug, execs, err := h.runs.History(ctx, runs.UserViewer(userID), []string{slug}, 20)
 	if err != nil {
 		httpx.Internal(c, err)
 		return
 	}
 	history := bySlug[slug]
+	keyNames, err := h.serviceKeyNames(ctx, history)
+	if err != nil {
+		httpx.Internal(c, err)
+		return
+	}
 	out := make([]buildDTO, 0, len(history))
 	for i := range history {
-		out = append(out, h.buildDTO(ctx, &history[i], execs[history[i].JobID]))
+		b := h.buildDTO(ctx, &history[i], execs[history[i].JobID])
+		if history[i].UserID.IsZero() {
+			b.StartedBy = keyNames[history[i].APIKeyID]
+		}
+		out = append(out, b)
 	}
 	c.JSON(http.StatusOK, gin.H{"builds": out})
 }
@@ -101,17 +112,34 @@ func (h *Handler) Trigger(c *gin.Context) {
 		adhoc = true
 	}
 
-	resolved, verr := Validate(schema, req.Values)
-	if verr != nil {
+	run := &models.Run{UserID: userID, AdHoc: adhoc}
+	if adhoc {
+		run.ParamSchema = schema
+	}
+	run, _, err = Start(ctx, h.runs, def, schema, req.Values, run)
+	if err != nil {
 		var ve *ValidationError
-		if errors.As(verr, &ve) {
+		if errors.As(err, &ve) {
 			httpx.Invalid(c, ve.Error(), ve.Fields)
 			return
 		}
-		httpx.Error(c, http.StatusBadRequest, verr.Error())
+		httpx.Internal(c, err)
 		return
 	}
 
+	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
+}
+
+// Start validates values against schema and queues a run of def. run says who started
+// it (UserID, or APIKeyID for a service key) and may carry an IdempotencyKey and AdHoc;
+// Start fills in the rest. Bad values return a *ValidationError, and created is false
+// when the idempotency key was used before.
+func Start(ctx context.Context, svc *runs.Service, def *models.JobDefinition, schema []models.ParameterField,
+	values map[string]any, run *models.Run) (_ *models.Run, created bool, _ error) {
+	resolved, err := Validate(schema, values)
+	if err != nil {
+		return nil, false, err
+	}
 	payload, err := json.Marshal(containerSpec{
 		SourceRepository: def.SourceRepo,
 		Runtime:          def.Runtime,
@@ -119,29 +147,25 @@ func (h *Handler) Trigger(c *gin.Context) {
 		Command:          def.Command,
 	})
 	if err != nil {
-		httpx.Internal(c, err)
-		return
+		return nil, false, err
 	}
+	run.Queue = def.Queue
+	run.Type = "container"
+	run.JobSlug = def.Slug
+	run.Environment = resolved.Environment
+	run.Params = resolved.Env
+	return svc.Enqueue(ctx, run, runs.Job{Payload: payload, Selector: def.LabelSelector})
+}
 
-	run := &models.Run{
-		UserID:      userID,
-		Queue:       def.Queue,
-		Type:        "container",
-		JobSlug:     def.Slug,
-		Environment: resolved.Environment,
-		Params:      resolved.Env,
-		AdHoc:       adhoc,
+// serviceKeyNames names the service keys behind runs no user started.
+func (h *Handler) serviceKeyNames(ctx context.Context, history []models.Run) (map[id.ID]string, error) {
+	var ids []id.ID
+	for i := range history {
+		if history[i].UserID.IsZero() && !history[i].APIKeyID.IsZero() {
+			ids = append(ids, history[i].APIKeyID)
+		}
 	}
-	if adhoc {
-		run.ParamSchema = schema
-	}
-	run, _, err = h.runs.Enqueue(ctx, run, runs.Job{Payload: payload, Selector: def.LabelSelector})
-	if err != nil {
-		httpx.Internal(c, err)
-		return
-	}
-
-	c.JSON(http.StatusCreated, h.buildDTO(ctx, run, nil))
+	return h.keys.Names(ctx, ids)
 }
 
 func shortID(i id.ID) string {
