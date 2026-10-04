@@ -21,17 +21,16 @@ problems it has:
 
 ## How it works
 
-Three pieces, each one doing one thing:
+Two pieces and a database:
 
 ```
-browser ──▶ admin (nginx SPA) ──/api──▶ core (HTTP + WS) ──▶ postgres
-workers ───────────────── gRPC ───────▶ core (:50051)
+browser ──── panel, /api, ws ──▶ core ──▶ postgres
+workers ───────── gRPC ────────▶ core (:50051)
 ```
 
-- **core** — stateless Go backend. REST + WebSocket for the panel, gRPC for workers. Everything
-  durable (domain data *and* the job queue) lives in Postgres, so core can be restarted or scaled
-  out freely.
-- **admin** — the web panel. Trigger jobs, watch builds stream in, manage workers.
+- **core** — stateless Go backend. It serves the web panel (trigger jobs, watch builds stream in,
+  manage workers) with its REST + WebSocket API, and gRPC for workers. Everything durable (domain
+  data *and* the job queue) lives in Postgres, so core can be restarted or scaled out freely.
 - **worker** — a container image that runs on rootless Docker. It enrols with a registration token,
   then runs jobs as sibling containers for the queues and labels it advertises
   ([Running a worker](https://notna-k.github.io/Lute/docs/workers/running/)).
@@ -76,21 +75,23 @@ All you need is Docker with Docker Compose. [`examples/`](examples/) has ready-t
 | Example | What it runs |
 |---|---|
 | [`quickstart/`](examples/quickstart/) | Everything on one machine, to try Lute out |
-| [`server/`](examples/server/) | Postgres, core and the panel, for a real install |
+| [`server/`](examples/server/) | Postgres and core, for a real install |
 | [`worker/`](examples/worker/) | A worker on a build machine with rootless Docker |
 
-To try it, take the quickstart:
+To try it, run the quickstart. It pulls the latest images from the GitHub Container Registry:
 
 ```bash
-git clone https://github.com/notna-k/Lute.git
-cd Lute/examples/quickstart
-cp .env.example .env     # set JWT_SECRET (>= 32 bytes), ADMIN_EMAIL, ADMIN_PASSWORD
+mkdir -p lute/jobdefs && cd lute
+base=https://raw.githubusercontent.com/notna-k/Lute/master/examples/quickstart
+curl -fsSL -O "$base/compose.yaml" -o jobdefs/hello.yaml "$base/jobdefs/hello.yaml"
+printf 'JWT_SECRET=%s\nADMIN_EMAIL=admin@example.com\nADMIN_PASSWORD=change-me\n' \
+  "$(openssl rand -base64 48)" > .env
 docker compose up -d
 ```
 
-Open http://localhost:8080, sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`, and run the `hello`
-job. Its definition is in [`examples/quickstart/jobdefs/`](examples/quickstart/jobdefs/); add your
-own YAML there and press **Sync from Git**.
+Open http://localhost:8080, sign in as `admin@example.com` / `change-me`, and run the `hello`
+job. Its definition is `jobdefs/hello.yaml`; add your own YAML next to it and press
+**Sync from Git**.
 
 For a real install, run [`server/`](examples/server/) on one machine and
 [`worker/`](examples/worker/) on each build machine. [`examples/README.md`](examples/README.md)

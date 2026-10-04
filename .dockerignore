@@ -13,8 +13,8 @@ node_modules
 
 worker/bin
 
-# NOTE: api/internal/ui/web is intentionally NOT ignored — Core embeds the
-# committed placeholder index.html there (the admin SPA is a separate image).
+# NOTE: api/internal/ui/web is intentionally NOT ignored — it holds the committed
+# placeholder index.html; api/Dockerfile replaces it with the built panel.
 
 .env
 .env.*
